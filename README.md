@@ -13,7 +13,7 @@ So far, so good, so, I began to do a simple script to automate this with ffpmeg,
 
 ### The good
 
-But recently I've dowloaded a set of BDRip movies, like 60GB each, and even my script reduced them a lot, still were around 10GB, which I found pretty much of a 100 or 120 minutes movie. So I gave a try to handbrake and used its AV1 preset. The result was impressive: from 60GB in H264 to 2GB in AV1... x30 times less!!!
+But recently I've dowloaded a set of BDRip movies, like 60GB each, and even my script reduced them a lot, still were around 10GB, which I found pretty much for a 100 or 120 minutes movie. So I gave a try to handbrake and used its AV1 preset. The result was impressive: from 60GB in H264 to 2GB in AV1... x30 times less!!!
 
 ### The bad
 
