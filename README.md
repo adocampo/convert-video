@@ -27,3 +27,6 @@ At this point, I find marvelous the preset in HandBrake, how well optimized was 
 
 ---
 You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.php), and be able to run bash scripts.
+In order to use all the scripts without limitations, make sure to have installed all those:
+ - `mediainfo`
+ - `mkvpropedit`
