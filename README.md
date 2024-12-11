@@ -1,5 +1,6 @@
  # History and why I did this
-
+ 
+## convert-video
 Usually, when you download from the internet movies and tv shows, you will have plenty of formats and codecs, and if the videos has some age, those codes will be quite unefficient (like AVC codec), occuping a lot of disk space when newer codecs (like AV1) are far more optimized (but not all players can play AV1 nowadays)
 
 I have plenty of space in my home server, but I realized I could save 2/3 of it just by re-enconding all my videos.
@@ -28,6 +29,12 @@ You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.p
 In order to use all the scripts without limitations, make sure to have installed all those:
  - `mediainfo`
  - `mkvpropedit`
+
+## change-title
+`change-title` is a quick script to change metadata title and make it match with its filename, so, intead of see something like
+![imagen](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
+you will see this
+![imagen](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
 
 
 ## Usage
