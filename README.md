@@ -32,9 +32,9 @@ In order to use all the scripts without limitations, make sure to have installed
 
 ## change-title
 `change-title` is a quick script to change metadata title and make it match with its filename, so, intead of see something like
-![imagen](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
+![image](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
 you will see this
-![imagen](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
+![image](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
 
 
 ## Usage
@@ -56,6 +56,5 @@ $ change-title <video_name>
 or you can do a oneliner like this
 ```
 $ find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
-
 ```
 
