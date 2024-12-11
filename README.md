@@ -1,6 +1,5 @@
-# History and why I did this
+ History and why I did this
 
----
 Usually, when you download from the internet movies and tv shows, you will have plenty of formats and codecs, and if the videos has some age, those codes will be quite unefficient (like AVC codec), occuping a lot of disk space when newer codecs (like AV1) are far more optimized (but not all players can play AV1 nowadays)
 
 I have plenty of space in my home server, but I realized I could save 2/3 of it just by re-enconding all my videos.
@@ -25,7 +24,6 @@ At this point, I find marvelous the preset in HandBrake, how well optimized was 
 
 ## Requisites
 
----
 You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.php), and be able to run bash scripts.
 In order to use all the scripts without limitations, make sure to have installed all those:
  - `mediainfo`
@@ -33,7 +31,6 @@ In order to use all the scripts without limitations, make sure to have installed
 
 
 ## Usage
----
 `convert-video` can be used standalone as
  
 ```
