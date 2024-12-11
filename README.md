@@ -30,3 +30,28 @@ You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.p
 In order to use all the scripts without limitations, make sure to have installed all those:
  - `mediainfo`
  - `mkvpropedit`
+
+
+## Usage
+---
+`convert-video` can be used standalone as
+ 
+```
+$ convert-video <video_name>
+```
+or you can do a oneliner like this
+```
+$ find . -type f \( -name "*.mp4" -o -name "*.ts" -o -name "*.mkv" -o -name "*.avi" \) -exec sh -c 'mediainfo "$1" | grep -q "Writing application.*: HandBrake.*" || (convert-video -y  "$1" && rm "$1")' sh {} \;
+```
+This oneliner search for video types `.mp4`,`.ts`,`.mkv`,and `.avi` and obtains from their metadata using `mediainfo` if they were encoded used HandBrake, *if not*, then it re-encodes the video with `convert-video` script and if it finish the encode successfully, then deletes the old video.
+
+`change-title` can be used standalone as
+```
+$ change-title <video_name>
+```
+or you can do a oneliner like this
+```
+$ find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
+
+```
+
