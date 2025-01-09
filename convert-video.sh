@@ -102,14 +102,14 @@ for input_file in "${input_files[@]}"; do
     if [[ "$codec" == "av1" ]]; then
         echo "Utilizando HandBrakeCLI para transcodificar a AV1."
         # Comando HandBrakeCLI para la transcodificación a AV1 con todas las pistas de audio y subtítulos
-        if ! HandBrakeCLI -i "$input_file" -o "$output_file" --preset="AV1 MKV 2160p60 4K" --all-audio --all-subtitles; then
+        if ! HandBrakeCLI -i "$input_file" -o "$output_file" --preset="AV1 MKV 2160p60 4K" --all-audio --audio-copy-mask "aac,ac3,eac3,truehd,dts,dtshd,mp3,mp2,flac,opus,vorbis" --all-subtitles; then
             echo "Error en la transcodificación con HandBrakeCLI."
             exit 1
         fi
     elif [[ "$codec" == "h265" ]]; then
         echo "Utilizando HandBrakeCLI para transcodificar a H.265 NVENC."
         # Comando HandBrakeCLI para la transcodificación a H.265 NVENC con todas las pistas de audio y subtítulos
-        if ! HandBrakeCLI -i "$input_file" -o "$output_file" --preset="H.265 NVENC 2160p 4K" --all-audio --all-subtitles; then
+        if ! HandBrakeCLI -i "$input_file" -o "$output_file" --preset="H.265 NVENC 2160p 4K" --all-audio --audio-copy-mask "aac,ac3,eac3,truehd,dts,dtshd,mp3,mp2,flac,opus,vorbis" --all-subtitles; then
             echo "Error en la transcodificación con HandBrakeCLI."
             exit 1
         fi
