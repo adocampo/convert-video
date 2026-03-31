@@ -1,6 +1,7 @@
- # History and why I did this
- 
+# History and why I did this
+
 ## convert-video
+
 Usually, when you download from the internet movies and tv shows, you will have plenty of formats and codecs, and if the videos has some age, those codes will be quite unefficient (like AVC codec), occuping a lot of disk space when newer codecs (like AV1) are far more optimized (but not all players can play AV1 nowadays)
 
 I have plenty of space in my home server, but I realized I could save 2/3 of it just by re-enconding all my videos.
@@ -25,36 +26,71 @@ At this point, I find marvelous the preset in HandBrake, how well optimized was 
 
 ## Requisites
 
-You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.php), and be able to run bash scripts.
+You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.php).
 In order to use all the scripts without limitations, make sure to have installed all those:
- - `mediainfo`
- - `mkvpropedit`
+
+- `mediainfo`
+- `mkvpropedit`
+- `pv` (optional, used by the bash version)
+
+## Smart codec detection
+
+`convert-video.py` automatically detects the current video codec and muxer before converting, avoiding unnecessary re-encodes:
+
+### Codec quality hierarchy
+
+The script understands that some codecs produce better compression than others:
+
+```
+AVC (H.264) < HEVC (H.265) < AV1
+```
+
+- If the source is in a **worse** codec than the target (e.g. AVC → HEVC), it **converts** normally.
+- If the source is already in a **better** codec than the target (e.g. AV1 → HEVC), it **skips** the file and warns you.
+- If the source is in the **same** codec as the target, it checks the muxer (see below).
+
+### Why HandBrake gets special treatment
+
+I have experimented extensively with ffmpeg, mkvmerge, and HandBrake for video encoding. While all three can produce valid H.265/AV1 output, I have consistently achieved significantly better compression results using HandBrake's built-in presets compared to anything I could configure with ffmpeg or mkvmerge. The HandBrake team clearly knows a lot about encoding tuning and their presets are incredibly well optimized.
+
+Because of this, the script treats the muxer as a quality signal:
+
+- **Same codec + muxed by HandBrake** → The file is already optimally compressed. The script **skips** it with a message: `[SKIP] 'file.mkv' is already HEVC encoded by HandBrake. Use --force to override.`
+- **Same codec + muxed by ffmpeg/mkvmerge/other** → The compression is likely suboptimal. The script shows a **warning** but **converts it anyway**: `[WARN] 'file.mkv' is already HEVC but was muxed by 'mkvmerge v88.0'. Converting anyway.`
+
+Use `--force` to override this behavior and convert everything regardless.
 
 ## change-title
+
 `change-title` is a quick script to change metadata title and make it match with its filename, so, intead of see something like
 ![image](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
 you will see this
 ![image](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
 
-
 ## Usage
+
 `convert-video` can be used standalone as
- 
+
 ```
-$ convert-video <video_name>
+convert-video <video_name>
 ```
+
 or you can do a oneliner like this
+
 ```
-$ find . -type f \( -name "*.mp4" -o -name "*.ts" -o -name "*.mkv" -o -name "*.avi" \) -exec sh -c 'mediainfo "$1" | grep -q "Writing application.*: HandBrake.*" || (convert-video -y  "$1" && rm "$1")' sh {} \;
+find . -type f \( -name "*.mp4" -o -name "*.ts" -o -name "*.mkv" -o -name "*.avi" \) -exec sh -c 'mediainfo "$1" | grep -q "Writing application.*: HandBrake.*" || (convert-video -y  "$1" && rm "$1")' sh {} \;
 ```
+
 This oneliner search for video types `.mp4`,`.ts`,`.mkv`,and `.avi` and obtains from their metadata using `mediainfo` if they were encoded used HandBrake, *if not*, then it re-encodes the video with `convert-video` script and if it finish the encode successfully, then deletes the old video.
 
 `change-title` can be used standalone as
+
 ```
-$ change-title <video_name>
-```
-or you can do a oneliner like this
-```
-$ find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
+change-title <video_name>
 ```
 
+or you can do a oneliner like this
+
+```
+find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
+```
