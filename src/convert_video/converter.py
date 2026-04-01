@@ -231,8 +231,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
     os.makedirs(output_subdir, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(input_file))[0]
-    # ISO files always produce MKV output
-    extension = "mkv" if is_iso else os.path.splitext(input_file)[1][1:]
+    # HandBrakeCLI always outputs Matroska (-f mkv)
+    extension = "mkv"
 
     if output_dir:
         final_output = generate_unique_filename(base_name, extension, output_subdir)
