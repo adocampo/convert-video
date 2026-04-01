@@ -5,11 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [1.1.1] - 2026-04-01
 
 ### Fixed
+
 - Output files now always use `.mkv` extension regardless of source format, matching the actual Matroska container produced by HandBrakeCLI.
 
 ## [1.1.0] - 2026-04-01
 
 ### Added
+
 - **Modular architecture**: refactored monolithic `cli.py` into separate modules (`output`, `mediainfo`, `converter`, `updater`, `iso`).
 - **ISO disc image support**: automatically scans ISO images, detects all titles, and converts the main feature (longest duration) with per-track audio channel preservation.
 - **`--delete-source` / `-ds`**: delete the original source file after a successful conversion.
@@ -20,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.0] - 2026-03-31
 
 ### Added
+
 - Initial packaged release with `pyproject.toml` and `pipx` support.
 - **`-v` / `--version`**: display current version (reassigned from `--verbose`; `--verbose` remains as long form).
 - **`--update`**: check if a newer version is available on GitHub.
