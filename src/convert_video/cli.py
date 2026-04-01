@@ -7,7 +7,7 @@ import sys
 from typing import List
 
 from convert_video import get_version
-from convert_video.output import info, warning, error
+from convert_video.output import info, warning, error, deleted, skip, success
 from convert_video.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
 from convert_video.converter import (
     install_signal_handlers, convert_video, confirm_prompt, poweroff_with_countdown,
@@ -29,7 +29,7 @@ def check_dependency(command: str):
     try:
         subprocess.run([command, '--version'], capture_output=True, check=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
-        error(f"Error: {command} is required but not installed.")
+        error(f"{command} is required but not installed.")
         sys.exit(1)
 
 
@@ -227,22 +227,20 @@ def main():
             display_titles(titles, main_title['index'])
             info(f"Selected title {main_title['index']} ({main_title['duration_str']})")
 
-            success = convert_video(
+            conversion_ok = convert_video(
                 input_file, args.output, args.codec, speed,
                 args.audio_passthrough, args.verbose,
                 title=main_title['index'],
                 resolution_override=main_title.get('resolution') or None,
                 audio_tracks=main_title.get('audio_tracks', []),
             )
-            if success:
+            if conversion_ok:
                 if args.delete_source:
                     try:
                         os.remove(input_file)
-                        info(f"Deleted source: {input_file}")
+                        deleted(f"Deleted source: {input_file}")
                     except OSError as e:
                         warning(f"Could not delete source file '{input_file}': {e}")
-            else:
-                warning(f"Conversion failed for: {input_file}")
             continue
 
         if not args.force:
@@ -256,17 +254,15 @@ def main():
             if args.delete_source:
                 try:
                     os.remove(input_file)
-                    info(f"Deleted source: {input_file}")
+                    deleted(f"Deleted source: {input_file}")
                 except OSError as e:
                     warning(f"Could not delete source file '{input_file}': {e}")
-        else:
-            warning(f"Conversion failed for: {input_file}")
 
     if skipped:
-        info(f"\n{skipped} file(s) skipped (already converted).")
+        skip(f"{skipped} file(s) skipped (already converted).")
 
 
-    print("Process complete.")
+    success("Process complete.")
 
     # Power off if requested
     if args.poweroff:

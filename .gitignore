@@ -6,3 +6,4 @@ build/
 *.egg
 src/*.egg-info/
 .venv/
+.github/copilot-instructions.md

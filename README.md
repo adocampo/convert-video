@@ -71,17 +71,19 @@ If you want to contribute or test the latest development version:
 ```bash
 git clone https://github.com/adocampo/convert-video.git
 cd convert-video
-bash dev.sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-Inside the venv, use `convert-video-dev` instead of `convert-video` to ensure you're running the development version:
+Inside the virtual environment, use the regular `convert-video` command:
 
 ```bash
-convert-video-dev --version
-convert-video-dev -r ~/Videos/
+convert-video --version
+convert-video -r ~/Videos/
 ```
 
-This avoids conflicts with your system-installed `convert-video` package and ensures changes to `src/` take effect immediately.
+If your system also has `convert-video` installed through `pipx`, activate `.venv` before running it so the virtual environment version takes priority in `PATH`.
 
 ## Updating
 
@@ -115,7 +117,7 @@ pipx uninstall convert-video
 
 The script understands that some codecs produce better compression than others:
 
-```
+```text
 AVC (H.264) < HEVC (H.265) < AV1
 ```
 
@@ -244,7 +246,7 @@ convert-video --help
 
 Full help output:
 
-```
+```text
 usage: convert-video [-h] [-o OUTPUT] [--find [PATTERN]] [-r] [-ds] [-c CODEC]
                      [-s] [-f] [-n] [-ap] [--force] [-y] [--verbose] [-po]
                      [-si] [-v] [--update] [--upgrade]
@@ -289,10 +291,3 @@ info:
   --update              Check if a newer version is available on GitHub.
   --upgrade             Upgrade to the latest version from GitHub.
 ```
-
-## change-title
-
-`change-title` is a quick script to change metadata title and make it match with its filename, so, intead of see something like
-![image](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
-you will see this
-![image](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
