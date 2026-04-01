@@ -33,6 +33,61 @@ In order to use all the scripts without limitations, make sure to have installed
 - `mkvpropedit`
 - `pv` (optional, used by the bash version)
 
+## Installation
+
+### Quick install (automatic)
+
+```bash
+git clone https://github.com/adocampo/convert-video.git
+cd convert-video
+bash install.sh
+```
+
+The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, installs `convert-video` via pipx, and checks for runtime dependencies.
+
+### Manual install with pipx
+
+```bash
+pipx install git+https://github.com/adocampo/convert-video.git
+```
+
+### Manual install from local clone
+
+```bash
+git clone https://github.com/adocampo/convert-video.git
+pipx install ./convert-video
+```
+
+### Verify installation
+
+```bash
+convert-video --version
+```
+
+## Updating
+
+### Self-update from the tool itself
+
+```bash
+# Check if a new version is available
+convert-video --update
+
+# Upgrade to the latest version
+convert-video --upgrade
+```
+
+### Manual update with pipx
+
+```bash
+pipx install git+https://github.com/adocampo/convert-video.git --force
+```
+
+## Uninstalling
+
+```bash
+pipx uninstall convert-video
+```
+
 ## Smart codec detection
 
 `convert-video.py` automatically detects the current video codec and muxer before converting, avoiding unnecessary re-encodes:
@@ -69,28 +124,144 @@ you will see this
 
 ## Usage
 
-`convert-video` can be used standalone as
+### Basic usage
 
-```
-convert-video <video_name>
-```
+Convert a single file:
 
-or you can do a oneliner like this
-
-```
-find . -type f \( -name "*.mp4" -o -name "*.ts" -o -name "*.mkv" -o -name "*.avi" \) -exec sh -c 'mediainfo "$1" | grep -q "Writing application.*: HandBrake.*" || (convert-video -y  "$1" && rm "$1")' sh {} \;
+```bash
+convert-video movie.mp4
 ```
 
-This oneliner search for video types `.mp4`,`.ts`,`.mkv`,and `.avi` and obtains from their metadata using `mediainfo` if they were encoded used HandBrake, *if not*, then it re-encodes the video with `convert-video` script and if it finish the encode successfully, then deletes the old video.
+Convert and place output in a directory:
 
-`change-title` can be used standalone as
-
-```
-change-title <video_name>
+```bash
+convert-video -o ~/converted/ movie.mp4
 ```
 
-or you can do a oneliner like this
+### Batch conversion
+
+Convert all videos in a directory recursively:
+
+```bash
+convert-video -r ~/Videos/
+```
+
+Convert all `.mp4` files in a pattern (without subdirectories):
+
+```bash
+convert-video ~/Videos/*.mp4
+```
+
+Convert all videos and auto-find them:
+
+```bash
+convert-video --find  # Searches current directory
+convert-video --find ~/Videos  # Searches ~/Videos directory pattern
+```
+
+### Advanced options
+
+Convert with audio passthrough (no re-encoding audio):
+
+```bash
+convert-video -ap movie.mp4
+```
+
+Convert using AV1 codec with maximum compression (slow):
+
+```bash
+convert-video -c av1 -s movie.mp4
+```
+
+Auto-accept without prompts and delete source on success:
+
+```bash
+convert-video -y -ds movie.mkv
+```
+
+Power off after conversion completes:
+
+```bash
+convert-video -po movie.mp4
+```
+
+Force re-conversion even if file is already in target codec:
+
+```bash
+convert-video --force movie.mkv
+```
+
+Show source file information (codec, resolution, audio tracks, etc.):
+
+```bash
+convert-video -si movie.mkv
+```
+
+### ISO disc images
+
+Convert a DVD/Blu-ray ISO image (automatically selects the main feature):
+
+```bash
+convert-video movie.iso
+```
+
+### Help
+
+```bash
+convert-video --help
+```
+
+Full help output:
 
 ```
-find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
+usage: convert-video [-h] [-o OUTPUT] [--find [PATTERN]] [-r] [-ds] [-c CODEC]
+                     [-s] [-f] [-n] [-ap] [--force] [-y] [--verbose] [-po]
+                     [-si] [-v] [--update] [--upgrade]
+                     [input_files ...]
+
+Convert video files using HandBrakeCLI and preserve all audio and subtitle
+tracks.
+
+options:
+  -h, --help            show this help message and exit
+
+input/output:
+  input_files           Video files or directories to convert.
+  -o, --output OUTPUT   Output directory for converted files.
+  --find [PATTERN]      Recursively search for video files in directories
+                        matching the pattern, or current directory if no
+                        pattern is given.
+  -r, --recursive       Recursively search directories for video files
+                        matching the given patterns.
+  -ds, --delete-source  Delete the original source file after a successful
+                        conversion.
+
+encoding:
+  -c, --codec CODEC     Video codec: nvenc_h265 (default), nvenc_h264, av1,
+                        x265.
+  -s, --slow            Use slow encoding speed.
+  -f, --fast            Use fast encoding speed.
+  -n, --normal          Use normal encoding speed (default).
+  -ap, --audio-passthrough
+                        Pass through original audio tracks.
+  --force               Force conversion even if file is already in the target
+                        codec.
+
+behaviour:
+  -y, --yes             Automatically accept transcoding without prompts.
+  --verbose             Show verbose output from HandBrakeCLI.
+  -po, --poweroff       Power off the system after conversion.
+
+info:
+  -si, --source-info    Show source information about a single video file.
+  -v, --version         show program's version number and exit
+  --update              Check if a newer version is available on GitHub.
+  --upgrade             Upgrade to the latest version from GitHub.
 ```
+
+## change-title
+
+`change-title` is a quick script to change metadata title and make it match with its filename, so, intead of see something like
+![image](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
+you will see this
+![image](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
