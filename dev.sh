@@ -36,9 +36,9 @@ pip install -e "${SCRIPT_DIR}" --quiet
 info "Ready! convert-video is now running from source."
 echo -e "${YELLOW}  Any changes to src/ take effect immediately.${RESET}"
 echo ""
-echo -e "  Run:  ${GREEN}convert-video --version${RESET}    to verify"
-echo -e "  Run:  ${GREEN}convert-video --help${RESET}       for usage"
-echo -e "  Run:  ${GREEN}deactivate${RESET}                 to leave the venv"
+echo -e "  Run:  ${GREEN}convert-video-dev --version${RESET}    to verify"
+echo -e "  Run:  ${GREEN}convert-video-dev --help${RESET}       for usage"
+echo -e "  Run:  ${GREEN}deactivate${RESET}                     to leave the venv"
 echo ""
 
 # ── Drop into a subshell with venv active ────

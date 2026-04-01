@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 convert-video = "convert_video.cli:main"
+convert-video-dev = "convert_video.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -64,6 +64,25 @@ pipx install ./convert-video
 convert-video --version
 ```
 
+## Development setup
+
+If you want to contribute or test the latest development version:
+
+```bash
+git clone https://github.com/adocampo/convert-video.git
+cd convert-video
+bash dev.sh
+```
+
+Inside the venv, use `convert-video-dev` instead of `convert-video` to ensure you're running the development version:
+
+```bash
+convert-video-dev --version
+convert-video-dev -r ~/Videos/
+```
+
+This avoids conflicts with your system-installed `convert-video` package and ensures changes to `src/` take effect immediately.
+
 ## Updating
 
 ### Self-update from the tool itself
@@ -121,6 +140,18 @@ Use `--force` to override this behavior and convert everything regardless.
 ![image](https://github.com/user-attachments/assets/8d1019f0-e931-49cc-8770-2195a7e9ad17)
 you will see this
 ![image](https://github.com/user-attachments/assets/ead048a4-79ae-47a6-a64f-60e8571709a5)
+
+`change-title` can be used standalone as
+
+```bash
+change-title <video_name>
+```
+
+or recursively for all Matroska files like this
+
+```bash
+find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
+```
 
 ## Usage
 
