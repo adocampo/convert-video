@@ -192,6 +192,111 @@ convert-video --find  # Searches current directory
 convert-video --find ~/Videos  # Searches ~/Videos directory pattern
 ```
 
+Convert several files in parallel with local CLI workers:
+
+```bash
+convert-video --workers 3 -r ~/Videos/
+```
+
+Distribute NVENC jobs across two GPUs:
+
+```bash
+convert-video --workers 2 --gpus 0,1 -r ~/Videos/
+```
+
+With more than one local worker, the CLI switches to a combined progress display that keeps all active conversions in one coordinated terminal view. Raw verbose HandBrake output is disabled in that mode so the progress view stays readable.
+
+When you pass `--gpus`, `convert-video` routes NVENC jobs through those GPU indices in round-robin order by passing `gpu=<index>` to HandBrake's NVENC encoder options. Leave it empty to let HandBrake choose the GPU automatically.
+
+> **Note:** Multi-GPU support is implemented and ready to use, but has not been tested with actual multi-GPU hardware. If you have more than one NVENC-capable GPU, please report any issues you find.
+
+### Service mode over the LAN
+
+You can now run `convert-video` as a service on machine A and submit jobs from another machine in the LAN.
+
+Important: in the first implementation, machine A must already be able to access the source and destination paths as normal filesystem paths. This works well with pre-mounted SMB or NFS shares. The service does not upload files from B to A and does not mount remote shares by itself.
+
+Start the service on machine A:
+
+```bash
+convert-video --serve \
+  --workers 2 \
+  --gpus 0,1 \
+  --listen-host 0.0.0.0 \
+  --listen-port 8765 \
+  --allow-root /mnt/media-b \
+  --allow-root /srv/convert-output
+```
+
+Then open the browser from machine B and use the built-in dashboard:
+
+```text
+http://machine-a:8765/
+```
+
+The dashboard lets you:
+
+- submit conversion jobs without using the CLI
+- inspect queued, running, completed, skipped, and failed jobs
+- cancel queued jobs
+- review the service roots and watched directories exposed by machine A
+- change how many workers run in parallel on the shared queue
+- change which NVENC GPU indices the service rotates across
+- change the default conversion settings used by the service and future watched files
+- add and remove watched directories without restarting the service
+
+Submit a job from machine B to be executed by machine A:
+
+```bash
+convert-video \
+  --server-url http://machine-a:8765 \
+  -o /mnt/media-b/converted \
+  /mnt/media-b/incoming/movie.mkv
+```
+
+If you omit `-o`, the service keeps the current behavior and writes the converted output next to the source file.
+
+Runtime service configuration is persisted in the service database (`--service-db`). This includes allowed roots, worker count, configured NVENC GPU indices, default job settings, and watched directories configured through the dashboard, so they survive service restarts. On first start, CLI service options seed that state; after that, the persisted state is restored from the database.
+
+Service HTTP endpoints:
+
+```text
+GET    /
+GET    /health
+GET    /config
+GET    /watchers
+GET    /jobs
+GET    /jobs/<job_id>
+POST   /config
+POST   /watchers
+POST   /jobs
+DELETE /watchers/<watcher_id>
+DELETE /jobs/<job_id>
+```
+
+The service starts with 1 worker by default. You can raise the worker count from the dashboard to process several jobs in parallel; all workers share the same queue. If you configure NVENC GPU indices, the service assigns NVENC jobs to those GPUs in round-robin order.
+
+### Automatic watched-directory mode
+
+Machine A can also watch one or more directories and automatically enqueue any new video file that becomes stable on disk.
+
+Watch a directory and convert everything that appears there:
+
+```bash
+convert-video --serve \
+  --listen-host 0.0.0.0 \
+  --watch-dir /mnt/media-b/watch \
+  --watch-recursive \
+  --watch-settle-time 60 \
+  --allow-root /mnt/media-b
+```
+
+The watcher uses a polling strategy and waits until the file stops changing before queueing it, which helps avoid starting a conversion while a large file is still being copied.
+
+When you use `--workers` in normal CLI mode, `convert-video` runs that many local conversions in parallel. In `--serve` mode, the same option seeds the service worker pool on first start for that service database; after that, the persisted worker count from the database takes precedence. When you use `--gpus`, local NVENC jobs rotate across those GPU indices, and `--serve --gpus ...` seeds the service's persisted NVENC GPU list on first start for that service database.
+
+The configured GPU indices must be visible to the process running `convert-video`. If the service only sees GPU `0`, configuring `0,1` will not make GPU `1` usable until that second GPU is also exposed to HandBrake and NVENC on that machine.
+
 ### Advanced options
 
 Convert with audio passthrough (no re-encoding audio):
@@ -248,8 +353,15 @@ Full help output:
 
 ```text
 usage: convert-video [-h] [-o OUTPUT] [--find [PATTERN]] [-r] [-ds] [-c CODEC]
-                     [-s] [-f] [-n] [-ap] [--force] [-y] [--verbose] [-po]
-                     [-si] [-v] [--update] [--upgrade]
+                     [-s] [-f] [-n] [-ap] [--force] [--gpus GPUS] [-y] [--verbose]
+                     [-w WORKERS] [-po]
+                     [--server-url SERVER_URL] [--serve]
+                     [--listen-host LISTEN_HOST] [--listen-port LISTEN_PORT]
+                     [--service-db SERVICE_DB] [--allow-root ALLOW_ROOT]
+                     [--watch-dir WATCH_DIR] [--watch-recursive]
+                     [--watch-poll-interval WATCH_POLL_INTERVAL]
+                     [--watch-settle-time WATCH_SETTLE_TIME] [-si] [-v]
+                     [--update] [--upgrade]
                      [input_files ...]
 
 Convert video files using HandBrakeCLI and preserve all audio and subtitle
@@ -279,11 +391,40 @@ encoding:
                         Pass through original audio tracks.
   --force               Force conversion even if file is already in the target
                         codec.
+  --gpus GPUS           Comma-separated NVENC GPU indices to use. Example:
+                        0,1 rotates jobs across GPU 0 and GPU 1.
 
 behaviour:
   -y, --yes             Automatically accept transcoding without prompts.
   --verbose             Show verbose output from HandBrakeCLI.
+  -w, --workers WORKERS
+                        Number of local conversion workers to run in
+                        parallel (default: 1).
   -po, --poweroff       Power off the system after conversion.
+  --server-url SERVER_URL
+                        Submit matching jobs to a remote convert-video
+                        service instead of converting locally.
+
+service:
+  --serve               Run the HTTP conversion service on this machine.
+  --listen-host LISTEN_HOST
+                        Bind host for the service (default: 127.0.0.1).
+  --listen-port LISTEN_PORT
+                        Bind port for the service (default: 8765).
+  --service-db SERVICE_DB
+                        SQLite database path for the service queue.
+  --allow-root ALLOW_ROOT
+                        Allowed filesystem root for service input/output
+                        paths. Repeat as needed.
+  --watch-dir WATCH_DIR
+                        Directory to watch and enqueue automatically when
+                        running with --serve.
+  --watch-recursive     Watch directories recursively when using --watch-dir.
+  --watch-poll-interval WATCH_POLL_INTERVAL
+                        Polling interval in seconds for watched directories.
+  --watch-settle-time WATCH_SETTLE_TIME
+                        Seconds a watched file must remain unchanged before
+                        enqueueing.
 
 info:
   -si, --source-info    Show source information about a single video file.

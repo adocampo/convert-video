@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-04-07
+
+### Added in 1.2.0
+
+- **Service mode** (`--serve`): run an HTTP conversion service that accepts jobs from other machines in the LAN.
+- **Web dashboard**: built-in browser UI served at the service port with dark/light theme, filesystem browser, queue management, job progress, and live auto-refresh.
+- **Parallel workers** (`--workers N`): run multiple local conversions at the same time with a combined terminal progress display.
+- **Multi-GPU round-robin** (`--gpus 0,1`): distribute NVENC jobs across multiple NVIDIA GPUs.
+- **Remote job submission** (`--server-url`): submit conversion jobs to a remote service from the CLI.
+- **Watched directories** (`--watch-dir`): automatically enqueue new video files that appear in monitored directories.
+- **Runtime administration**: change worker count, GPU indices, allowed roots, default job settings, and watched directories from the web dashboard without restarting the service.
+- **Persistent service configuration**: worker count, GPU devices, allowed roots, defaults, and watchers are stored in the service database and survive restarts.
+- **Directory-based job submission**: queue all video files in a directory at once from the dashboard.
+- **Job retry and bulk clear**: retry failed/cancelled jobs and clear finished jobs from the queue.
+
+### Changed in 1.2.0
+
+- Multi-file progress display now shows full filenames on their own line with a dynamic-width progress bar underneath, matching the single-file display style.
+- Completed jobs in multi-file mode emit `[ OK ]`, `[FAIL]`, `[SKIP]` lines identical to single-file output.
+- Web dashboard assets (HTML, CSS, JS) are packaged inside the Python package and served via `importlib.resources`.
+
+### Notes
+
+- Multi-GPU support is implemented but has not been tested with actual multi-GPU hardware due to lack of compatible hardware.
+
 ## [1.1.2] - 2026-04-01
 
 ### Fixed in 1.1.2

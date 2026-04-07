@@ -222,7 +222,7 @@ def show_source_info(filepath: str):
         print()
 
 
-def check_already_converted(input_file: str, target_codec: str, force: bool) -> str:
+def check_already_converted(input_file: str, target_codec: str, force: bool, quiet: bool = False) -> str:
     """Check if a file is already in the target codec.
 
     Returns:
@@ -256,8 +256,9 @@ def check_already_converted(input_file: str, target_codec: str, force: bool) -> 
 
     # If current codec is better than target, skip (don't downgrade)
     if current_quality > target_quality:
-        basename = os.path.basename(input_file)
-        skip(f"'{basename}' is already in {current_format} which is better than {target_format}. Use --force to override.")
+        if not quiet:
+            basename = os.path.basename(input_file)
+            skip(f"'{basename}' is already in {current_format} which is better than {target_format}. Use --force to override.")
         return 'skip'
 
     # Same codec — check if it was muxed by HandBrake
@@ -267,11 +268,13 @@ def check_already_converted(input_file: str, target_codec: str, force: bool) -> 
     is_handbrake = 'handbrake' in muxer.lower() or 'handbrake' in encoder.lower()
 
     if is_handbrake:
-        basename = os.path.basename(input_file)
-        skip(f"'{basename}' is already {current_format} encoded by HandBrake. Use --force to override.")
+        if not quiet:
+            basename = os.path.basename(input_file)
+            skip(f"'{basename}' is already {current_format} encoded by HandBrake. Use --force to override.")
         return 'skip'
     else:
-        basename = os.path.basename(input_file)
-        muxer_name = muxer or 'unknown'
-        warning(f"'{basename}' is already {current_format} but was muxed by '{muxer_name}'. Converting anyway.")
+        if not quiet:
+            basename = os.path.basename(input_file)
+            muxer_name = muxer or 'unknown'
+            warning(f"'{basename}' is already {current_format} but was muxed by '{muxer_name}'. Converting anyway.")
         return 'warn'

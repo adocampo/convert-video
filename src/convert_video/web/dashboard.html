@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>convert-video service</title>
+    <link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <div class="hero-top">
+                <h1>convert-video service</h1>
+                <button class="theme-toggle" type="button" id="toggle-theme" aria-label="Toggle dashboard theme" title="Toggle dashboard theme">
+                    <span class="theme-icons" aria-hidden="true">
+                        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" focusable="false">
+                            <circle cx="12" cy="12" r="4"></circle>
+                            <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"></path>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" focusable="false">
+                            <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8a9.5 9.5 0 1 0 11.3 11.3z"></path>
+                        </svg>
+                    </span>
+                    <span class="theme-copy">
+                        <span class="theme-copy-label">Theme</span>
+                        <span class="theme-copy-value" id="theme-label">Light theme</span>
+                    </span>
+                </button>
+            </div>
+            <p>Remote control panel for the source. Use this page from the destination to submit conversions, inspect the queue, and cancel jobs without using the CLI.</p>
+            <div class="meta" id="service-meta"></div>
+        </section>
+
+        <div class="grid">
+            <section class="stack">
+                <section class="panel">
+                    <h2>New Job</h2>
+                    <form id="job-form" method="post" action="/jobs">
+                        <label>
+                            <span>Source path</span>
+                            <div class="path-picker">
+                                <input id="input-file" name="input_file" placeholder="Choose a file or folder on the source" title="Source file or folder to convert. Use the chooser buttons to browse the source." readonly required>
+                                <input id="input-kind" name="input_kind" type="hidden" value="file">
+                                <div class="actions">
+                                    <button class="secondary" type="button" id="browse-input-file" title="Browse the source and pick a single file to convert.">Choose file</button>
+                                    <button class="secondary" type="button" id="browse-input-directory" title="Browse the source and pick a folder to queue.">Choose folder</button>
+                                    <button class="ghost" type="button" id="clear-input-file" title="Clear the current source selection.">Clear</button>
+                                </div>
+                                <p class="small picker-help" id="input-selection-hint">Choose a single file or a folder on the source.</p>
+                            </div>
+                        </label>
+
+                        <div class="checks checks-single">
+                            <label class="check" title="When the source is a folder, include files from its subdirectories too."><input id="input-recursive" type="checkbox" name="recursive" disabled>Include subdirectories when the source is a folder</label>
+                        </div>
+
+                        <label>
+                            <span>Destination directory</span>
+                            <input name="output_dir" placeholder="/mnt/destination/converted" title="Destination directory for converted files. Leave empty to write next to each source file.">
+                        </label>
+
+                        <div class="row">
+                            <label>
+                                <span>Codec</span>
+                                <select name="codec" title="Encoder profile used for the conversion.">
+                                    <option value="nvenc_h265">nvenc_h265</option>
+                                    <option value="nvenc_h264">nvenc_h264</option>
+                                    <option value="av1">av1</option>
+                                    <option value="x265">x265</option>
+                                </select>
+                            </label>
+
+                            <label>
+                                <span>Speed</span>
+                                <select name="encode_speed" title="Encoding preset. Slower presets usually compress better, but they take longer.">
+                                    <option value="normal">normal</option>
+                                    <option value="slow">slow</option>
+                                    <option value="fast">fast</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="checks">
+                            <label class="check" title="Keep the original audio tracks instead of re-encoding them."><input type="checkbox" name="audio_passthrough">Audio passthrough</label>
+                            <label class="check" title="Delete the source file after a successful conversion. Use with care."><input type="checkbox" name="delete_source">Delete source on success</label>
+                            <label class="check" title="Queue the job even if the file already looks converted."><input type="checkbox" name="force">Force conversion</label>
+                            <label class="check" title="Capture and display more detailed HandBrake output for troubleshooting."><input type="checkbox" name="verbose">Verbose HandBrake output</label>
+                        </div>
+
+                        <div class="actions">
+                            <button class="primary" type="submit" id="submit-button" title="Add the current source to the queue with these settings.">Queue job</button>
+                            <button class="secondary" type="button" id="refresh-button" title="Refresh the service summary and queue right now.">Refresh jobs</button>
+                        </div>
+                        <div class="status-line" id="form-status"></div>
+                    </form>
+                </section>
+
+                <section class="panel">
+                    <h2>Service Admin</h2>
+
+                    <div class="subpanel">
+                        <h3>Default Job Settings</h3>
+                        <form id="settings-form" method="post" action="/config">
+                            <div class="picker-block">
+                                <div class="picker-block-header">
+                                    <div>
+                                        <span>Allowed source roots</span>
+                                        <p class="small picker-help">Choose which directories on the source the service can access.</p>
+                                    </div>
+                                    <button class="secondary" type="button" id="add-allowed-root" title="Add a source directory that the service is allowed to browse and use.">Add allowed root</button>
+                                </div>
+                                <textarea name="allowed_roots" hidden></textarea>
+                                <div id="allowed-roots-list" class="list-block"></div>
+                            </div>
+
+                            <label>
+                                <span>Parallel workers</span>
+                                <input name="worker_count" type="number" min="1" step="1" value="1" title="Number of conversion workers that can run at the same time. All workers share the same queue.">
+                            </label>
+                            <p class="small picker-help">Each worker processes one job at a time. All workers share the same queue.</p>
+
+                            <label>
+                                <span>NVENC GPU devices</span>
+                                <input name="gpu_devices" placeholder="Leave empty for automatic selection" title="Comma-separated NVIDIA GPU indices for NVENC jobs. Example: 0,1 rotates jobs across GPU 0 and GPU 1. Leave empty to let HandBrake choose automatically.">
+                            </label>
+                            <p class="small picker-help">Example: 0,1 rotates NVENC jobs across those GPUs. Leave empty to let HandBrake choose the GPU automatically.</p>
+
+                            <label>
+                                <span>Default destination directory</span>
+                                <input name="default_output_dir" placeholder="Leave empty to write next to source" title="Default destination directory for new jobs and watchers. Leave empty to write next to each source file.">
+                            </label>
+
+                            <div class="row">
+                                <label>
+                                    <span>Default codec</span>
+                                    <select name="default_codec" title="Default encoder profile for new jobs and watcher-created jobs.">
+                                        <option value="nvenc_h265">nvenc_h265</option>
+                                        <option value="nvenc_h264">nvenc_h264</option>
+                                        <option value="av1">av1</option>
+                                        <option value="x265">x265</option>
+                                    </select>
+                                </label>
+
+                                <label>
+                                    <span>Default speed</span>
+                                    <select name="default_encode_speed" title="Default encoding preset for new jobs and watcher-created jobs.">
+                                        <option value="normal">normal</option>
+                                        <option value="slow">slow</option>
+                                        <option value="fast">fast</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="checks">
+                                <label class="check" title="Use audio passthrough by default on new jobs and watcher-created jobs."><input type="checkbox" name="default_audio_passthrough">Default audio passthrough</label>
+                                <label class="check" title="Delete source files by default after successful conversions."><input type="checkbox" name="default_delete_source">Default delete source</label>
+                                <label class="check" title="Force conversion by default, even when a file already looks converted."><input type="checkbox" name="default_force">Default force conversion</label>
+                                <label class="check" title="Enable verbose HandBrake output by default."><input type="checkbox" name="default_verbose">Default verbose mode</label>
+                            </div>
+
+                            <div class="actions">
+                                <button class="primary" type="submit" id="settings-button" title="Save the default service settings and allowed source roots.">Save settings</button>
+                            </div>
+                            <div class="status-line" id="settings-status"></div>
+                        </form>
+                    </div>
+
+                    <div class="subpanel">
+                        <h3>Watch Directories</h3>
+                        <form id="watcher-form" method="post" action="/watchers">
+                            <label>
+                                <span>Source directory</span>
+                                <div class="path-picker">
+                                    <input id="watcher-directory" name="directory" placeholder="Choose a directory on the source" title="Source directory to monitor for new files." readonly required>
+                                    <div class="actions">
+                                        <button class="secondary" type="button" id="browse-watcher-directory" title="Browse the source and choose a directory to watch.">Choose folder</button>
+                                        <button class="ghost" type="button" id="clear-watcher-directory" title="Clear the current watcher directory.">Clear</button>
+                                    </div>
+                                </div>
+                            </label>
+
+                            <div class="row">
+                                <label>
+                                    <span>Poll interval</span>
+                                    <input name="poll_interval" type="number" min="1" step="1" value="5" title="Seconds between scans for new files in this source directory.">
+                                </label>
+                                <label>
+                                    <span>Settle time</span>
+                                    <input name="settle_time" type="number" min="1" step="1" value="30" title="Seconds a file must stay unchanged before the watcher queues it.">
+                                </label>
+                            </div>
+
+                            <div class="checks checks-single">
+                                <label class="check" title="Also monitor subdirectories inside this source directory."><input type="checkbox" name="recursive">Recursive watch</label>
+                                <label class="check" title="Delete each source file after this watcher finishes a successful conversion."><input type="checkbox" name="delete_source">Delete source on success for this watcher</label>
+                            </div>
+
+                            <div class="actions">
+                                <button class="secondary" type="submit" id="watcher-button" title="Start monitoring this source directory with the current watcher settings.">Add watcher</button>
+                            </div>
+                            <div class="status-line" id="watcher-status"></div>
+                        </form>
+                        <div id="watchers-container" class="list-block"></div>
+                    </div>
+                </section>
+            </section>
+
+            <section class="panel panel-queue">
+                <div class="jobs-header">
+                    <h2>Queue</h2>
+                    <div class="jobs-header-actions">
+                        <button class="ghost" type="button" id="clear-jobs" title="Remove finished jobs from the queue list. Running jobs stay in place.">Clear queue</button>
+                        <button class="ghost" type="button" id="toggle-autorefresh" title="Automatically refresh the queue every 2 seconds. Click to pause or resume.">Auto refresh: on</button>
+                    </div>
+                </div>
+                <div id="jobs-container"></div>
+            </section>
+        </div>
+    </div>
+
+    <div class="browser-modal" id="path-browser" hidden>
+        <div class="browser-backdrop" data-close-browser></div>
+        <div class="browser-dialog" role="dialog" aria-modal="true" aria-labelledby="path-browser-title">
+            <div class="browser-header">
+                <div class="browser-copy">
+                    <div class="theme-copy-label" id="path-browser-eyebrow">Browse</div>
+                    <h3 id="path-browser-title">Source filesystem</h3>
+                </div>
+                <button class="ghost" type="button" id="close-browser" title="Close the source browser.">Close</button>
+            </div>
+            <div class="browser-root-chips" id="browser-roots"></div>
+            <div class="row browser-toolbar">
+                <button class="ghost" type="button" id="browser-up" title="Go to the parent folder in the source browser.">Up</button>
+                <input id="browser-current-path" title="Current folder in the source browser." readonly>
+            </div>
+            <div class="browser-options">
+                <input id="browser-filter" type="search" placeholder="Filter current source directory" title="Filter the current source folder by name or path.">
+                <label class="check browser-check" title="Show dotfiles and hidden folders in the source browser."><input id="browser-show-hidden" type="checkbox">Show hidden files and folders</label>
+            </div>
+            <div class="status-line" id="browser-status"></div>
+            <div class="browser-list" id="browser-list"></div>
+            <div class="actions browser-footer">
+                <button class="primary" type="button" id="browser-select-current" title="Use the current source folder as the selected path." hidden>Use this folder</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/assets/dashboard.js"></script>
+</body>
+</html>

@@ -10,8 +10,9 @@ import subprocess
 import sys
 import tempfile
 import termios
+import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from tqdm import tqdm
 
@@ -21,11 +22,92 @@ from convert_video.output import (
 from convert_video.mediainfo import get_resolution, get_audio_info
 
 # Global references for cleanup on signal
-_current_temp_file: Optional[str] = None
-_current_process: Optional[subprocess.Popen] = None
-_interrupted = False
+_STATE_UNSET = object()
+_conversion_state_lock = threading.Lock()
+_conversion_states: dict[int, dict[str, object]] = {}
 _last_sigint_time: float = 0.0
 _DOUBLE_PRESS_INTERVAL = 1.5  # seconds
+
+
+def _get_conversion_state(thread_id: Optional[int] = None) -> dict[str, object]:
+    key = thread_id if thread_id is not None else threading.get_ident()
+    with _conversion_state_lock:
+        state = _conversion_states.get(key)
+        if state is None:
+            state = {
+                "temp_file": None,
+                "process": None,
+                "interrupted": False,
+            }
+            _conversion_states[key] = state
+        return dict(state)
+
+
+def _update_conversion_state(
+    thread_id: Optional[int] = None,
+    *,
+    temp_file=_STATE_UNSET,
+    process=_STATE_UNSET,
+    interrupted=_STATE_UNSET,
+) -> dict[str, object]:
+    key = thread_id if thread_id is not None else threading.get_ident()
+    with _conversion_state_lock:
+        state = _conversion_states.setdefault(
+            key,
+            {
+                "temp_file": None,
+                "process": None,
+                "interrupted": False,
+            },
+        )
+        if temp_file is not _STATE_UNSET:
+            state["temp_file"] = temp_file
+        if process is not _STATE_UNSET:
+            state["process"] = process
+        if interrupted is not _STATE_UNSET:
+            state["interrupted"] = bool(interrupted)
+        return dict(state)
+
+
+def _is_conversion_interrupted(thread_id: Optional[int] = None) -> bool:
+    return bool(_get_conversion_state(thread_id).get("interrupted"))
+
+
+def _clear_conversion_interrupt(thread_id: Optional[int] = None):
+    _update_conversion_state(thread_id, interrupted=False)
+
+
+def clear_current_conversion_state(thread_id: Optional[int] = None):
+    key = thread_id if thread_id is not None else threading.get_ident()
+    with _conversion_state_lock:
+        _conversion_states.pop(key, None)
+
+
+def _spawn_conversion_process(args, *, stdout=None, stderr=None) -> subprocess.Popen:
+    kwargs = {
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+    if os.name != "nt":
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(args, **kwargs)
+
+
+def _stop_process_tree(process: Optional[subprocess.Popen]) -> bool:
+    if process is None or process.poll() is not None:
+        return False
+
+    try:
+        if os.name != "nt":
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        else:
+            process.kill()
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            return False
+    return True
 
 
 def _get_terminal_size() -> tuple[int, int]:
@@ -43,39 +125,156 @@ def _set_pty_window_size(fd: int):
 
 def handle_sigint(signum, frame):
     """Handle Ctrl+C: single press skips current file, double press exits."""
-    global _interrupted, _last_sigint_time
+    global _last_sigint_time
     now = time.time()
 
     if now - _last_sigint_time < _DOUBLE_PRESS_INTERVAL:
         # Double Ctrl+C — abort everything
         print()
         error("Double Ctrl+C detected. Aborting all conversions...")
-        if _current_process:
-            try:
-                _current_process.kill()
-                _current_process.wait()
-            except Exception:
-                pass
-        if _current_temp_file and os.path.exists(_current_temp_file):
-            os.remove(_current_temp_file)
+        request_all_conversion_stops()
+        with _conversion_state_lock:
+            temp_files = [
+                str(state.get("temp_file") or "")
+                for state in _conversion_states.values()
+                if state.get("temp_file")
+            ]
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
         os._exit(1)
 
     # Single Ctrl+C — skip current file
     _last_sigint_time = now
-    _interrupted = True
     print()
     warning("Ctrl+C: skipping current file (press again quickly to abort all)...")
-    if _current_process:
-        try:
-            _current_process.kill()
-        except Exception:
-            pass
+    request_current_conversion_stop()
 
 
 def install_signal_handlers():
     """Register SIGINT/SIGTERM handlers for safe conversion interruption."""
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
+
+
+def request_current_conversion_stop(thread_id: Optional[int] = None) -> bool:
+    """Ask a conversion to stop and report whether a live process was signalled."""
+    state = _update_conversion_state(thread_id, interrupted=True)
+    process = state.get("process")
+    if isinstance(process, subprocess.Popen):
+        return _stop_process_tree(process)
+    return False
+
+
+def request_all_conversion_stops() -> bool:
+    """Ask every tracked conversion to stop and report whether any live process was signalled."""
+    with _conversion_state_lock:
+        states = []
+        for state in _conversion_states.values():
+            state["interrupted"] = True
+            states.append(dict(state))
+
+    stopped_any = False
+    for state in states:
+        process = state.get("process")
+        if isinstance(process, subprocess.Popen):
+            stopped_any = _stop_process_tree(process) or stopped_any
+    return stopped_any
+
+
+def get_current_conversion_output_size(thread_id: Optional[int] = None) -> int:
+    """Return the current temporary output size for the active conversion."""
+    temp_file = _get_conversion_state(thread_id).get("temp_file")
+    if not temp_file or not os.path.exists(temp_file):
+        return 0
+    try:
+        return os.path.getsize(temp_file)
+    except OSError:
+        return 0
+
+
+def parse_gpu_devices(value: object) -> list[int]:
+    """Parse a GPU device selection into a normalized list of unique indices."""
+    if value is None:
+        return []
+
+    raw_items: list[str] = []
+    if isinstance(value, int):
+        raw_items = [str(value)]
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in {"auto", "any", "default"}:
+            return []
+        raw_items = [item for item in re.split(r"[\s,;]+", text) if item]
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            text = str(item).strip()
+            if not text:
+                continue
+            raw_items.extend(part for part in re.split(r"[\s,;]+", text) if part)
+    else:
+        raise ValueError("GPU devices must be provided as an index, a list, or a comma-separated string.")
+
+    devices: list[int] = []
+    seen: set[int] = set()
+    for item in raw_items:
+        lowered = item.lower()
+        if lowered in {"auto", "any", "default"}:
+            if len(raw_items) == 1:
+                return []
+            raise ValueError("Automatic GPU selection cannot be combined with explicit GPU indices.")
+        try:
+            index = int(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid GPU index: {item}") from exc
+        if index < 0:
+            raise ValueError("GPU indices must be zero or greater.")
+        if index in seen:
+            continue
+        seen.add(index)
+        devices.append(index)
+    return devices
+
+
+def get_visible_nvidia_gpus() -> list[dict[str, object]]:
+    """Return visible NVIDIA GPUs detected through nvidia-smi."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []
+
+    devices: list[dict[str, object]] = []
+    seen: set[int] = set()
+    for line in result.stdout.splitlines():
+        parts = [part.strip() for part in line.split(",", 1)]
+        if len(parts) != 2:
+            continue
+        try:
+            index = int(parts[0])
+        except ValueError:
+            continue
+        if index in seen:
+            continue
+        seen.add(index)
+        devices.append({"index": index, "name": parts[1]})
+    return devices
+
+
+def uses_nvenc_encoder(codec: str, encode_speed: str) -> bool:
+    """Return whether the current settings route the encode through NVENC."""
+    normalized_speed = str(encode_speed or "").strip().lower()
+    normalized_codec = str(codec or "").strip().lower()
+    if normalized_speed == "normal":
+        return True
+    if normalized_speed == "fast":
+        return normalized_codec.startswith("nvenc_")
+    return False
 
 
 def generate_unique_filename(base_name: str, extension: str, output_path: str) -> str:
@@ -91,7 +290,7 @@ def generate_unique_filename(base_name: str, extension: str, output_path: str) -
     return output_file
 
 
-def preserve_audio_titles(input_file: str, output_file: str):
+def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool = True):
     """Copy audio track titles from input to output using mkvpropedit."""
     audio_tracks = get_audio_info(input_file)
     for i, track in enumerate(audio_tracks):
@@ -105,7 +304,8 @@ def preserve_audio_titles(input_file: str, output_file: str):
                 capture_output=True, check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            warning(f"Could not set audio title for track {track_num}: {e}")
+            if emit_logs:
+                warning(f"Could not set audio title for track {track_num}: {e}")
 
 
 def confirm_prompt() -> bool:
@@ -144,11 +344,75 @@ def confirm_prompt() -> bool:
             print(f"\r\033[2K", end="")
 
 
+def _extract_progress_percent(line: str) -> Optional[float]:
+    match = re.search(r"Encoding:.*? (\d+\.\d+) %", line)
+    if not match:
+        return None
+    return float(match.group(1))
+
+
+def _consume_pty_output(
+    master_fd: int,
+    process: subprocess.Popen,
+    line_handler: Callable[[str], None],
+):
+    buf = b""
+
+    def flush_buffer(chunk_buffer: bytes) -> bytes:
+        while b"\r" in chunk_buffer or b"\n" in chunk_buffer:
+            idx_r = chunk_buffer.find(b"\r")
+            idx_n = chunk_buffer.find(b"\n")
+            if idx_r == -1:
+                idx = idx_n
+            elif idx_n == -1:
+                idx = idx_r
+            else:
+                idx = min(idx_r, idx_n)
+            line = chunk_buffer[:idx].decode("utf-8", errors="replace")
+            chunk_buffer = chunk_buffer[idx + 1:]
+            if line:
+                line_handler(line)
+        return chunk_buffer
+
+    while True:
+        ready, _, _ = select.select([master_fd], [], [], 0.1)
+        if ready:
+            try:
+                chunk = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            buf = flush_buffer(buf)
+        elif process.poll() is not None:
+            while True:
+                ready, _, _ = select.select([master_fd], [], [], 0.1)
+                if ready:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    buf += chunk
+                    buf = flush_buffer(buf)
+                else:
+                    break
+            break
+
+    if buf:
+        line_handler(buf.decode("utf-8", errors="replace"))
+
+
 def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: str,
                    audio_passthrough: bool, verbose: bool,
                    title: int = None, resolution_override: str = None,
-                   audio_tracks: list = None) -> bool:
-    global _current_temp_file, _interrupted
+                   audio_tracks: list = None, show_progress: bool = True,
+                   gpu_device: Optional[int] = None,
+                   progress_callback: Optional[Callable[[float, str], None]] = None,
+                   emit_logs: bool = True) -> str:
+    thread_id = threading.get_ident()
 
     is_iso = title is not None
 
@@ -157,7 +421,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     else:
         resolution = get_resolution(input_file)
         if not resolution:
-            return False
+            return ""
 
     # Build audio parameters
     audio_params = []
@@ -257,10 +521,10 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         final_output = generate_unique_filename(f"{base_name}_converted", extension, output_subdir)
 
     with tempfile.NamedTemporaryFile(
-        suffix=f".{extension}", dir=output_subdir, prefix=f"{base_name}.tmp.", delete=False
+        dir=output_subdir, prefix=f"{base_name}.tmp.{extension}.", delete=False
     ) as tf:
         temp_filepath = tf.name
-    _current_temp_file = temp_filepath
+    _update_conversion_state(thread_id, temp_file=temp_filepath, process=None)
 
     # Build HandBrakeCLI command
     hb_params = [
@@ -287,34 +551,62 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             "--vb", "1000",
         ])
 
+    if gpu_device is not None and uses_nvenc_encoder(codec, encode_speed):
+        hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
+
     try:
         elapsed_text = None
+        last_progress = 0.0
+
+        def report_progress(percent: float, detail: str):
+            nonlocal last_progress
+            clamped = max(0.0, min(percent, 100.0))
+            if clamped < last_progress:
+                return
+            last_progress = clamped
+            if progress_callback is not None:
+                progress_callback(clamped, detail)
+
+        report_progress(0.0, "Starting conversion.")
+
+        if _is_conversion_interrupted(thread_id):
+            _clear_conversion_interrupt(thread_id)
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+            _update_conversion_state(thread_id, temp_file=None, process=None)
+            if emit_logs:
+                skip(f"Conversion skipped: {os.path.basename(input_file)}")
+            report_progress(last_progress, "Conversion skipped.")
+            return ""
+
         if verbose:
             # Verbose mode: show full HandBrakeCLI output
-            _current_process = subprocess.Popen(hb_params)
-            _current_process.wait()
-            conversion_succeeded = _current_process.returncode == 0
-            _current_process = None
-        else:
+            process = _spawn_conversion_process(hb_params)
+            _update_conversion_state(thread_id, process=process)
+            process.wait()
+            conversion_succeeded = process.returncode == 0
+            _update_conversion_state(thread_id, process=None)
+        elif show_progress:
             # Progress bar mode — use a pseudo-terminal so HandBrakeCLI
             # sees a real TTY and emits progress updates.
             conversion_succeeded = False
             master_fd, slave_fd = pty.openpty()
             _set_pty_window_size(slave_fd)
-            print(f"Converting: {os.path.basename(input_file)}")
+            if emit_logs:
+                print(f"Converting: {os.path.basename(input_file)}")
             with tqdm(
                 total=100,
                 dynamic_ncols=True,
                 leave=False,
                 bar_format="{percentage:3.0f}%|{bar}| [{elapsed}<{remaining}]",
             ) as pbar:
-                process = subprocess.Popen(
+                process = _spawn_conversion_process(
                     hb_params,
                     stdout=slave_fd,
                     stderr=slave_fd,
                 )
                 os.close(slave_fd)
-                _current_process = process
+                _update_conversion_state(thread_id, process=process)
 
                 def handle_resize(signum, frame):
                     """Redraw the progress bar and propagate window size changes."""
@@ -328,51 +620,18 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
                 old_winch_handler = signal.getsignal(signal.SIGWINCH)
                 signal.signal(signal.SIGWINCH, handle_resize)
-                buf = b""
+
+                def handle_line(line: str):
+                    percent = _extract_progress_percent(line)
+                    if percent is None:
+                        return
+                    increment = percent - pbar.n
+                    if increment > 0:
+                        pbar.update(increment)
+                    report_progress(percent, line)
+
                 try:
-                    while True:
-                        ready, _, _ = select.select([master_fd], [], [], 0.1)
-                        if ready:
-                            try:
-                                chunk = os.read(master_fd, 4096)
-                            except OSError:
-                                break
-                            if not chunk:
-                                break
-                            buf += chunk
-                            # Process all complete lines (delimited by \r or \n)
-                            while b"\r" in buf or b"\n" in buf:
-                                idx_r = buf.find(b"\r")
-                                idx_n = buf.find(b"\n")
-                                if idx_r == -1:
-                                    idx = idx_n
-                                elif idx_n == -1:
-                                    idx = idx_r
-                                else:
-                                    idx = min(idx_r, idx_n)
-                                line = buf[:idx].decode("utf-8", errors="replace")
-                                buf = buf[idx + 1:]
-                                m = re.search(r"Encoding:.*? (\d+\.\d+) %", line)
-                                if m:
-                                    percent = float(m.group(1))
-                                    increment = percent - pbar.n
-                                    if increment > 0:
-                                        pbar.update(increment)
-                        elif process.poll() is not None:
-                            # Drain remaining data after process exits
-                            while True:
-                                ready, _, _ = select.select([master_fd], [], [], 0.1)
-                                if ready:
-                                    try:
-                                        chunk = os.read(master_fd, 4096)
-                                    except OSError:
-                                        break
-                                    if not chunk:
-                                        break
-                                    buf += chunk
-                                else:
-                                    break
-                            break
+                    _consume_pty_output(master_fd, process, handle_line)
                 finally:
                     signal.signal(signal.SIGWINCH, old_winch_handler)
                     try:
@@ -380,50 +639,98 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     except OSError:
                         pass
                 process.wait()
-                _current_process = None
+                _update_conversion_state(thread_id, process=None)
                 conversion_succeeded = process.returncode == 0
                 elapsed_text = tqdm.format_interval(pbar.format_dict["elapsed"])
+        elif progress_callback is not None:
+            if emit_logs:
+                info(f"Converting: {os.path.basename(input_file)}")
+            conversion_succeeded = False
+            master_fd, slave_fd = pty.openpty()
+            _set_pty_window_size(slave_fd)
+            process = _spawn_conversion_process(
+                hb_params,
+                stdout=slave_fd,
+                stderr=slave_fd,
+            )
+            os.close(slave_fd)
+            _update_conversion_state(thread_id, process=process)
+            try:
+                _consume_pty_output(
+                    master_fd,
+                    process,
+                    lambda line: (
+                        lambda percent: report_progress(percent, line)
+                        if percent is not None else None
+                    )(_extract_progress_percent(line)),
+                )
+            finally:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            process.wait()
+            _update_conversion_state(thread_id, process=None)
+            conversion_succeeded = process.returncode == 0
+        else:
+            if emit_logs:
+                info(f"Converting: {os.path.basename(input_file)}")
+            process = _spawn_conversion_process(hb_params)
+            _update_conversion_state(thread_id, process=process)
+            process.wait()
+            conversion_succeeded = process.returncode == 0
+            _update_conversion_state(thread_id, process=None)
 
         # Check if this conversion was interrupted by Ctrl+C
-        if _interrupted:
-            _interrupted = False
+        if _is_conversion_interrupted(thread_id):
+            _clear_conversion_interrupt(thread_id)
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            _current_temp_file = None
-            skip(f"Conversion skipped: {os.path.basename(input_file)}")
-            return False
+            _update_conversion_state(thread_id, temp_file=None, process=None)
+            if emit_logs:
+                skip(f"Conversion skipped: {os.path.basename(input_file)}")
+            report_progress(last_progress, "Conversion skipped.")
+            return ""
 
         if conversion_succeeded:
             shutil.move(temp_filepath, final_output)
-            _current_temp_file = None
-            if elapsed_text:
-                success(f"Conversion successful [{elapsed_text}]")
-            else:
-                success(f"Conversion successful: {os.path.basename(final_output)}")
+            _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+            if emit_logs:
+                if elapsed_text:
+                    success(f"Conversion successful [{elapsed_text}]")
+                else:
+                    success(f"Conversion successful: {os.path.basename(final_output)}")
             # Preserve audio track titles from original file
-            preserve_audio_titles(input_file, final_output)
-            return True
+            preserve_audio_titles(input_file, final_output, emit_logs=emit_logs)
+            report_progress(100.0, "Conversion successful.")
+            return final_output
         else:
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            _current_temp_file = None
-            if elapsed_text:
-                error(f"Conversion failed [{elapsed_text}]: {os.path.basename(input_file)}")
-            else:
-                error(f"Conversion failed: {os.path.basename(input_file)}")
-            return False
+            _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+            if emit_logs:
+                if elapsed_text:
+                    error(f"Conversion failed [{elapsed_text}]: {os.path.basename(input_file)}")
+                else:
+                    error(f"Conversion failed: {os.path.basename(input_file)}")
+            report_progress(last_progress, "Conversion failed.")
+            return ""
     except FileNotFoundError:
-        error("HandBrakeCLI not found.")
+        if emit_logs:
+            error("HandBrakeCLI not found.")
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
-        _current_temp_file = None
-        return False
+        _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+        report_progress(last_progress, "HandBrakeCLI not found.")
+        return ""
     except subprocess.CalledProcessError as e:
-        error(f"Error during conversion: {e}")
+        if emit_logs:
+            error(f"Error during conversion: {e}")
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
-        _current_temp_file = None
-        return False
+        _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+        report_progress(last_progress, f"Conversion error: {e}")
+        return ""
 
 
 def poweroff_with_countdown():
