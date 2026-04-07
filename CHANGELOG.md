@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-04-07
+
+### Changed in 1.2.1
+
+- `--update` now shows the full changelog between the installed version and the latest available version, including all intermediate versions when there is more than one.
+
 ## [1.2.0] - 2026-04-07
 
 ### Added in 1.2.0

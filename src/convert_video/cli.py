@@ -22,7 +22,7 @@ from convert_video.converter import (
     parse_gpu_devices, request_all_conversion_stops,
 )
 from convert_video.service import build_service_db_path, run_service, submit_remote_job
-from convert_video.updater import check_for_updates, upgrade
+from convert_video.updater import check_for_updates, get_update_changelog, upgrade
 from convert_video.iso import is_iso_file, scan_iso, select_main_title, display_titles
 
 install_signal_handlers()
@@ -656,7 +656,12 @@ def main():
         if remote_ver:
             print(f"  Latest version  : {remote_ver}")
             if update_available:
-                print(f"\n  Run 'convert-video --upgrade' to install the new version.")
+                changelog = get_update_changelog(local_ver, remote_ver)
+                if changelog:
+                    print()
+                    print(changelog)
+                    print()
+                print(f"  Run 'convert-video --upgrade' to install the new version.")
             else:
                 info("Already up to date.")
         sys.exit(0)
