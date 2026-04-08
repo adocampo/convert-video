@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-04-08
+
+### Added in 1.3.0
+
+- **Clutch branding assets**: the project now ships the branded logo and favicon used by the documentation and web dashboard.
+
+### Changed in 1.3.0
+
+- The project is now branded as `clutch` across the CLI, installer, systemd service, dashboard, packaged assets, and documentation.
+- The installed console script is now `clutch`; the previous `convert-video` command is no longer installed.
+- Upgrade and service migration paths now carry forward legacy `convert-video` state, theme preferences, and service files under the new `clutch` names automatically.
+
+### Repository status
+
+- The GitHub repository URL still uses `adocampo/convert-video` until the repository rename happens, so install and self-update commands continue to reference that URL.
+
 ## [1.2.3] - 2026-04-08
 
 ### Added in 1.2.3
