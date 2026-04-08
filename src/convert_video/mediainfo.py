@@ -23,6 +23,38 @@ CODEC_TO_FORMAT = {
 }
 
 
+def _collect_encoding_markers(*tracks: dict | None) -> list[str]:
+    markers: list[str] = []
+    seen: set[str] = set()
+
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        for key, value in track.items():
+            if not isinstance(value, str):
+                continue
+            normalized_key = key.lower()
+            if "encoded" not in normalized_key and "writing" not in normalized_key:
+                continue
+            marker = value.strip()
+            if not marker:
+                continue
+            normalized_marker = marker.lower()
+            if normalized_marker in seen:
+                continue
+            seen.add(normalized_marker)
+            markers.append(marker)
+
+    return markers
+
+
+def _first_available_value(*values: object) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def get_mediainfo_json(filepath: str) -> dict:
     """Get full mediainfo JSON output for a file."""
     try:
@@ -120,8 +152,14 @@ def show_source_info(filepath: str):
         overall_br = general.get('OverallBitRate', 'N/A')
         if overall_br != 'N/A':
             print(f"  Bitrate:      {_format_bitrate(overall_br)}")
-        if general.get('Encoded_Application'):
-            print(f"  Muxer:        {general['Encoded_Application']}")
+        muxer_name = _first_available_value(
+            general.get('Encoded_Application', ''),
+            general.get('Writing_Application', ''),
+            general.get('Encoded_Library', ''),
+            general.get('Encoded_Library_Name', ''),
+        )
+        if muxer_name:
+            print(f"  Muxer:        {muxer_name}")
         if general.get('Encoded_Date'):
             print(f"  Encoded:      {general['Encoded_Date']}")
         print()
@@ -155,8 +193,14 @@ def show_source_info(filepath: str):
             print(f"  Chroma:       {t.get('ChromaSubsampling', 'N/A')}")
             print(f"  Scan type:    {t.get('ScanType', 'N/A')}")
             print(f"  Color space:  {t.get('ColorSpace', 'N/A')}")
-            if t.get('Encoded_Library'):
-                print(f"  Encoder:      {t['Encoded_Library']}")
+            encoder_name = _first_available_value(
+                t.get('Encoded_Library', ''),
+                t.get('Encoded_Library_Name', ''),
+                t.get('Writing_library', ''),
+                t.get('Writing_Library', ''),
+            )
+            if encoder_name:
+                print(f"  Encoder:      {encoder_name}")
             stream_size = t.get('StreamSize', '')
             if stream_size:
                 print(f"  Stream size:  {_format_size(stream_size)}")
@@ -234,6 +278,9 @@ def check_already_converted(input_file: str, target_codec: str, force: bool, qui
     if not data:
         return 'convert'
 
+    if force:
+        return 'convert'
+
     tracks = data.get('media', {}).get('track', [])
     general = next((t for t in tracks if t['@type'] == 'General'), None)
     video = next((t for t in tracks if t['@type'] == 'Video'), None)
@@ -261,11 +308,9 @@ def check_already_converted(input_file: str, target_codec: str, force: bool, qui
             skip(f"'{basename}' is already in {current_format} which is better than {target_format}. Use --force to override.")
         return 'skip'
 
-    # Same codec — check if it was muxed by HandBrake
-    muxer = general.get('Encoded_Application', '')
-    encoder = video.get('Encoded_Library_Name', '')
-
-    is_handbrake = 'handbrake' in muxer.lower() or 'handbrake' in encoder.lower()
+    # Same codec — check if it was encoded or muxed by HandBrake.
+    encoding_markers = _collect_encoding_markers(general, video)
+    is_handbrake = any('handbrake' in marker.lower() for marker in encoding_markers)
 
     if is_handbrake:
         if not quiet:
@@ -275,6 +320,15 @@ def check_already_converted(input_file: str, target_codec: str, force: bool, qui
     else:
         if not quiet:
             basename = os.path.basename(input_file)
-            muxer_name = muxer or 'unknown'
+            muxer_name = _first_available_value(
+                general.get('Encoded_Application', ''),
+                general.get('Writing_Application', ''),
+                general.get('Encoded_Library', ''),
+                general.get('Encoded_Library_Name', ''),
+                video.get('Encoded_Library', ''),
+                video.get('Encoded_Library_Name', ''),
+                video.get('Writing_library', ''),
+                video.get('Writing_Library', ''),
+            ) or 'unknown'
             warning(f"'{basename}' is already {current_format} but was muxed by '{muxer_name}'. Converting anyway.")
         return 'warn'

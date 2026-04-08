@@ -33,10 +33,10 @@ For the full feature set, install these tools as well:
 
 ### One-liner install (no manual clone needed)
 
-The repository URL still uses the old GitHub name until the repo rename lands.
+The GitHub repository now lives at `adocampo/clutch`, and the installer and self-update commands below use the renamed repo.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/adocampo/clutch/master/install.sh | bash
 ```
 
 The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, clones the repo to a temporary directory when needed, installs `clutch` via pipx, checks runtime dependencies, and places the systemd user unit on Linux.
@@ -44,7 +44,7 @@ The installer detects your OS and package manager, ensures Python 3.9+, venv, an
 ### Install from a local clone
 
 ```bash
-git clone https://github.com/adocampo/convert-video.git clutch
+git clone https://github.com/adocampo/clutch.git clutch
 cd clutch
 bash install.sh
 ```
@@ -52,7 +52,7 @@ bash install.sh
 ### Direct install with pipx from GitHub
 
 ```bash
-pipx install git+https://github.com/adocampo/convert-video.git
+pipx install git+https://github.com/adocampo/clutch.git
 ```
 
 ### Verify installation
@@ -90,7 +90,7 @@ HandBrake H.265 was good enough that it often got close to AV1 compression while
 If you want to contribute or test the latest development version:
 
 ```bash
-git clone https://github.com/adocampo/convert-video.git clutch
+git clone https://github.com/adocampo/clutch.git clutch
 cd clutch
 python3 -m venv .venv
 source .venv/bin/activate
@@ -123,7 +123,7 @@ clutch --upgrade
 ### Manual update with pipx
 
 ```bash
-pipx install git+https://github.com/adocampo/convert-video.git --force
+pipx install git+https://github.com/adocampo/clutch.git --force
 ```
 
 ## Uninstalling

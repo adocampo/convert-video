@@ -6,7 +6,7 @@ set -euo pipefail
 # Works on Linux, macOS, and WSL
 # ──────────────────────────────────────────────
 
-REPO_URL="https://github.com/adocampo/convert-video.git"
+REPO_URL="https://github.com/adocampo/clutch.git"
 APP_NAME="clutch"
 LEGACY_APP_NAME="convert-video"
 SYSTEMD_UNIT_NAME="clutch.service"

@@ -19,7 +19,7 @@ from tqdm import tqdm
 from convert_video.output import (
     info, warning, error, success, skip,
 )
-from convert_video.mediainfo import get_resolution, get_audio_info
+from convert_video.mediainfo import check_already_converted, get_resolution, get_audio_info
 
 # Global references for cleanup on signal
 _STATE_UNSET = object()
@@ -292,6 +292,42 @@ def generate_unique_filename(base_name: str, extension: str, output_path: str) -
     return output_file
 
 
+def build_output_subdir(input_file: str, output_dir: str) -> str:
+    if output_dir:
+        relative_path = os.path.relpath(input_file, os.getcwd())
+        relative_dir = os.path.dirname(relative_path)
+        return os.path.join(output_dir, relative_dir)
+    return os.path.dirname(os.path.abspath(input_file))
+
+
+def build_default_output_path(input_file: str, output_dir: str) -> str:
+    output_subdir = build_output_subdir(input_file, output_dir)
+    base_name = os.path.splitext(os.path.basename(input_file))[0]
+    if output_dir:
+        return os.path.join(output_subdir, f"{base_name}.mkv")
+    return os.path.join(output_subdir, f"{base_name}_converted.mkv")
+
+
+def output_is_current_for_input(input_file: str, output_file: str) -> bool:
+    try:
+        return os.path.getmtime(output_file) >= os.path.getmtime(input_file)
+    except OSError:
+        return False
+
+
+def find_existing_converted_output(input_file: str, output_dir: str, codec: str) -> str:
+    candidate = build_default_output_path(input_file, output_dir)
+    if os.path.abspath(candidate) == os.path.abspath(input_file):
+        return ""
+    if not os.path.exists(candidate):
+        return ""
+    if not output_is_current_for_input(input_file, candidate):
+        return ""
+    if check_already_converted(candidate, codec, False, quiet=True) != "skip":
+        return ""
+    return candidate
+
+
 def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool = True):
     """Copy audio track titles from input to output using mkvpropedit."""
     audio_tracks = get_audio_info(input_file)
@@ -505,12 +541,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             ]
 
     # Determine output path and create temp file
-    if output_dir:
-        relative_path = os.path.relpath(input_file, os.getcwd())
-        relative_dir = os.path.dirname(relative_path)
-        output_subdir = os.path.join(output_dir, relative_dir)
-    else:
-        output_subdir = os.path.dirname(os.path.abspath(input_file))
+    output_subdir = build_output_subdir(input_file, output_dir)
 
     os.makedirs(output_subdir, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(input_file))[0]

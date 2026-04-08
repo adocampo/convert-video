@@ -19,7 +19,7 @@ from convert_video.output import info, warning, error, deleted, skip, success
 from convert_video.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
 from convert_video.converter import (
     install_signal_handlers, convert_video, confirm_prompt, poweroff_with_countdown,
-    parse_gpu_devices, request_all_conversion_stops,
+    find_existing_converted_output, parse_gpu_devices, request_all_conversion_stops,
 )
 from convert_video.service import build_service_db_path, run_service, submit_remote_job
 from convert_video.updater import (
@@ -437,6 +437,16 @@ def process_local_input(
             if status == 'skip':
                 if renderer is not None:
                     renderer.finish_job(input_file, "skipped", "Already converted")
+                return "skipped"
+
+            existing_output = find_existing_converted_output(input_file, output_dir, codec)
+            if existing_output:
+                if emit_logs:
+                    basename = os.path.basename(input_file)
+                    output_name = os.path.basename(existing_output)
+                    skip(f"'{basename}' already has a current converted output '{output_name}'. Use --force to override.")
+                if renderer is not None:
+                    renderer.finish_job(input_file, "skipped", "Existing converted output")
                 return "skipped"
 
         if stop_requested is not None and stop_requested.is_set():

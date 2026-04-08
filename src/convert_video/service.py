@@ -19,6 +19,7 @@ from convert_video import APP_NAME, build_state_dir, get_version
 from convert_video.converter import (
     clear_current_conversion_state,
     convert_video,
+    find_existing_converted_output,
     get_current_conversion_output_size,
     get_visible_nvidia_gpus,
     parse_gpu_devices,
@@ -1073,6 +1074,10 @@ class ConversionService:
         if check_already_converted(normalized, codec, False, quiet=True) == "skip":
             return True
 
+        output_dir = str(settings.get("output_dir") or "").strip()
+        if find_existing_converted_output(normalized, output_dir, codec):
+            return True
+
         if latest and latest["status"] == "succeeded":
             output_file = str(latest.get("output_file") or "").strip()
             if output_file and os.path.exists(output_file):
@@ -1550,6 +1555,11 @@ class ConversionService:
             status = check_already_converted(job.input_file, job.codec, job.force)
             if status == "skip":
                 return "skipped", "", "File already converted."
+
+            existing_output = find_existing_converted_output(job.input_file, job.output_dir, job.codec)
+            if existing_output:
+                output_name = os.path.basename(existing_output)
+                return "skipped", "", f"Converted output already exists: {output_name}."
 
         gpu_device = self._select_gpu_device(job.codec, job.encode_speed)
         if gpu_device is not None:

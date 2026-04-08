@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 APP_NAME = "clutch"
 LEGACY_APP_NAME = "convert-video"
-GITHUB_REPO = "adocampo/convert-video"
+GITHUB_REPO = "adocampo/clutch"
 
 
 def get_package_names() -> tuple[str, ...]:
