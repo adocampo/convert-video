@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-04-08
+
+### Added in 1.2.2
+
+- **One-line installer**: `curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash` now installs the tool without a manual clone.
+- **Systemd user unit**: Linux installs now include a `convert-video.service` user unit for running the LAN service via `systemctl --user`.
+
+### Changed in 1.2.2
+
+- The installer now supports both local-repo installs and piped installs from the GitHub-hosted `install.sh`.
+- The dashboard now shows visible NVIDIA GPUs with model name and total memory instead of raw numeric indices.
+- The README now highlights the main features, quick installation options, service usage, and dashboard screenshot more clearly.
+
 ## [1.2.1] - 2026-04-07
 
 ### Changed in 1.2.1
