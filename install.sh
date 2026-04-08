@@ -2,11 +2,15 @@
 set -euo pipefail
 
 # ──────────────────────────────────────────────
-# install.sh — Install convert-video via pipx
+# install.sh — Install clutch via pipx
 # Works on Linux, macOS, and WSL
 # ──────────────────────────────────────────────
 
 REPO_URL="https://github.com/adocampo/convert-video.git"
+APP_NAME="clutch"
+LEGACY_APP_NAME="convert-video"
+SYSTEMD_UNIT_NAME="clutch.service"
+LEGACY_SYSTEMD_UNIT_NAME="convert-video.service"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -128,7 +132,7 @@ ensure_external_deps() {
 
 # ── Main ─────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " convert-video installer"
+echo " clutch installer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
 
@@ -169,22 +173,34 @@ resolve_source() {
 resolve_source
 echo
 
-# ── Install convert-video ────────────────────
-info "Installing convert-video via pipx..."
-if pipx list 2>/dev/null | grep -q "convert-video"; then
-    pipx reinstall "$SOURCE_DIR"
-else
-    pipx install "$SOURCE_DIR"
+pipx_has_package() {
+    local package_name="$1"
+    pipx list 2>/dev/null | grep -q "$package_name"
+}
+
+# ── Install clutch ───────────────────────────
+info "Installing ${APP_NAME} via pipx..."
+if pipx_has_package "$LEGACY_APP_NAME"; then
+    info "Legacy pipx installation detected; replacing it with ${APP_NAME} from ${SOURCE_DIR}"
+    pipx uninstall "$LEGACY_APP_NAME" >/dev/null
 fi
+
+if pipx_has_package "$APP_NAME"; then
+    info "Existing ${APP_NAME} pipx installation detected; reinstalling from ${SOURCE_DIR}"
+    pipx uninstall "$APP_NAME" >/dev/null
+fi
+
+pipx install "$SOURCE_DIR"
 
 echo
 ensure_external_deps
 
 # ── Install systemd user unit (Linux only) ───
 install_systemd_unit() {
-    local unit_src="${SOURCE_DIR}/convert-video.service"
+    local unit_src="${SOURCE_DIR}/${SYSTEMD_UNIT_NAME}"
     local unit_dir="${HOME}/.config/systemd/user"
-    local unit_dst="${unit_dir}/convert-video.service"
+    local unit_dst="${unit_dir}/${SYSTEMD_UNIT_NAME}"
+    local legacy_unit_dst="${unit_dir}/${LEGACY_SYSTEMD_UNIT_NAME}"
 
     if [[ "$(uname -s)" != "Linux" ]]; then
         return
@@ -197,6 +213,10 @@ install_systemd_unit() {
     mkdir -p "$unit_dir"
     cp "$unit_src" "$unit_dst"
     info "Installed systemd unit to ${unit_dst}"
+    if [[ -f "$legacy_unit_dst" ]]; then
+        rm -f "$legacy_unit_dst"
+        info "Removed legacy systemd unit ${legacy_unit_dst}"
+    fi
 
     if command -v systemctl &>/dev/null; then
         if systemctl --user daemon-reload &>/dev/null; then
@@ -205,12 +225,12 @@ install_systemd_unit() {
             warn "Could not reload the systemd user daemon automatically."
         fi
         echo "  To enable and start the service:"
-        echo "    systemctl --user enable --now convert-video.service"
+        echo "    systemctl --user enable --now ${SYSTEMD_UNIT_NAME}"
         echo "  To check its status:"
-        echo "    systemctl --user status convert-video.service"
+        echo "    systemctl --user status ${SYSTEMD_UNIT_NAME}"
     fi
 }
 install_systemd_unit
 
 echo
-info "Installation complete! Run 'convert-video --help' to get started."
+info "Installation complete! Run '${APP_NAME} --help' to get started."

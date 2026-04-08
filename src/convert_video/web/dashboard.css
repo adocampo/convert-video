@@ -106,6 +106,26 @@ body {
     gap: 16px;
 }
 
+.hero-brand {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.hero-copy-block {
+    display: grid;
+    gap: 6px;
+}
+
+.hero-logo {
+    width: clamp(72px, 9vw, 104px);
+    height: clamp(72px, 9vw, 104px);
+    border-radius: 24px;
+    box-shadow: 0 18px 40px rgba(9, 36, 31, 0.24);
+    flex: 0 0 auto;
+}
+
 .hero-actions {
     display: flex;
     flex-wrap: wrap;
@@ -127,6 +147,12 @@ body {
     max-width: 70ch;
     color: var(--muted);
     line-height: 1.5;
+}
+
+.hero-kicker {
+    max-width: none;
+    font-size: 0.98rem;
+    color: var(--accent-strong);
 }
 
 .meta {
@@ -880,6 +906,10 @@ body.modal-open {
     .hero-top {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .hero-brand {
+        align-items: flex-start;
     }
 
     .hero-actions {

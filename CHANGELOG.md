@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file.
 ### Added in 1.2.2
 
 - **One-line installer**: `curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash` now installs the tool without a manual clone.
-- **Systemd user unit**: Linux installs now include a `convert-video.service` user unit for running the LAN service via `systemctl --user`.
+- **Systemd user unit**: Linux installs now include a dedicated user unit for running the LAN service via `systemctl --user`.
 
 ### Changed in 1.2.2
 
@@ -64,7 +64,7 @@ All notable changes to this project will be documented in this file.
 
 - Fixed the terminal progress bar so it redraws correctly when the terminal is resized and disappears cleanly when conversion finishes.
 - Fixed the end-of-run crash caused by a local `success` variable shadowing the output helper.
-- Removed the broken `dev.sh` and `convert-video-dev` workflow in favor of a simpler manual virtual environment setup.
+- Removed the broken `dev.sh` development workflow in favor of a simpler manual virtual environment setup.
 
 ### Changed in 1.1.2
 

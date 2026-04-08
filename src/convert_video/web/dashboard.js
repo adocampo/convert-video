@@ -32,7 +32,8 @@
         },
     };
 
-    const themeStorageKey = 'convert-video-theme';
+    const themeStorageKey = 'clutch-theme';
+    const legacyThemeStorageKey = 'convert-video-theme';
 
     const statusPriority = {
         running: 0,
@@ -189,8 +190,10 @@
     function getStoredTheme() {
         try {
             const storedTheme = window.localStorage.getItem(themeStorageKey);
-            if (storedTheme === 'light' || storedTheme === 'dark') {
-                return storedTheme;
+            const legacyTheme = window.localStorage.getItem(legacyThemeStorageKey);
+            const resolvedTheme = storedTheme || legacyTheme;
+            if (resolvedTheme === 'light' || resolvedTheme === 'dark') {
+                return resolvedTheme;
             }
         } catch (error) {
             return '';
@@ -269,7 +272,7 @@
 
     function buildReleaseTooltip(updateInfo) {
         if (updateInfo.update_in_progress) {
-            return 'Installing the latest convert-video release and restarting the service.';
+            return 'Installing the latest clutch release and restarting the service.';
         }
 
         if (updateInfo.update_available) {
@@ -336,7 +339,7 @@
 
                 const updateInfo = payload.update_info || {};
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
-                    setStatus(releaseStatus, `Service restarted on convert-video ${updateInfo.local_version || targetVersion}.`, 'ok');
+                    setStatus(releaseStatus, `Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
                     await refreshJobs();
                     return;
                 }
@@ -371,6 +374,7 @@
     function persistTheme(theme) {
         try {
             window.localStorage.setItem(themeStorageKey, theme);
+            window.localStorage.removeItem(legacyThemeStorageKey);
         } catch (error) {
             return;
         }
@@ -1547,7 +1551,7 @@
         if (state.release.update_available) {
             const targetVersion = state.release.remote_version || 'latest';
             const confirmed = window.confirm(
-                `Install convert-video ${targetVersion} and restart the service now?\n\nAny running conversions will be stopped and returned to the queue.`
+                `Install clutch ${targetVersion} and restart the service now?\n\nAny running conversions will be stopped and returned to the queue.`
             );
             if (!confirmed) {
                 return;
@@ -1555,7 +1559,7 @@
 
             releaseButton.disabled = true;
             releaseButton.dataset.busy = 'true';
-            setStatus(releaseStatus, `Installing convert-video ${targetVersion} and restarting the service...`);
+            setStatus(releaseStatus, `Installing clutch ${targetVersion} and restarting the service...`);
 
             try {
                 const payload = await fetchJson('/updates/upgrade', { method: 'POST' });
@@ -1568,7 +1572,7 @@
                     last_error: '',
                     update_in_progress: true,
                 });
-                setStatus(releaseStatus, payload.message || `Installing convert-video ${targetVersion} and restarting the service...`, 'ok');
+                setStatus(releaseStatus, payload.message || `Installing clutch ${targetVersion} and restarting the service...`, 'ok');
                 waitForReleaseRestart(targetVersion);
             } catch (error) {
                 renderReleaseControl(state.release);
@@ -1588,7 +1592,7 @@
             } else if (payload.update_available) {
                 setStatus(releaseStatus, `New version available: ${payload.local_version} -> ${payload.remote_version}`, 'ok');
             } else {
-                setStatus(releaseStatus, `convert-video ${payload.local_version} is already up to date.`, 'ok');
+                setStatus(releaseStatus, `clutch ${payload.local_version} is already up to date.`, 'ok');
             }
         } catch (error) {
             setStatus(releaseStatus, error.message, 'error');

@@ -9,19 +9,15 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-from convert_video import get_version
+from convert_video import APP_NAME, GITHUB_REPO, LEGACY_APP_NAME, build_state_dir, get_version
 from convert_video.output import info, error
 
-GITHUB_REPO = "adocampo/convert-video"
 _UPDATE_STATE_LOCK = threading.Lock()
 
 
 def build_update_state_path() -> str:
     """Return the shared state file used to cache update checks."""
-    state_home = os.environ.get("XDG_STATE_HOME")
-    if not state_home:
-        state_home = os.path.join(os.path.expanduser("~"), ".local", "state")
-    return os.path.join(state_home, "convert-video", "update-state.json")
+    return os.path.join(build_state_dir(), "update-state.json")
 
 
 def _local_today() -> str:
@@ -230,8 +226,22 @@ def mark_cli_notice_shown() -> dict[str, object]:
         return _write_update_state_unlocked(state)
 
 
+def _pipx_package_installed(package_name: str) -> bool:
+    result = subprocess.run(
+        ["pipx", "list"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and package_name in result.stdout
+
+
 def install_latest_version() -> subprocess.CompletedProcess:
-    """Install the latest convert-video version from GitHub via pipx."""
+    """Install the latest clutch version from GitHub via pipx."""
+    if _pipx_package_installed(LEGACY_APP_NAME):
+        subprocess.run(
+            ["pipx", "uninstall", LEGACY_APP_NAME],
+            capture_output=False,
+        )
     return subprocess.run(
         ["pipx", "install", f"git+https://github.com/{GITHUB_REPO}.git", "--force"],
         capture_output=False,
@@ -247,7 +257,7 @@ def get_update_changelog(current_ver: str, latest_ver: str) -> str:
 
 
 def upgrade():
-    """Upgrade convert-video to the latest version via pipx."""
+    """Upgrade clutch to the latest version via pipx."""
     local_ver, remote_ver, update_available = check_for_updates()
     if remote_ver is None:
         sys.exit(1)
@@ -260,7 +270,7 @@ def upgrade():
         mark_update_installed(local_ver)
         sys.exit(0)
 
-    print(f"\nUpgrading convert-video {local_ver} \u2192 {remote_ver} ...")
+    print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} ...")
     result = install_latest_version()
     if result.returncode == 0:
         mark_update_installed(remote_ver)

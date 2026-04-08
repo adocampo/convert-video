@@ -1,14 +1,14 @@
 [Unit]
-Description=convert-video media conversion service
+Description=clutch media conversion service
 After=network.target
 
 [Service]
 Type=simple
 # User unit: runs as the logged-in user.
 # If installed via pipx, the binary lives under ~/.local/bin
-ExecStart=%h/.local/bin/convert-video --serve --listen-host 127.0.0.1 --listen-port 8765
+ExecStart=%h/.local/bin/clutch --serve --listen-host 127.0.0.1 --listen-port 8765
 # Uncomment and edit to restrict which paths the service can access:
-#ExecStart=%h/.local/bin/convert-video --serve --listen-host 127.0.0.1 --listen-port 8765 --allow-root /path/to/media
+#ExecStart=%h/.local/bin/clutch --serve --listen-host 127.0.0.1 --listen-port 8765 --allow-root /path/to/media
 Restart=on-failure
 RestartSec=5
 
@@ -20,6 +20,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=false
 PrivateTmp=true
+ReadWritePaths=%h/.local/state/clutch
 ReadWritePaths=%h/.local/state/convert-video
 
 [Install]

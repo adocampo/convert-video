@@ -14,7 +14,7 @@ import time
 from typing import List
 from tqdm import tqdm
 
-from convert_video import get_version
+from convert_video import APP_NAME, get_version
 from convert_video.output import info, warning, error, deleted, skip, success
 from convert_video.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
 from convert_video.converter import (
@@ -613,7 +613,7 @@ def main():
     beh_group.add_argument("-po", "--poweroff", action="store_true",
                            help="Power off the system after conversion.")
     beh_group.add_argument("--server-url", default="",
-                           help="Submit matching jobs to a remote convert-video service instead of converting locally.")
+                           help="Submit matching jobs to a remote clutch service instead of converting locally.")
 
     service_group = parser.add_argument_group("service")
     service_group.add_argument("--serve", action="store_true",
@@ -640,7 +640,7 @@ def main():
     info_group.add_argument("-si", "--source-info", action="store_true",
                             help="Show source information about a single video file.")
     info_group.add_argument("-v", "--version", action="version",
-                            version=f"convert-video {get_version()}")
+                            version=f"{APP_NAME} {get_version()}")
     info_group.add_argument("--update", action="store_true",
                             help="Check if a newer version is available on GitHub.")
     info_group.add_argument("--upgrade", action="store_true",
@@ -667,7 +667,7 @@ def main():
                     print()
                     print(changelog)
                     print()
-                print(f"  Run 'convert-video --upgrade' to install the new version.")
+                print(f"  Run '{APP_NAME} --upgrade' to install the new version.")
             else:
                 info("Already up to date.")
         sys.exit(0)
@@ -679,9 +679,9 @@ def main():
     daily_update_state = get_update_state(force=False, quiet=True)
     if daily_update_state.get("update_available") and daily_update_state.get("cli_notice_date") != daily_update_state.get("checked_date"):
         warning(
-            "A newer convert-video release is available: "
+            f"A newer {APP_NAME} release is available: "
             f"{daily_update_state.get('local_version')} -> {daily_update_state.get('remote_version')}. "
-            "Run 'convert-video --update' to review the changelog or '--upgrade' to install it."
+            f"Run '{APP_NAME} --update' to review the changelog or '--upgrade' to install it."
         )
         mark_cli_notice_shown()
 

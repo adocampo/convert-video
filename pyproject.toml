@@ -3,9 +3,9 @@ requires = ["setuptools >= 68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "convert-video"
+name = "clutch"
 version = "1.2.3"
-description = "Convert video files using HandBrakeCLI with smart codec detection"
+description = "Clutch transcodes video files through HandBrakeCLI with smart codec detection"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
@@ -14,10 +14,10 @@ dependencies = [
 ]
 
 [project.scripts]
-convert-video = "convert_video.cli:main"
+clutch = "convert_video.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"convert_video.web" = ["*.html", "*.css", "*.js"]
+"convert_video.web" = ["*.html", "*.css", "*.js", "*.png", "*.ico"]

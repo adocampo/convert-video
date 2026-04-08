@@ -1,8 +1,8 @@
-# convert-video
+![clutch logo](docs/images/clutch.png)
 
-Convert and manage video transcodes with HandBrakeCLI from the command line or from a browser dashboard. `convert-video` handles single files, recursive libraries, watched folders, and a shared LAN service with a persistent queue.
+Clutch manages video transcodes through HandBrakeCLI from the command line or from a browser dashboard. `clutch` handles single files, recursive libraries, watched folders, and a shared LAN service with a persistent queue.
 
-![convert-video service dashboard](docs/images/service-dashboard.png)
+![clutch service dashboard](docs/images/service-dashboard.png)
 
 ## Features at a glance
 
@@ -33,17 +33,19 @@ For the full feature set, install these tools as well:
 
 ### One-liner install (no manual clone needed)
 
+The repository URL still uses the old GitHub name until the repo rename lands.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash
 ```
 
-The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, clones the repo to a temporary directory when needed, installs `convert-video` via pipx, checks runtime dependencies, and places the systemd user unit on Linux.
+The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, clones the repo to a temporary directory when needed, installs `clutch` via pipx, checks runtime dependencies, and places the systemd user unit on Linux.
 
 ### Install from a local clone
 
 ```bash
-git clone https://github.com/adocampo/convert-video.git
-cd convert-video
+git clone https://github.com/adocampo/convert-video.git clutch
+cd clutch
 bash install.sh
 ```
 
@@ -56,7 +58,7 @@ pipx install git+https://github.com/adocampo/convert-video.git
 ### Verify installation
 
 ```bash
-convert-video --version
+clutch --version
 ```
 
 ## Why this exists
@@ -88,34 +90,34 @@ HandBrake H.265 was good enough that it often got close to AV1 compression while
 If you want to contribute or test the latest development version:
 
 ```bash
-git clone https://github.com/adocampo/convert-video.git
-cd convert-video
+git clone https://github.com/adocampo/convert-video.git clutch
+cd clutch
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-Inside the virtual environment, use the regular `convert-video` command:
+Inside the virtual environment, use the regular `clutch` command:
 
 ```bash
-convert-video --version
-convert-video -r ~/Videos/
+clutch --version
+clutch -r ~/Videos/
 ```
 
-If your system also has `convert-video` installed through `pipx`, activate `.venv` before running it so the virtual environment version takes priority in `PATH`.
+If your system also has `clutch` installed through `pipx`, activate `.venv` before running it so the virtual environment version takes priority in `PATH`.
 
 ## Updating
 
 ### Self-update from the tool itself
 
-On the first normal CLI run of each day, `convert-video` also performs a lightweight cached release check and prints a reminder when a newer version is available.
+On the first normal CLI run of each day, `clutch` also performs a lightweight cached release check and prints a reminder when a newer version is available.
 
 ```bash
 # Check if a new version is available
-convert-video --update
+clutch --update
 
 # Upgrade to the latest version
-convert-video --upgrade
+clutch --upgrade
 ```
 
 ### Manual update with pipx
@@ -127,12 +129,12 @@ pipx install git+https://github.com/adocampo/convert-video.git --force
 ## Uninstalling
 
 ```bash
-pipx uninstall convert-video
+pipx uninstall clutch
 ```
 
 ## Smart codec detection
 
-`convert-video.py` automatically detects the current video codec and muxer before converting, avoiding unnecessary re-encodes:
+`clutch` automatically detects the current video codec and muxer before converting, avoiding unnecessary re-encodes:
 
 ### Codec quality hierarchy
 
@@ -183,13 +185,13 @@ find . -type f -name "*.mkv" -print0 | xargs -0 -I {} change-title "{}"
 Convert a single file:
 
 ```bash
-convert-video movie.mp4
+clutch movie.mp4
 ```
 
 Convert and place output in a directory:
 
 ```bash
-convert-video -o ~/converted/ movie.mp4
+clutch -o ~/converted/ movie.mp4
 ```
 
 ### Batch conversion
@@ -197,43 +199,43 @@ convert-video -o ~/converted/ movie.mp4
 Convert all videos in a directory recursively:
 
 ```bash
-convert-video -r ~/Videos/
+clutch -r ~/Videos/
 ```
 
 Convert all `.mp4` files in a pattern (without subdirectories):
 
 ```bash
-convert-video ~/Videos/*.mp4
+clutch ~/Videos/*.mp4
 ```
 
 Convert all videos and auto-find them:
 
 ```bash
-convert-video --find  # Searches current directory
-convert-video --find ~/Videos  # Searches ~/Videos directory pattern
+clutch --find  # Searches current directory
+clutch --find ~/Videos  # Searches ~/Videos directory pattern
 ```
 
 Convert several files in parallel with local CLI workers:
 
 ```bash
-convert-video --workers 3 -r ~/Videos/
+clutch --workers 3 -r ~/Videos/
 ```
 
 Distribute NVENC jobs across two GPUs:
 
 ```bash
-convert-video --workers 2 --gpus 0,1 -r ~/Videos/
+clutch --workers 2 --gpus 0,1 -r ~/Videos/
 ```
 
 With more than one local worker, the CLI switches to a combined progress display that keeps all active conversions in one coordinated terminal view. Raw verbose HandBrake output is disabled in that mode so the progress view stays readable.
 
-When you pass `--gpus`, `convert-video` routes NVENC jobs through those GPU indices in round-robin order by passing `gpu=<index>` to HandBrake's NVENC encoder options. Leave it empty to let HandBrake choose the GPU automatically.
+When you pass `--gpus`, `clutch` routes NVENC jobs through those GPU indices in round-robin order by passing `gpu=<index>` to HandBrake's NVENC encoder options. Leave it empty to let HandBrake choose the GPU automatically.
 
 > **Note:** Multi-GPU support is implemented and ready to use, but has not been tested with actual multi-GPU hardware. If you have more than one NVENC-capable GPU, please report any issues you find.
 
 ### Service mode over the LAN
 
-You can now run `convert-video` as a service on machine A and submit jobs from another machine in the LAN.
+You can now run `clutch` as a service on machine A and submit jobs from another machine in the LAN.
 
 Important: in the first implementation, machine A must already be able to access the source and destination paths as normal filesystem paths. This works well with pre-mounted SMB or NFS shares. The service does not upload files from B to A and does not mount remote shares by itself.
 
@@ -242,15 +244,15 @@ Important: in the first implementation, machine A must already be able to access
 The installer automatically places a systemd user unit file. To enable and start the service:
 
 ```bash
-systemctl --user enable --now convert-video.service
-systemctl --user status convert-video.service
+systemctl --user enable --now clutch.service
+systemctl --user status clutch.service
 ```
 
-By default the unit runs `convert-video --serve` on `127.0.0.1:8765`. To customize options (bind address, allowed roots, watchers, GPUs, etc.), edit `~/.config/systemd/user/convert-video.service` and reload:
+By default the unit runs `clutch --serve` on `127.0.0.1:8765`. To customize options (bind address, allowed roots, watchers, GPUs, etc.), edit `~/.config/systemd/user/clutch.service` and reload:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user restart convert-video.service
+systemctl --user restart clutch.service
 ```
 
 To keep the service running after you log out:
@@ -264,7 +266,7 @@ loginctl enable-linger $USER
 Start the service on machine A:
 
 ```bash
-convert-video --serve \
+clutch --serve \
   --workers 2 \
   --gpus 0,1 \
   --listen-host 0.0.0.0 \
@@ -296,7 +298,7 @@ The service also performs its own cached GitHub release check once per day. When
 Submit a job from machine B to be executed by machine A:
 
 ```bash
-convert-video \
+clutch \
   --server-url http://machine-a:8765 \
   -o /mnt/media-b/converted \
   /mnt/media-b/incoming/movie.mkv
@@ -331,7 +333,7 @@ Machine A can also watch one or more directories and automatically enqueue any n
 Watch a directory and convert everything that appears there:
 
 ```bash
-convert-video --serve \
+clutch --serve \
   --listen-host 0.0.0.0 \
   --watch-dir /mnt/media-b/watch \
   --watch-recursive \
@@ -341,46 +343,46 @@ convert-video --serve \
 
 The watcher uses a polling strategy and waits until the file stops changing before queueing it, which helps avoid starting a conversion while a large file is still being copied.
 
-When you use `--workers` in normal CLI mode, `convert-video` runs that many local conversions in parallel. In `--serve` mode, the same option seeds the service worker pool on first start for that service database; after that, the persisted worker count from the database takes precedence. When you use `--gpus`, local NVENC jobs rotate across those GPU indices, and `--serve --gpus ...` seeds the service's persisted NVENC GPU list on first start for that service database.
+When you use `--workers` in normal CLI mode, `clutch` runs that many local conversions in parallel. In `--serve` mode, the same option seeds the service worker pool on first start for that service database; after that, the persisted worker count from the database takes precedence. When you use `--gpus`, local NVENC jobs rotate across those GPU indices, and `--serve --gpus ...` seeds the service's persisted NVENC GPU list on first start for that service database.
 
-The configured GPU indices must be visible to the process running `convert-video`. If the service only sees GPU `0`, configuring `0,1` will not make GPU `1` usable until that second GPU is also exposed to HandBrake and NVENC on that machine.
+The configured GPU indices must be visible to the process running `clutch`. If the service only sees GPU `0`, configuring `0,1` will not make GPU `1` usable until that second GPU is also exposed to HandBrake and NVENC on that machine.
 
 ### Advanced options
 
 Convert with audio passthrough (no re-encoding audio):
 
 ```bash
-convert-video -ap movie.mp4
+clutch -ap movie.mp4
 ```
 
 Convert using AV1 codec with maximum compression (slow):
 
 ```bash
-convert-video -c av1 -s movie.mp4
+clutch -c av1 -s movie.mp4
 ```
 
 Auto-accept without prompts and delete source on success:
 
 ```bash
-convert-video -y -ds movie.mkv
+clutch -y -ds movie.mkv
 ```
 
 Power off after conversion completes:
 
 ```bash
-convert-video -po movie.mp4
+clutch -po movie.mp4
 ```
 
 Force re-conversion even if file is already in target codec:
 
 ```bash
-convert-video --force movie.mkv
+clutch --force movie.mkv
 ```
 
 Show source file information (codec, resolution, audio tracks, etc.):
 
 ```bash
-convert-video -si movie.mkv
+clutch -si movie.mkv
 ```
 
 ### ISO disc images
@@ -388,19 +390,19 @@ convert-video -si movie.mkv
 Convert a DVD/Blu-ray ISO image (automatically selects the main feature):
 
 ```bash
-convert-video movie.iso
+clutch movie.iso
 ```
 
 ### Help
 
 ```bash
-convert-video --help
+clutch --help
 ```
 
 Full help output:
 
 ```text
-usage: convert-video [-h] [-o OUTPUT] [--find [PATTERN]] [-r] [-ds] [-c CODEC]
+usage: clutch [-h] [-o OUTPUT] [--find [PATTERN]] [-r] [-ds] [-c CODEC]
                      [-s] [-f] [-n] [-ap] [--force] [--gpus GPUS] [-y] [--verbose]
                      [-w WORKERS] [-po]
                      [--server-url SERVER_URL] [--serve]
@@ -450,7 +452,7 @@ behaviour:
                         parallel (default: 1).
   -po, --poweroff       Power off the system after conversion.
   --server-url SERVER_URL
-                        Submit matching jobs to a remote convert-video
+                        Submit matching jobs to a remote clutch
                         service instead of converting locally.
 
 service:

@@ -4,7 +4,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>convert-video service</title>
+    <title>clutch service</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/assets/dashboard.css">
 </head>
 
@@ -12,7 +13,13 @@
     <div class="shell">
         <section class="hero">
             <div class="hero-top">
-                <h1>convert-video service</h1>
+                <div class="hero-brand">
+                    <img class="hero-logo" src="/assets/clutch.png" alt="Clutch logo">
+                    <div class="hero-copy-block">
+                        <h1>Clutch UI</h1>
+                        <p class="hero-kicker">Ready to drift!</p>
+                    </div>
+                </div>
                 <div class="hero-actions">
                     <button class="release-toggle" type="button" id="release-check"
                         aria-label="Check whether new versions are available"
@@ -51,8 +58,8 @@
                     </button>
                 </div>
             </div>
-            <p>Remote control panel for the source. Use this page from the destination to submit conversions, inspect
-                the queue, and cancel jobs without using the CLI.</p>
+            <p>Use this page to submit conversions, inspect the queue, cancel jobs, and keep the service updated without
+                touching the CLI.</p>
             <div class="meta" id="service-meta"></div>
             <div class="status-line" id="release-status"></div>
         </section>
@@ -167,18 +174,14 @@
                             <label>
                                 <span>Parallel workers</span>
                                 <input name="worker_count" type="number" min="1" step="1" value="1"
-                                    title="Number of conversion workers that can run at the same time. All workers share the same queue.">
+                                    title="Number of conversion workers that can run at the same time. Each worker processes one job at a time. All workers share the same queue.">
                             </label>
-                            <p class="small picker-help">Each worker processes one job at a time. All workers share the
-                                same queue.</p>
 
                             <label>
                                 <span>NVENC GPU devices</span>
                                 <input name="gpu_devices" placeholder="Leave empty for automatic selection"
                                     title="Comma-separated NVIDIA GPU indices for NVENC jobs. Example: 0,1 rotates jobs across GPU 0 and GPU 1. Leave empty to let HandBrake choose automatically.">
                             </label>
-                            <p class="small picker-help">Example: 0,1 rotates NVENC jobs across those GPUs. Leave empty
-                                to let HandBrake choose the GPU automatically.</p>
 
                             <label>
                                 <span>Default destination directory</span>

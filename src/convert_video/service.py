@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Optional
 from urllib import error, request
 from urllib.parse import parse_qs, quote, urlparse
 
-from convert_video import get_version
+from convert_video import APP_NAME, build_state_dir, get_version
 from convert_video.converter import (
     clear_current_conversion_state,
     convert_video,
@@ -64,6 +64,10 @@ def format_eta(seconds: float) -> str:
 
 def read_web_asset(name: str) -> str:
     return files("convert_video.web").joinpath(name).read_text(encoding="utf-8")
+
+
+def read_web_asset_bytes(name: str) -> bytes:
+    return files("convert_video.web").joinpath(name).read_bytes()
 
 
 def normalize_path(path: str) -> str:
@@ -889,7 +893,7 @@ class ConversionService:
                     target=self._worker_loop,
                     args=(worker_id, stop_event),
                     daemon=True,
-                    name=f"convert-video-{worker_id}",
+                    name=f"{APP_NAME}-{worker_id}",
                 )
                 worker = WorkerHandle(worker_id=worker_id, thread=thread, stop_event=stop_event)
                 self._workers[worker_id] = worker
@@ -923,7 +927,7 @@ class ConversionService:
         self._update_monitor_thread = threading.Thread(
             target=self._update_monitor_loop,
             daemon=True,
-            name="convert-video-update-monitor",
+            name=f"{APP_NAME}-update-monitor",
         )
         self._update_monitor_thread.start()
 
@@ -975,11 +979,11 @@ class ConversionService:
             target=self._run_self_upgrade,
             args=(shutdown_callback, remote_version),
             daemon=True,
-            name="convert-video-upgrade",
+            name=f"{APP_NAME}-upgrade",
         )
         thread.start()
         return {
-            "message": f"Installing convert-video {remote_version} and restarting the service.",
+            "message": f"Installing {APP_NAME} {remote_version} and restarting the service.",
             "update_info": self.get_update_info(force_check=False),
         }
 
@@ -991,7 +995,7 @@ class ConversionService:
                 raise RuntimeError("Upgrade failed. Check the service logs for details.")
 
             mark_update_installed(target_version or get_version())
-            info("Latest version installed. Restarting convert-video service...")
+            info(f"Latest version installed. Restarting {APP_NAME} service...")
 
             with self._update_lock:
                 self._restart_requested = True
@@ -1627,8 +1631,10 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
     server: ConversionHTTPServer
 
     ASSET_CONTENT_TYPES = {
-        "/assets/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
-        "/assets/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
+        "/assets/dashboard.css": ("dashboard.css", "text/css; charset=utf-8", "text"),
+        "/assets/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8", "text"),
+        "/assets/clutch.png": ("clutch.png", "image/png", "bytes"),
+        "/favicon.ico": ("favicon.ico", "image/x-icon", "bytes"),
     }
 
     DASHBOARD_HTML = """<!DOCTYPE html>
@@ -1636,7 +1642,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>convert-video service</title>
+    <title>clutch service</title>
     <style>
         :root {
             --bg: #f3efe6;
@@ -2006,7 +2012,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 <body>
     <div class="shell">
         <section class="hero">
-            <h1>convert-video service</h1>
+            <h1>clutch service</h1>
             <p>Remote control panel for machine A. Use this page from machine B to submit conversions, inspect the queue, and cancel pending jobs without using the CLI.</p>
             <div class="meta" id="service-meta"></div>
         </section>
@@ -2537,6 +2543,16 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _send_bytes(self, status_code: int, body: bytes, content_type: str):
+        self.send_response(status_code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _read_json(self) -> Dict[str, object]:
         length = int(self.headers.get("Content-Length") or "0")
         raw = self.rfile.read(length) if length else b"{}"
@@ -2578,8 +2594,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         path, query = self._get_request_parts()
 
         if path in self.ASSET_CONTENT_TYPES:
-            asset_name, content_type = self.ASSET_CONTENT_TYPES[path]
-            self._send_text(200, read_web_asset(asset_name), content_type)
+            asset_name, content_type, mode = self.ASSET_CONTENT_TYPES[path]
+            if mode == "bytes":
+                self._send_bytes(200, read_web_asset_bytes(asset_name), content_type)
+            else:
+                self._send_text(200, read_web_asset(asset_name), content_type)
             return
 
         if path in {"/", "/index.html"}:
@@ -2798,10 +2817,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
 
 def build_service_db_path() -> str:
-    state_home = os.environ.get("XDG_STATE_HOME")
-    if not state_home:
-        state_home = os.path.join(os.path.expanduser("~"), ".local", "state")
-    return os.path.join(state_home, "convert-video", "service.db")
+    return os.path.join(build_state_dir(), "service.db")
 
 
 def run_service(
@@ -2850,7 +2866,7 @@ def run_service(
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        warning("Stopping convert-video service...")
+        warning(f"Stopping {APP_NAME} service...")
     finally:
         server.server_close()
         service.stop()
@@ -2859,11 +2875,11 @@ def run_service(
     if service.should_restart():
         restart_command = service.get_restart_command()
         if restart_command and restart_command[0]:
-            info("Restarting convert-video service with the upgraded version...")
+            info(f"Restarting {APP_NAME} service with the upgraded version...")
             try:
                 os.execvp(restart_command[0], restart_command)
             except OSError as exc:
-                print_error(f"Could not restart convert-video service automatically: {exc}")
+                print_error(f"Could not restart {APP_NAME} service automatically: {exc}")
 
 
 def submit_remote_job(server_url: str, payload: Dict[str, object]) -> Dict[str, object]:
