@@ -1,4 +1,5 @@
 import os
+import shutil
 from importlib.metadata import PackageNotFoundError, version
 
 
@@ -11,6 +12,31 @@ def get_package_names() -> tuple[str, ...]:
     return APP_NAME, LEGACY_APP_NAME
 
 
+def _migrate_legacy_state_dir(legacy_path: str, branded_path: str):
+    if not os.path.isdir(legacy_path):
+        return
+
+    os.makedirs(branded_path, exist_ok=True)
+
+    try:
+        with os.scandir(legacy_path) as entries:
+            for entry in entries:
+                target_path = os.path.join(branded_path, entry.name)
+                if os.path.exists(target_path):
+                    continue
+                try:
+                    shutil.move(entry.path, target_path)
+                except OSError:
+                    continue
+    except OSError:
+        return
+
+    try:
+        os.rmdir(legacy_path)
+    except OSError:
+        pass
+
+
 def build_state_dir() -> str:
     state_home = os.environ.get("XDG_STATE_HOME")
     if not state_home:
@@ -18,9 +44,8 @@ def build_state_dir() -> str:
 
     branded_path = os.path.join(state_home, APP_NAME)
     legacy_path = os.path.join(state_home, LEGACY_APP_NAME)
-    if os.path.isdir(branded_path) or not os.path.isdir(legacy_path):
-        return branded_path
-    return legacy_path
+    _migrate_legacy_state_dir(legacy_path, branded_path)
+    return branded_path
 
 
 def get_version() -> str:

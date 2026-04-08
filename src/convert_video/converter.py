@@ -37,7 +37,11 @@ def _get_conversion_state(thread_id: Optional[int] = None) -> dict[str, object]:
             state = {
                 "temp_file": None,
                 "process": None,
+                "pid": None,
                 "interrupted": False,
+                "paused": False,
+                "paused_at": None,
+                "paused_seconds": 0.0,
             }
             _conversion_states[key] = state
         return dict(state)
@@ -48,7 +52,11 @@ def _update_conversion_state(
     *,
     temp_file=_STATE_UNSET,
     process=_STATE_UNSET,
+    pid=_STATE_UNSET,
     interrupted=_STATE_UNSET,
+    paused=_STATE_UNSET,
+    paused_at=_STATE_UNSET,
+    paused_seconds=_STATE_UNSET,
 ) -> dict[str, object]:
     key = thread_id if thread_id is not None else threading.get_ident()
     with _conversion_state_lock:
@@ -57,15 +65,27 @@ def _update_conversion_state(
             {
                 "temp_file": None,
                 "process": None,
+                "pid": None,
                 "interrupted": False,
+                "paused": False,
+                "paused_at": None,
+                "paused_seconds": 0.0,
             },
         )
         if temp_file is not _STATE_UNSET:
             state["temp_file"] = temp_file
         if process is not _STATE_UNSET:
             state["process"] = process
+        if pid is not _STATE_UNSET:
+            state["pid"] = int(pid) if pid else None
         if interrupted is not _STATE_UNSET:
             state["interrupted"] = bool(interrupted)
+        if paused is not _STATE_UNSET:
+            state["paused"] = bool(paused)
+        if paused_at is not _STATE_UNSET:
+            state["paused_at"] = paused_at
+        if paused_seconds is not _STATE_UNSET:
+            state["paused_seconds"] = max(0.0, float(paused_seconds or 0.0))
         return dict(state)
 
 
@@ -93,6 +113,39 @@ def _spawn_conversion_process(args, *, stdout=None, stderr=None) -> subprocess.P
     return subprocess.Popen(args, **kwargs)
 
 
+def is_conversion_process_alive(process_id: Optional[int]) -> bool:
+    pid = int(process_id or 0)
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _signal_process_id(process_id: Optional[int], sig: int) -> bool:
+    pid = int(process_id or 0)
+    if pid <= 0 or not is_conversion_process_alive(pid):
+        return False
+
+    try:
+        if os.name != "nt":
+            os.killpg(os.getpgid(pid), sig)
+        else:
+            os.kill(pid, sig)
+    except Exception:
+        return False
+    return True
+
+
+def _signal_process_tree(process: Optional[subprocess.Popen], sig: int) -> bool:
+    if process is None or process.poll() is not None:
+        return False
+
+    return _signal_process_id(process.pid, sig)
+
+
 def _stop_process_tree(process: Optional[subprocess.Popen]) -> bool:
     if process is None or process.poll() is not None:
         return False
@@ -108,6 +161,64 @@ def _stop_process_tree(process: Optional[subprocess.Popen]) -> bool:
         except Exception:
             return False
     return True
+
+
+def request_conversion_stop_by_pid(process_id: Optional[int]) -> bool:
+    if os.name != "nt":
+        return _signal_process_id(process_id, signal.SIGKILL)
+    pid = int(process_id or 0)
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    return True
+
+
+def _pause_process_tree(process: Optional[subprocess.Popen]) -> bool:
+    if os.name == "nt":
+        return False
+    return _signal_process_tree(process, signal.SIGSTOP)
+
+
+def _resume_process_tree(process: Optional[subprocess.Popen]) -> bool:
+    if os.name == "nt":
+        return False
+    return _signal_process_tree(process, signal.SIGCONT)
+
+
+def request_conversion_pause_by_pid(process_id: Optional[int]) -> bool:
+    if os.name == "nt":
+        return False
+    return _signal_process_id(process_id, signal.SIGSTOP)
+
+
+def request_conversion_resume_by_pid(process_id: Optional[int]) -> bool:
+    if os.name == "nt":
+        return False
+    return _signal_process_id(process_id, signal.SIGCONT)
+
+
+def attach_conversion_runtime(
+    thread_id: Optional[int] = None,
+    *,
+    pid: Optional[int],
+    temp_file: str,
+    paused: bool = False,
+    paused_at: Optional[float] = None,
+    paused_seconds: float = 0.0,
+):
+    _update_conversion_state(
+        thread_id,
+        temp_file=temp_file,
+        process=None,
+        pid=pid,
+        interrupted=False,
+        paused=paused,
+        paused_at=paused_at,
+        paused_seconds=paused_seconds,
+    )
 
 
 def _get_terminal_size() -> tuple[int, int]:
@@ -163,7 +274,55 @@ def request_current_conversion_stop(thread_id: Optional[int] = None) -> bool:
     process = state.get("process")
     if isinstance(process, subprocess.Popen):
         return _stop_process_tree(process)
-    return False
+    return request_conversion_stop_by_pid(state.get("pid"))
+
+
+def request_current_conversion_pause(thread_id: Optional[int] = None) -> bool:
+    """Pause a live conversion and report whether the process was signalled."""
+    state = _get_conversion_state(thread_id)
+    if state.get("paused"):
+        return True
+
+    process = state.get("process")
+    if not isinstance(process, subprocess.Popen):
+        if not request_conversion_pause_by_pid(state.get("pid")):
+            return False
+    elif not _pause_process_tree(process):
+        return False
+
+    _update_conversion_state(
+        thread_id,
+        paused=True,
+        paused_at=time.monotonic(),
+    )
+    return True
+
+
+def request_current_conversion_resume(thread_id: Optional[int] = None) -> bool:
+    """Resume a paused conversion and report whether the process was signalled."""
+    state = _get_conversion_state(thread_id)
+    if not state.get("paused"):
+        return False
+
+    process = state.get("process")
+    if not isinstance(process, subprocess.Popen):
+        if not request_conversion_resume_by_pid(state.get("pid")):
+            return False
+    elif not _resume_process_tree(process):
+        return False
+
+    paused_at = state.get("paused_at")
+    paused_seconds = float(state.get("paused_seconds") or 0.0)
+    if isinstance(paused_at, (int, float)):
+        paused_seconds += max(0.0, time.monotonic() - float(paused_at))
+
+    _update_conversion_state(
+        thread_id,
+        paused=False,
+        paused_at=None,
+        paused_seconds=paused_seconds,
+    )
+    return True
 
 
 def request_all_conversion_stops() -> bool:
@@ -179,6 +338,8 @@ def request_all_conversion_stops() -> bool:
         process = state.get("process")
         if isinstance(process, subprocess.Popen):
             stopped_any = _stop_process_tree(process) or stopped_any
+        else:
+            stopped_any = request_conversion_stop_by_pid(state.get("pid")) or stopped_any
     return stopped_any
 
 
@@ -191,6 +352,16 @@ def get_current_conversion_output_size(thread_id: Optional[int] = None) -> int:
         return os.path.getsize(temp_file)
     except OSError:
         return 0
+
+
+def get_current_conversion_paused_seconds(thread_id: Optional[int] = None) -> float:
+    """Return the total paused time for the active conversion."""
+    state = _get_conversion_state(thread_id)
+    paused_seconds = float(state.get("paused_seconds") or 0.0)
+    paused_at = state.get("paused_at")
+    if state.get("paused") and isinstance(paused_at, (int, float)):
+        paused_seconds += max(0.0, time.monotonic() - float(paused_at))
+    return paused_seconds
 
 
 def parse_gpu_devices(value: object) -> list[int]:
@@ -346,6 +517,67 @@ def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool 
                 warning(f"Could not set audio title for track {track_num}: {e}")
 
 
+class ConversionDetached(RuntimeError):
+    """Raised when a service worker intentionally detaches from a live encode."""
+
+
+def _consume_log_output(
+    log_path: str,
+    *,
+    process: Optional[subprocess.Popen],
+    process_id: Optional[int],
+    line_handler: Callable[[str], None],
+    detach_when: Optional[Callable[[], bool]] = None,
+):
+    buf = b""
+    offset = 0
+
+    def flush_buffer(chunk_buffer: bytes) -> bytes:
+        while b"\r" in chunk_buffer or b"\n" in chunk_buffer:
+            idx_r = chunk_buffer.find(b"\r")
+            idx_n = chunk_buffer.find(b"\n")
+            if idx_r == -1:
+                idx = idx_n
+            elif idx_n == -1:
+                idx = idx_r
+            else:
+                idx = min(idx_r, idx_n)
+            line = chunk_buffer[:idx].decode("utf-8", errors="replace")
+            chunk_buffer = chunk_buffer[idx + 1:]
+            if line:
+                line_handler(line)
+        return chunk_buffer
+
+    def read_available() -> None:
+        nonlocal buf, offset
+        if not os.path.exists(log_path):
+            return
+        with open(log_path, "rb") as handle:
+            handle.seek(offset)
+            chunk = handle.read()
+        if not chunk:
+            return
+        offset += len(chunk)
+        buf += chunk
+        buf = flush_buffer(buf)
+
+    while True:
+        read_available()
+
+        if detach_when is not None and detach_when():
+            raise ConversionDetached("Conversion detached from the service worker.")
+
+        process_running = process.poll() is None if process is not None else is_conversion_process_alive(process_id)
+        if not process_running:
+            read_available()
+            break
+
+        time.sleep(0.1)
+
+    if buf:
+        line_handler(buf.decode("utf-8", errors="replace"))
+
+
 def confirm_prompt() -> bool:
     """Interactive confirmation prompt. Returns True to proceed, False to cancel."""
     while True:
@@ -449,7 +681,15 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                    audio_tracks: list = None, show_progress: bool = True,
                    gpu_device: Optional[int] = None,
                    progress_callback: Optional[Callable[[float, str], None]] = None,
-                   emit_logs: bool = True) -> str:
+                   emit_logs: bool = True,
+                   progress_log_path: str = "",
+                   existing_process_id: Optional[int] = None,
+                   existing_temp_file: str = "",
+                   existing_output_file: str = "",
+                   initial_progress: float = 0.0,
+                   resume_existing_process: bool = False,
+                   detach_when: Optional[Callable[[], bool]] = None,
+                   runtime_callback: Optional[Callable[[dict[str, object]], None]] = None) -> str:
     thread_id = threading.get_ident()
 
     is_iso = title is not None
@@ -548,16 +788,30 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     # HandBrakeCLI always outputs Matroska (-f mkv)
     extension = "mkv"
 
-    if output_dir:
+    if existing_output_file:
+        final_output = existing_output_file
+    elif output_dir:
         final_output = generate_unique_filename(base_name, extension, output_subdir)
     else:
         final_output = generate_unique_filename(f"{base_name}_converted", extension, output_subdir)
 
-    with tempfile.NamedTemporaryFile(
-        dir=output_subdir, prefix=f"{base_name}.tmp.{extension}.", delete=False
-    ) as tf:
-        temp_filepath = tf.name
-    _update_conversion_state(thread_id, temp_file=temp_filepath, process=None)
+    if existing_temp_file:
+        temp_filepath = existing_temp_file
+    else:
+        with tempfile.NamedTemporaryFile(
+            dir=output_subdir, prefix=f"{base_name}.tmp.{extension}.", delete=False
+        ) as tf:
+            temp_filepath = tf.name
+    _update_conversion_state(
+        thread_id,
+        temp_file=temp_filepath,
+        process=None,
+        pid=existing_process_id,
+        interrupted=False,
+        paused=False,
+        paused_at=None,
+        paused_seconds=0.0,
+    )
 
     # Build HandBrakeCLI command
     hb_params = [
@@ -589,7 +843,9 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
     try:
         elapsed_text = None
-        last_progress = 0.0
+        last_progress = max(0.0, float(initial_progress or 0.0))
+        process: Optional[subprocess.Popen] = None
+        log_path = progress_log_path or f"{temp_filepath}.progress.log"
 
         def report_progress(percent: float, detail: str):
             nonlocal last_progress
@@ -600,13 +856,26 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             if progress_callback is not None:
                 progress_callback(clamped, detail)
 
+        def should_detach() -> bool:
+            if detach_when is None or not detach_when():
+                return False
+            request_current_conversion_pause(thread_id)
+            return True
+
         report_progress(0.0, "Starting conversion.")
 
         if _is_conversion_interrupted(thread_id):
             _clear_conversion_interrupt(thread_id)
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            _update_conversion_state(thread_id, temp_file=None, process=None)
+            _update_conversion_state(
+                thread_id,
+                temp_file=None,
+                process=None,
+                paused=False,
+                paused_at=None,
+                paused_seconds=0.0,
+            )
             if emit_logs:
                 skip(f"Conversion skipped: {os.path.basename(input_file)}")
             report_progress(last_progress, "Conversion skipped.")
@@ -615,10 +884,10 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         if verbose:
             # Verbose mode: show full HandBrakeCLI output
             process = _spawn_conversion_process(hb_params)
-            _update_conversion_state(thread_id, process=process)
+            _update_conversion_state(thread_id, process=process, pid=process.pid)
             process.wait()
             conversion_succeeded = process.returncode == 0
-            _update_conversion_state(thread_id, process=None)
+            _update_conversion_state(thread_id, process=None, pid=None)
         elif show_progress:
             # Progress bar mode — use a pseudo-terminal so HandBrakeCLI
             # sees a real TTY and emits progress updates.
@@ -639,7 +908,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     stderr=slave_fd,
                 )
                 os.close(slave_fd)
-                _update_conversion_state(thread_id, process=process)
+                _update_conversion_state(thread_id, process=process, pid=process.pid)
 
                 def handle_resize(signum, frame):
                     """Redraw the progress bar and propagate window size changes."""
@@ -672,54 +941,88 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     except OSError:
                         pass
                 process.wait()
-                _update_conversion_state(thread_id, process=None)
+                _update_conversion_state(thread_id, process=None, pid=None)
                 conversion_succeeded = process.returncode == 0
                 elapsed_text = tqdm.format_interval(pbar.format_dict["elapsed"])
         elif progress_callback is not None:
             if emit_logs:
                 info(f"Converting: {os.path.basename(input_file)}")
             conversion_succeeded = False
-            master_fd, slave_fd = pty.openpty()
-            _set_pty_window_size(slave_fd)
-            process = _spawn_conversion_process(
-                hb_params,
-                stdout=slave_fd,
-                stderr=slave_fd,
-            )
-            os.close(slave_fd)
-            _update_conversion_state(thread_id, process=process)
-            try:
-                _consume_pty_output(
-                    master_fd,
-                    process,
-                    lambda line: (
+            if existing_process_id:
+                attach_conversion_runtime(
+                    thread_id,
+                    pid=existing_process_id,
+                    temp_file=temp_filepath,
+                    paused=resume_existing_process,
+                    paused_at=time.monotonic() if resume_existing_process else None,
+                )
+                if resume_existing_process:
+                    request_current_conversion_resume(thread_id)
+            else:
+                with open(log_path, "ab", buffering=0) as log_handle:
+                    process = _spawn_conversion_process(
+                        hb_params,
+                        stdout=log_handle,
+                        stderr=log_handle,
+                    )
+                    _update_conversion_state(thread_id, process=process, pid=process.pid)
+                    if runtime_callback is not None:
+                        runtime_callback(
+                            {
+                                "process_id": process.pid,
+                                "temp_file": temp_filepath,
+                                "log_file": log_path,
+                                "final_output_file": final_output,
+                            }
+                        )
+                    _consume_log_output(
+                        log_path,
+                        process=process,
+                        process_id=process.pid,
+                        line_handler=lambda line: (
+                            lambda percent: report_progress(percent, line)
+                            if percent is not None else None
+                        )(_extract_progress_percent(line)),
+                        detach_when=should_detach if detach_when is not None else None,
+                    )
+                    process.wait()
+                    conversion_succeeded = process.returncode == 0
+            if existing_process_id:
+                _consume_log_output(
+                    log_path,
+                    process=None,
+                    process_id=existing_process_id,
+                    line_handler=lambda line: (
                         lambda percent: report_progress(percent, line)
                         if percent is not None else None
                     )(_extract_progress_percent(line)),
+                    detach_when=should_detach if detach_when is not None else None,
                 )
-            finally:
-                try:
-                    os.close(master_fd)
-                except OSError:
-                    pass
-            process.wait()
-            _update_conversion_state(thread_id, process=None)
-            conversion_succeeded = process.returncode == 0
+                conversion_succeeded = last_progress >= 99.9 and os.path.exists(temp_filepath)
+            _update_conversion_state(thread_id, process=None, pid=None)
         else:
             if emit_logs:
                 info(f"Converting: {os.path.basename(input_file)}")
             process = _spawn_conversion_process(hb_params)
-            _update_conversion_state(thread_id, process=process)
+            _update_conversion_state(thread_id, process=process, pid=process.pid)
             process.wait()
             conversion_succeeded = process.returncode == 0
-            _update_conversion_state(thread_id, process=None)
+            _update_conversion_state(thread_id, process=None, pid=None)
 
         # Check if this conversion was interrupted by Ctrl+C
         if _is_conversion_interrupted(thread_id):
             _clear_conversion_interrupt(thread_id)
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            _update_conversion_state(thread_id, temp_file=None, process=None)
+            _update_conversion_state(
+                thread_id,
+                temp_file=None,
+                process=None,
+                pid=None,
+                paused=False,
+                paused_at=None,
+                paused_seconds=0.0,
+            )
             if emit_logs:
                 skip(f"Conversion skipped: {os.path.basename(input_file)}")
             report_progress(last_progress, "Conversion skipped.")
@@ -727,7 +1030,16 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
         if conversion_succeeded:
             shutil.move(temp_filepath, final_output)
-            _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+            _update_conversion_state(
+                thread_id,
+                temp_file=None,
+                process=None,
+                pid=None,
+                interrupted=False,
+                paused=False,
+                paused_at=None,
+                paused_seconds=0.0,
+            )
             if emit_logs:
                 if elapsed_text:
                     success(f"Conversion successful [{elapsed_text}]")
@@ -740,7 +1052,16 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         else:
             if os.path.exists(temp_filepath):
                 os.remove(temp_filepath)
-            _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+            _update_conversion_state(
+                thread_id,
+                temp_file=None,
+                process=None,
+                pid=None,
+                interrupted=False,
+                paused=False,
+                paused_at=None,
+                paused_seconds=0.0,
+            )
             if emit_logs:
                 if elapsed_text:
                     error(f"Conversion failed [{elapsed_text}]: {os.path.basename(input_file)}")
@@ -748,12 +1069,25 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     error(f"Conversion failed: {os.path.basename(input_file)}")
             report_progress(last_progress, "Conversion failed.")
             return ""
+    except ConversionDetached:
+        if process is not None:
+            _update_conversion_state(thread_id, process=None, pid=process.pid)
+        raise
     except FileNotFoundError:
         if emit_logs:
             error("HandBrakeCLI not found.")
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
-        _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+        _update_conversion_state(
+            thread_id,
+            temp_file=None,
+            process=None,
+            pid=None,
+            interrupted=False,
+            paused=False,
+            paused_at=None,
+            paused_seconds=0.0,
+        )
         report_progress(last_progress, "HandBrakeCLI not found.")
         return ""
     except subprocess.CalledProcessError as e:
@@ -761,7 +1095,16 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             error(f"Error during conversion: {e}")
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
-        _update_conversion_state(thread_id, temp_file=None, process=None, interrupted=False)
+        _update_conversion_state(
+            thread_id,
+            temp_file=None,
+            process=None,
+            pid=None,
+            interrupted=False,
+            paused=False,
+            paused_at=None,
+            paused_seconds=0.0,
+        )
         report_progress(last_progress, f"Conversion error: {e}")
         return ""
 

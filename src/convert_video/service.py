@@ -17,13 +17,19 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from convert_video import APP_NAME, build_state_dir, get_version
 from convert_video.converter import (
+    ConversionDetached,
     clear_current_conversion_state,
     convert_video,
     find_existing_converted_output,
+    get_current_conversion_paused_seconds,
     get_current_conversion_output_size,
     get_visible_nvidia_gpus,
+    is_conversion_process_alive,
     parse_gpu_devices,
-    request_all_conversion_stops,
+    request_conversion_pause_by_pid,
+    request_conversion_stop_by_pid,
+    request_current_conversion_pause,
+    request_current_conversion_resume,
     request_current_conversion_stop,
     uses_nvenc_encoder,
 )
@@ -78,6 +84,20 @@ def normalize_path(path: str) -> str:
 def path_within_roots(path: str, roots: List[str]) -> bool:
     normalized = normalize_path(path)
     return any(normalized == root or normalized.startswith(f"{root}{os.sep}") for root in roots)
+
+
+ACTIVE_JOB_STATUSES = ("running", "paused", "cancelling")
+
+
+def record_has_recoverable_runtime(record: Dict[str, object]) -> bool:
+    process_id = int(record.get("process_id") or 0)
+    return (
+        process_id > 0
+        and is_conversion_process_alive(process_id)
+        and bool(str(record.get("temp_file") or "").strip())
+        and bool(str(record.get("log_file") or "").strip())
+        and bool(str(record.get("final_output_file") or "").strip())
+    )
 
 
 @dataclass
@@ -209,6 +229,11 @@ class JobStore:
                     progress_percent REAL NOT NULL DEFAULT 0,
                     message TEXT,
                     output_file TEXT,
+                    process_id INTEGER,
+                    temp_file TEXT,
+                    log_file TEXT,
+                    final_output_file TEXT,
+                    resume_on_start INTEGER NOT NULL DEFAULT 0,
                     extra_json TEXT NOT NULL
                 )
                 """
@@ -227,6 +252,18 @@ class JobStore:
             if "output_size_bytes" not in columns:
                 self._conn.execute(
                     "ALTER TABLE jobs ADD COLUMN output_size_bytes INTEGER NOT NULL DEFAULT 0"
+                )
+            if "process_id" not in columns:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN process_id INTEGER")
+            if "temp_file" not in columns:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN temp_file TEXT")
+            if "log_file" not in columns:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN log_file TEXT")
+            if "final_output_file" not in columns:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN final_output_file TEXT")
+            if "resume_on_start" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN resume_on_start INTEGER NOT NULL DEFAULT 0"
                 )
             self._conn.execute(
                 """
@@ -271,27 +308,78 @@ class JobStore:
                 )
 
     def _recover_stale_jobs(self):
+        recoverable = 0
+        requeued = 0
+        cancelled = 0
         with self._lock, self._conn:
-            running = self._conn.execute(
-                """
-                UPDATE jobs
-                SET status = 'queued',
-                    started_at = NULL,
-                    finished_at = NULL,
-                    progress_percent = 0,
-                    output_size_bytes = 0,
-                    output_file = NULL,
-                    message = ?
-                WHERE status = 'running'
-                """,
-                (
-                    "Service restarted before this job completed. Returned to queue.",
-                ),
-            )
-        if running.rowcount:
+            rows = self._conn.execute(
+                "SELECT * FROM jobs WHERE status IN ('running', 'paused', 'cancelling')"
+            ).fetchall()
+            for row in rows:
+                record = dict(row)
+                job_id = str(record["id"])
+                status = str(record.get("status") or "")
+
+                if status == "cancelling":
+                    request_conversion_stop_by_pid(record.get("process_id"))
+                    self._conn.execute(
+                        """
+                        UPDATE jobs
+                        SET status = 'cancelled',
+                            finished_at = ?,
+                            message = ?,
+                            process_id = NULL,
+                            temp_file = NULL,
+                            log_file = NULL,
+                            final_output_file = NULL,
+                            resume_on_start = 0
+                        WHERE id = ?
+                        """,
+                        (
+                            utc_now(),
+                            "Service restarted while cancellation was in progress. Job marked as cancelled.",
+                            job_id,
+                        ),
+                    )
+                    cancelled += 1
+                    continue
+
+                if record_has_recoverable_runtime(record):
+                    recoverable += 1
+                    continue
+
+                self._conn.execute(
+                    """
+                    UPDATE jobs
+                    SET status = 'queued',
+                        started_at = NULL,
+                        finished_at = NULL,
+                        progress_percent = 0,
+                        output_size_bytes = 0,
+                        output_file = NULL,
+                        process_id = NULL,
+                        temp_file = NULL,
+                        log_file = NULL,
+                        final_output_file = NULL,
+                        resume_on_start = 0,
+                        message = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        "Service restarted after losing the active encoder process. Returned to queue from the beginning.",
+                        job_id,
+                    ),
+                )
+                requeued += 1
+
+        if recoverable:
+            info(f"Recovered {recoverable} detached conversion(s) that can continue after restart.")
+        if requeued:
             warning(
-                f"Recovered {running.rowcount} interrupted job(s) from a previous service run."
+                f"Recovered {requeued} interrupted job(s) from a previous service run."
             )
+        if cancelled:
+            warning(f"Marked {cancelled} in-progress cancellation(s) as cancelled during service recovery.")
 
     def submit(self, job: ConversionJob) -> Dict[str, object]:
         job_id = str(uuid.uuid4())
@@ -310,8 +398,9 @@ class JobStore:
                     id, status, input_file, output_dir, codec, encode_speed,
                     audio_passthrough, delete_source, verbose, force, source,
                     submitted_at, started_at, finished_at, input_size_bytes, output_size_bytes,
-                    progress_percent, message, output_file, extra_json
-                ) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, 0, NULL, NULL, ?)
+                    progress_percent, message, output_file, process_id, temp_file, log_file,
+                    final_output_file, resume_on_start, extra_json
+                ) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, ?)
                 """,
                 (
                     job_id,
@@ -472,6 +561,34 @@ class JobStore:
             ).fetchall()
         return [self._hydrate_record(row) for row in rows]
 
+    def list_active_jobs(self) -> List[Dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM jobs WHERE status IN ('running', 'paused', 'cancelling') ORDER BY submitted_at ASC"
+            ).fetchall()
+        return [self._hydrate_record(row) for row in rows]
+
+    def list_recoverable_jobs(self) -> List[Dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE process_id IS NOT NULL
+                  AND temp_file IS NOT NULL
+                  AND log_file IS NOT NULL
+                  AND final_output_file IS NOT NULL
+                  AND (
+                    status = 'running'
+                    OR (status = 'paused' AND resume_on_start = 1)
+                  )
+                ORDER BY COALESCE(started_at, submitted_at) ASC
+                """
+            ).fetchall()
+        return [
+            record for record in (self._hydrate_record(row) for row in rows)
+            if record_has_recoverable_runtime(record)
+        ]
+
     def claim_next(self) -> Optional[Dict[str, object]]:
         with self._lock, self._conn:
             row = self._conn.execute(
@@ -503,6 +620,7 @@ class JobStore:
             progress_percent = max(0.0, min(progress_percent, 100.0))
         if output_size_bytes is not None:
             output_size_bytes = max(0, int(output_size_bytes))
+        clears_runtime = status in {"succeeded", "failed", "skipped", "cancelled", "queued"}
         with self._lock, self._conn:
             self._conn.execute(
                 """
@@ -512,10 +630,28 @@ class JobStore:
                     progress_percent = COALESCE(?, progress_percent),
                     message = ?,
                     output_file = COALESCE(?, output_file),
-                    output_size_bytes = COALESCE(?, output_size_bytes)
+                    output_size_bytes = COALESCE(?, output_size_bytes),
+                    process_id = CASE WHEN ? THEN NULL ELSE process_id END,
+                    temp_file = CASE WHEN ? THEN NULL ELSE temp_file END,
+                    log_file = CASE WHEN ? THEN NULL ELSE log_file END,
+                    final_output_file = CASE WHEN ? THEN NULL ELSE final_output_file END,
+                    resume_on_start = CASE WHEN ? THEN 0 ELSE resume_on_start END
                 WHERE id = ?
                 """,
-                (status, finished_at, progress_percent, message, output_file, output_size_bytes, job_id),
+                (
+                    status,
+                    finished_at,
+                    progress_percent,
+                    message,
+                    output_file,
+                    output_size_bytes,
+                    int(clears_runtime),
+                    int(clears_runtime),
+                    int(clears_runtime),
+                    int(clears_runtime),
+                    int(clears_runtime),
+                    job_id,
+                ),
             )
         return self.get(job_id)
 
@@ -539,6 +675,76 @@ class JobStore:
                 WHERE id = ? AND status IN ('running', 'cancelling')
                 """,
                 (progress_percent, message, output_size_bytes, job_id),
+            )
+        return self.get(job_id)
+
+    def pause(self, job_id: str, message: str, *, resume_on_start: bool = False) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            updated = self._conn.execute(
+                "UPDATE jobs SET status = 'paused', message = ?, resume_on_start = ? WHERE id = ? AND status = 'running'",
+                (message, int(bool(resume_on_start)), job_id),
+            )
+            if updated.rowcount != 1:
+                return None
+        return self.get(job_id)
+
+    def resume(self, job_id: str, message: str, *, resume_on_start: bool = False) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            updated = self._conn.execute(
+                "UPDATE jobs SET status = 'running', message = ?, resume_on_start = ? WHERE id = ? AND status = 'paused'",
+                (message, int(bool(resume_on_start)), job_id),
+            )
+            if updated.rowcount != 1:
+                return None
+        return self.get(job_id)
+
+    def request_cancellation(self, job_id: str, message: str) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            updated = self._conn.execute(
+                "UPDATE jobs SET status = 'cancelling', message = ?, resume_on_start = 0 WHERE id = ? AND status IN ('running', 'paused')",
+                (message, job_id),
+            )
+            if updated.rowcount != 1:
+                return None
+        return self.get(job_id)
+
+    def set_runtime(
+        self,
+        job_id: str,
+        *,
+        process_id: Optional[int],
+        temp_file: str,
+        log_file: str,
+        final_output_file: str,
+        resume_on_start: bool = False,
+    ) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                UPDATE jobs
+                SET process_id = ?,
+                    temp_file = ?,
+                    log_file = ?,
+                    final_output_file = ?,
+                    resume_on_start = ?
+                WHERE id = ?
+                """,
+                (
+                    int(process_id) if process_id else None,
+                    str(temp_file or "").strip() or None,
+                    str(log_file or "").strip() or None,
+                    str(final_output_file or "").strip() or None,
+                    int(bool(resume_on_start)),
+                    job_id,
+                ),
+            )
+        return self.get(job_id)
+
+    def set_resume_on_start(self, job_id: str, enabled: bool) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE jobs SET resume_on_start = ? WHERE id = ?",
+                (int(bool(enabled)), job_id),
             )
         return self.get(job_id)
 
@@ -571,7 +777,12 @@ class JobStore:
                     progress_percent = 0,
                     message = ?,
                     output_file = NULL,
-                    output_size_bytes = 0
+                    output_size_bytes = 0,
+                    process_id = NULL,
+                    temp_file = NULL,
+                    log_file = NULL,
+                    final_output_file = NULL,
+                    resume_on_start = 0
                 WHERE id = ?
                 """,
                 (message, job_id),
@@ -583,22 +794,34 @@ class JobStore:
     def delete(self, job_id: str) -> bool:
         with self._lock, self._conn:
             updated = self._conn.execute(
-                "DELETE FROM jobs WHERE id = ? AND status != 'running'",
+                "DELETE FROM jobs WHERE id = ? AND status NOT IN ('running', 'paused', 'cancelling')",
                 (job_id,),
             )
         return updated.rowcount == 1
 
     def clear(self) -> Dict[str, int]:
         with self._lock, self._conn:
-            running_row = self._conn.execute(
-                "SELECT COUNT(*) AS count FROM jobs WHERE status = 'running'"
+            counts = self._conn.execute(
+                """
+                SELECT
+                    SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
+                    SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused,
+                    SUM(CASE WHEN status = 'cancelling' THEN 1 ELSE 0 END) AS cancelling
+                FROM jobs
+                """
             ).fetchone()
             deleted = self._conn.execute(
-                "DELETE FROM jobs WHERE status != 'running'"
+                "DELETE FROM jobs WHERE status NOT IN ('running', 'paused', 'cancelling')"
             )
+        running_count = int(counts["running"] if counts and counts["running"] else 0)
+        paused_count = int(counts["paused"] if counts and counts["paused"] else 0)
+        cancelling_count = int(counts["cancelling"] if counts and counts["cancelling"] else 0)
         return {
             "deleted": int(deleted.rowcount),
-            "running": int(running_row["count"] if running_row else 0),
+            "running": running_count,
+            "paused": paused_count,
+            "cancelling": cancelling_count,
+            "active": running_count + paused_count + cancelling_count,
         }
 
 
@@ -760,6 +983,8 @@ class ConversionService:
         self._active_jobs: Dict[str, int] = {}
         self._job_control_lock = threading.Lock()
         self._cancel_requested_jobs: set[str] = set()
+        self._recoverable_job_ids: List[str] = []
+        self._recoverable_jobs_lock = threading.Lock()
         self._loaded_persisted_state = False
         self._update_monitor_thread: Optional[threading.Thread] = None
         self._update_lock = threading.Lock()
@@ -827,18 +1052,43 @@ class ConversionService:
 
     def start(self):
         self._service_started = True
+        self._prime_recoverable_jobs()
         self._sync_worker_pool()
         self._start_update_monitor()
 
     def stop(self):
+        self._service_started = False
+
+        for record in self.store.list_active_jobs():
+            job_id = str(record["id"])
+            status = str(record.get("status") or "")
+            if status == "running":
+                with self._job_control_lock:
+                    active_thread_id = self._active_jobs.get(job_id)
+                if active_thread_id is not None:
+                    request_current_conversion_pause(active_thread_id)
+                else:
+                    request_conversion_pause_by_pid(record.get("process_id"))
+                self.store.pause(
+                    job_id,
+                    "Service stopped. Conversion paused and will resume when the service starts again.",
+                    resume_on_start=True,
+                )
+                continue
+            if status == "paused":
+                self.store.set_resume_on_start(job_id, False)
+                continue
+            if status == "cancelling":
+                process_id = int(record.get("process_id") or 0)
+                if process_id > 0:
+                    request_conversion_stop_by_pid(process_id)
+
         self.stop_event.set()
         self._wake_event.set()
-        self._service_started = False
         with self._workers_lock:
             workers = list(self._workers.values())
             for worker in workers:
                 worker.stop_event.set()
-        request_all_conversion_stops()
         with self._watchers_lock:
             watchers = list(self._watchers.values())
         for watcher in watchers:
@@ -852,6 +1102,47 @@ class ConversionService:
                 break
             for worker in workers:
                 worker.thread.join()
+
+    def _prime_recoverable_jobs(self):
+        records = self.store.list_recoverable_jobs()
+        with self._recoverable_jobs_lock:
+            self._recoverable_job_ids = [str(record["id"]) for record in records]
+        if records:
+            info(f"Queued {len(records)} detached job(s) for recovery after service start.")
+
+    def _enqueue_recoverable_job(self, job_id: str):
+        with self._recoverable_jobs_lock:
+            if job_id in self._recoverable_job_ids:
+                return
+            self._recoverable_job_ids.append(job_id)
+        self._wake_event.set()
+
+    def _claim_recoverable_job(self) -> Optional[Dict[str, object]]:
+        with self._recoverable_jobs_lock:
+            if not self._recoverable_job_ids:
+                return None
+            job_id = self._recoverable_job_ids.pop(0)
+        record = self.store.get(job_id)
+        if not record or not record_has_recoverable_runtime(record):
+            return None
+        status = str(record.get("status") or "")
+        if status == "paused" and not bool(record.get("resume_on_start")):
+            return None
+        if status not in {"running", "paused"}:
+            return None
+        return record
+
+    def _cleanup_runtime_artifacts(self, record: Dict[str, object], *, remove_temp: bool = False):
+        for key in ("log_file", "temp_file"):
+            if key == "temp_file" and not remove_temp:
+                continue
+            path = str(record.get(key) or "").strip()
+            if not path:
+                continue
+            try:
+                os.remove(path)
+            except OSError:
+                continue
 
     def _normalize_worker_count(self, value: object) -> int:
         try:
@@ -1067,7 +1358,7 @@ class ConversionService:
 
         normalized = normalize_path(path)
         latest = self.store.get_latest_for_input(normalized)
-        if latest and latest["status"] in {"queued", "running", "cancelling"}:
+        if latest and latest["status"] in {"queued", "running", "paused", "cancelling"}:
             return True
 
         codec = str(settings.get("codec") or "nvenc_h265")
@@ -1359,9 +1650,25 @@ class ConversionService:
             record = self.store.get(job_id)
             if not record:
                 return None
-        if record["status"] == "running":
+        if record["status"] in {"running", "paused"}:
             return self._request_running_job_cancel(job_id)
         return None
+
+    def pause_job(self, job_id: str) -> Optional[Dict[str, object]]:
+        record = self.store.get(job_id)
+        if not record:
+            return None
+        if record["status"] != "running":
+            return None
+        return self._request_running_job_pause(job_id)
+
+    def resume_job(self, job_id: str) -> Optional[Dict[str, object]]:
+        record = self.store.get(job_id)
+        if not record:
+            return None
+        if record["status"] != "paused":
+            return None
+        return self._request_running_job_resume(job_id)
 
     def retry_job(self, job_id: str) -> Optional[Dict[str, object]]:
         record = self.store.get(job_id)
@@ -1399,15 +1706,77 @@ class ConversionService:
             "update_info": self.get_update_info(force_check=force_update_check),
         }
 
+    def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:
+        if os.name == "nt":
+            raise ValueError("Pause and resume are only supported on Unix-like systems.")
+
+        record = self.store.get(job_id)
+        if not record:
+            return None
+
+        with self._job_control_lock:
+            active_thread_id = self._active_jobs.get(job_id)
+
+        if active_thread_id is None:
+            if not request_conversion_pause_by_pid(record.get("process_id")):
+                raise ValueError("Could not pause the active HandBrake process.")
+        elif not request_current_conversion_pause(active_thread_id):
+            raise ValueError("Could not pause the active HandBrake process.")
+
+        paused = self.store.pause(job_id, "Paused manually.", resume_on_start=False)
+        if not paused and active_thread_id is not None:
+            request_current_conversion_resume(active_thread_id)
+        return paused
+
+    def _request_running_job_resume(self, job_id: str) -> Optional[Dict[str, object]]:
+        if os.name == "nt":
+            raise ValueError("Pause and resume are only supported on Unix-like systems.")
+
+        record = self.store.get(job_id)
+        if not record:
+            return None
+
+        with self._job_control_lock:
+            active_thread_id = self._active_jobs.get(job_id)
+
+        if active_thread_id is None:
+            if not record_has_recoverable_runtime(record):
+                raise ValueError("Paused job is no longer attached to an active worker.")
+            resumed = self.store.resume(
+                job_id,
+                "Waiting for a worker to resume the paused conversion.",
+                resume_on_start=True,
+            )
+            if resumed:
+                self._enqueue_recoverable_job(job_id)
+            return resumed
+        if not request_current_conversion_resume(active_thread_id):
+            raise ValueError("Could not resume the active HandBrake process.")
+
+        resumed = self.store.resume(job_id, "Resumed manually.", resume_on_start=False)
+        if not resumed:
+            request_current_conversion_pause(active_thread_id)
+        return resumed
+
     def _request_running_job_cancel(self, job_id: str) -> Optional[Dict[str, object]]:
+        record = self.store.get(job_id)
+        if not record:
+            return None
+
         with self._job_control_lock:
             active_thread_id = self._active_jobs.get(job_id)
             self._cancel_requested_jobs.add(job_id)
 
         if active_thread_id is not None:
             request_current_conversion_stop(active_thread_id)
+            return self.store.request_cancellation(job_id, "Cancellation requested.")
 
-        return self.store.update_status(job_id, "cancelling", message="Cancellation requested.")
+        if record_has_recoverable_runtime(record):
+            request_conversion_stop_by_pid(record.get("process_id"))
+            self._cleanup_runtime_artifacts(record, remove_temp=True)
+            return self.store.update_status(job_id, "cancelled", message="Cancelled while detached from the service.")
+
+        return self.store.request_cancellation(job_id, "Cancellation requested.")
 
     def _consume_cancel_request(self, job_id: str) -> bool:
         with self._job_control_lock:
@@ -1432,12 +1801,17 @@ class ConversionService:
         while not self.stop_event.is_set() and not worker_stop_event.is_set():
             record = None
             try:
-                record = self.store.claim_next()
+                record = self._claim_recoverable_job()
+                if not record:
+                    record = self.store.claim_next()
                 if not record:
                     self._wake_event.wait(self.worker_poll_interval)
                     self._wake_event.clear()
                     continue
                 if self.stop_event.is_set() or worker_stop_event.is_set():
+                    if record_has_recoverable_runtime(record):
+                        self._enqueue_recoverable_job(str(record["id"]))
+                        continue
                     self.store.requeue(
                         record["id"],
                         "Service stopped before this job started. Returned to queue."
@@ -1471,11 +1845,12 @@ class ConversionService:
             info(f"[{job_id[:8]}] Processing: {os.path.basename(job.input_file)}")
 
             if is_iso_file(job.input_file):
-                status, output_path, message = self._execute_iso_job(job_id, job)
+                status, output_path, message = self._execute_iso_job(job_id, job, record)
             else:
-                status, output_path, message = self._execute_regular_job(job_id, job)
+                status, output_path, message = self._execute_regular_job(job_id, job, record)
 
             if status == "succeeded" and output_path:
+                runtime_record = self.store.get(job_id) or record
                 try:
                     output_size_bytes = os.path.getsize(output_path)
                 except OSError:
@@ -1493,23 +1868,34 @@ class ConversionService:
                     output_size_bytes=output_size_bytes,
                     message=message,
                 )
+                self._cleanup_runtime_artifacts(runtime_record)
                 info(f"[{job_id[:8]}] Succeeded: {os.path.basename(output_path)}")
             elif status == "queued":
+                runtime_record = self.store.get(job_id) or record
                 self.store.requeue(job_id, message)
+                self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
                 warning(f"[{job_id[:8]}] Returned to queue: {message}")
             elif status == "cancelled":
+                runtime_record = self.store.get(job_id) or record
                 self.store.update_status(job_id, "cancelled", message=message)
+                self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
                 warning(f"[{job_id[:8]}] Cancelled: {message}")
             elif status == "skipped":
                 self.store.update_status(job_id, "skipped", progress_percent=100.0, message=message)
                 info(f"[{job_id[:8]}] Skipped: {message}")
+            elif status == "detached":
+                info(f"[{job_id[:8]}] Detached: {message}")
             else:
+                runtime_record = self.store.get(job_id) or record
                 self.store.update_status(job_id, "failed", message=message)
+                self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
                 print_error(f"[{job_id[:8]}] Failed: {message}")
         except Exception as exc:
             print_error(f"[{job_id[:8]}] Job error for '{input_file}': {exc}")
             try:
+                runtime_record = self.store.get(job_id) or record
                 self.store.update_status(job_id, "failed", message=str(exc))
+                self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
             except Exception:
                 pass
         finally:
@@ -1531,7 +1917,8 @@ class ConversionService:
             last_update_at = now
             message = f"Encoding {percent:.1f}%"
             if 0.0 < percent < 100.0:
-                elapsed = max(0.0, time.monotonic() - started_at)
+                paused_seconds = get_current_conversion_paused_seconds()
+                elapsed = max(0.0, time.monotonic() - started_at - paused_seconds)
                 eta_seconds = (elapsed * (100.0 - percent) / percent) if elapsed > 0.0 else 0.0
                 if eta_seconds > 0.0:
                     message = f"{message} - ETA {format_eta(eta_seconds)}"
@@ -1548,9 +1935,17 @@ class ConversionService:
 
         return callback
 
-    def _execute_regular_job(self, job_id: str, job: ConversionJob) -> tuple[str, str, str]:
+    def _execute_regular_job(self, job_id: str, job: ConversionJob, record: Dict[str, object]) -> tuple[str, str, str]:
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
+
+        existing_process_id = int(record.get("process_id") or 0) or None
+        if existing_process_id:
+            if record.get("status") == "paused" and bool(record.get("resume_on_start")):
+                self.store.resume(job_id, "Resuming conversion after service restart.", resume_on_start=False)
+            else:
+                self.store.set_resume_on_start(job_id, False)
+
         if not job.force:
             status = check_already_converted(job.input_file, job.codec, job.force)
             if status == "skip":
@@ -1565,31 +1960,57 @@ class ConversionService:
         if gpu_device is not None:
             info(f"[{job_id[:8]}] Using NVENC GPU {gpu_device}")
 
-        output_path = convert_video(
-            job.input_file,
-            job.output_dir,
-            job.codec,
-            job.encode_speed,
-            job.audio_passthrough,
-            job.verbose,
-            title=job.title,
-            resolution_override=job.resolution_override,
-            audio_tracks=job.audio_tracks,
-            show_progress=False,
-            gpu_device=gpu_device,
-            progress_callback=self._build_progress_callback(job_id),
-        )
+        try:
+            output_path = convert_video(
+                job.input_file,
+                job.output_dir,
+                job.codec,
+                job.encode_speed,
+                job.audio_passthrough,
+                job.verbose,
+                title=job.title,
+                resolution_override=job.resolution_override,
+                audio_tracks=job.audio_tracks,
+                show_progress=False,
+                gpu_device=gpu_device,
+                progress_callback=self._build_progress_callback(job_id),
+                progress_log_path=str(record.get("log_file") or ""),
+                existing_process_id=existing_process_id,
+                existing_temp_file=str(record.get("temp_file") or ""),
+                existing_output_file=str(record.get("final_output_file") or ""),
+                initial_progress=float(record.get("progress_percent") or 0.0),
+                resume_existing_process=bool(record.get("resume_on_start")),
+                detach_when=self.stop_event.is_set,
+                runtime_callback=lambda runtime: self.store.set_runtime(
+                    job_id,
+                    process_id=runtime.get("process_id"),
+                    temp_file=str(runtime.get("temp_file") or ""),
+                    log_file=str(runtime.get("log_file") or ""),
+                    final_output_file=str(runtime.get("final_output_file") or ""),
+                    resume_on_start=False,
+                ),
+            )
+        except ConversionDetached:
+            return "detached", "", "Service stopped while the conversion was still running."
         if output_path:
             return "succeeded", output_path, "Conversion successful."
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
         if self.stop_event.is_set():
-            return "queued", "", "Service stopped during conversion. Returned to queue."
+            return "detached", "", "Service stopped while the conversion was still running."
         return "failed", "", "Conversion failed."
 
-    def _execute_iso_job(self, job_id: str, job: ConversionJob) -> tuple[str, str, str]:
+    def _execute_iso_job(self, job_id: str, job: ConversionJob, record: Dict[str, object]) -> tuple[str, str, str]:
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
+
+        existing_process_id = int(record.get("process_id") or 0) or None
+        if existing_process_id:
+            if record.get("status") == "paused" and bool(record.get("resume_on_start")):
+                self.store.resume(job_id, "Resuming conversion after service restart.", resume_on_start=False)
+            else:
+                self.store.set_resume_on_start(job_id, False)
+
         titles = scan_iso(job.input_file)
         if not titles:
             raise RuntimeError(f"No titles found in ISO: {job.input_file}")
@@ -1606,26 +2027,44 @@ class ConversionService:
         gpu_device = self._select_gpu_device(job.codec, job.encode_speed)
         if gpu_device is not None:
             info(f"[{job_id[:8]}] Using NVENC GPU {gpu_device}")
-        output_path = convert_video(
-            job.input_file,
-            job.output_dir,
-            job.codec,
-            job.encode_speed,
-            job.audio_passthrough,
-            job.verbose,
-            title=main_title["index"],
-            resolution_override=job.resolution_override or main_title.get("resolution") or None,
-            audio_tracks=job.audio_tracks or main_title.get("audio_tracks", []),
-            show_progress=False,
-            gpu_device=gpu_device,
-            progress_callback=self._build_progress_callback(job_id),
-        )
+        try:
+            output_path = convert_video(
+                job.input_file,
+                job.output_dir,
+                job.codec,
+                job.encode_speed,
+                job.audio_passthrough,
+                job.verbose,
+                title=main_title["index"],
+                resolution_override=job.resolution_override or main_title.get("resolution") or None,
+                audio_tracks=job.audio_tracks or main_title.get("audio_tracks", []),
+                show_progress=False,
+                gpu_device=gpu_device,
+                progress_callback=self._build_progress_callback(job_id),
+                progress_log_path=str(record.get("log_file") or ""),
+                existing_process_id=existing_process_id,
+                existing_temp_file=str(record.get("temp_file") or ""),
+                existing_output_file=str(record.get("final_output_file") or ""),
+                initial_progress=float(record.get("progress_percent") or 0.0),
+                resume_existing_process=bool(record.get("resume_on_start")),
+                detach_when=self.stop_event.is_set,
+                runtime_callback=lambda runtime: self.store.set_runtime(
+                    job_id,
+                    process_id=runtime.get("process_id"),
+                    temp_file=str(runtime.get("temp_file") or ""),
+                    log_file=str(runtime.get("log_file") or ""),
+                    final_output_file=str(runtime.get("final_output_file") or ""),
+                    resume_on_start=False,
+                ),
+            )
+        except ConversionDetached:
+            return "detached", "", "Service stopped while the conversion was still running."
         if output_path:
             return "succeeded", output_path, "Conversion successful."
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
         if self.stop_event.is_set():
-            return "queued", "", "Service stopped during conversion. Returned to queue."
+            return "detached", "", "Service stopped while the conversion was still running."
         return "failed", "", "Conversion failed."
 
 
@@ -2703,6 +3142,32 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self._redirect_with_message(notice=f"Queued retry for job {job_id}")
             return
 
+        if path.startswith("/jobs/") and path.endswith("/pause"):
+            job_id = path[:-len("/pause")].rsplit("/", 1)[-1]
+            try:
+                record = self.server.service.pause_job(job_id)
+            except ValueError as exc:
+                self._send_json(409, {"error": str(exc)})
+                return
+            if not record:
+                self._send_json(409, {"error": "Job cannot be paused."})
+                return
+            self._send_json(200, record)
+            return
+
+        if path.startswith("/jobs/") and path.endswith("/resume"):
+            job_id = path[:-len("/resume")].rsplit("/", 1)[-1]
+            try:
+                record = self.server.service.resume_job(job_id)
+            except ValueError as exc:
+                self._send_json(409, {"error": str(exc)})
+                return
+            if not record:
+                self._send_json(409, {"error": "Job cannot be resumed."})
+                return
+            self._send_json(200, record)
+            return
+
         if path == "/config":
             try:
                 payload = self._read_json() if self._is_json_request() else self._read_form()
@@ -2812,7 +3277,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if query.get("purge") == "1":
             deleted = self.server.service.delete_job(job_id)
             if not deleted:
-                self._send_json(409, {"error": "Job cannot be removed while running."})
+                self._send_json(409, {"error": "Job cannot be removed while active."})
                 return
             self._send_json(200, {"id": job_id, "deleted": True})
             return

@@ -37,12 +37,13 @@
 
     const statusPriority = {
         running: 0,
-        cancelling: 1,
-        queued: 2,
-        failed: 3,
-        cancelled: 4,
-        skipped: 5,
-        succeeded: 6,
+        paused: 1,
+        cancelling: 2,
+        queued: 3,
+        failed: 4,
+        cancelled: 5,
+        skipped: 6,
+        succeeded: 7,
     };
 
     const meta = document.getElementById('service-meta');
@@ -160,6 +161,9 @@
     function summarizeMessage(job) {
         if (job.status === 'running') {
             return job.message || 'Conversion in progress.';
+        }
+        if (job.status === 'paused') {
+            return job.message || 'Conversion paused.';
         }
         if (job.status === 'queued') {
             return job.message || 'Waiting in queue.';
@@ -934,7 +938,7 @@
         if (Object.prototype.hasOwnProperty.call(state.expandedJobs, job.id)) {
             return Boolean(state.expandedJobs[job.id]);
         }
-        return job.status === 'running' || job.status === 'queued' || job.status === 'cancelling';
+        return job.status === 'running' || job.status === 'paused' || job.status === 'queued' || job.status === 'cancelling';
     }
 
     function pruneExpandedJobs(jobs) {
@@ -1046,6 +1050,7 @@
                 ? Math.max(0, Math.min(rawProgress, 100))
                 : 0;
             const etaLabel = extractEtaLabel(job.message);
+            const progressFillClass = job.status === 'paused' ? ' progress-fill-paused' : '';
             let progressLabel = 'Done';
 
             if (job.status === 'queued') {
@@ -1054,6 +1059,8 @@
                 progressLabel = etaLabel
                     ? `${progress.toFixed(1)}% - ETA ${etaLabel}`
                     : `${progress.toFixed(1)}%`;
+            } else if (job.status === 'paused') {
+                progressLabel = `${progress.toFixed(1)}% - Paused`;
             } else if (job.status === 'cancelling') {
                 progressLabel = 'Cancelling...';
             } else if (job.status === 'failed') {
@@ -1069,13 +1076,18 @@
             const submitted = job.submitted_display || job.submitted_at || '';
             const detailsOpen = shouldShowJobOpen(job) ? ' open' : '';
             const preview = summarizeMessage(job);
-            const cancelButton = (job.status === 'queued' || job.status === 'running')
+            const pauseButton = job.status === 'running'
+                ? `<button class="secondary" type="button" data-pause-id="${job.id}" title="Pause this conversion without removing it from the worker.">Pause job</button>`
+                : job.status === 'paused'
+                    ? `<button class="secondary" type="button" data-resume-id="${job.id}" title="Resume this paused conversion.">Resume job</button>`
+                    : '';
+            const cancelButton = (job.status === 'queued' || job.status === 'running' || job.status === 'paused')
                 ? `<button class="inline-button" type="button" data-cancel-id="${job.id}" title="Request cancellation for this job.">Cancel job</button>`
                 : '';
             const retryButton = (job.status === 'failed' || job.status === 'cancelled')
                 ? `<button class="secondary" type="button" data-retry-id="${job.id}" title="Queue this job again with the same settings.">Retry job</button>`
                 : '';
-            const clearButton = (job.status !== 'running' && job.status !== 'cancelling')
+            const clearButton = (job.status !== 'running' && job.status !== 'paused' && job.status !== 'cancelling')
                 ? `<button class="ghost" type="button" data-clear-id="${job.id}" title="Remove this job from the queue list.">Clear</button>`
                 : '';
 
@@ -1092,7 +1104,7 @@
                         </div>
                         <div class="job-summary-side progress-cell">
                             <div class="job-summary-caption">Progress</div>
-                            <div class="progress-track"><div class="progress-fill" style="width: ${progress.toFixed(1)}%"></div></div>
+                            <div class="progress-track"><div class="progress-fill${progressFillClass}" style="width: ${progress.toFixed(1)}%"></div></div>
                             <div class="progress-text">${escapeHtml(progressLabel)}</div>
                         </div>
                         <div class="job-summary-expand"><span>Details</span><span class="job-chevron">▾</span></div>
@@ -1133,7 +1145,7 @@
                                 <div class="job-detail-value job-detail-code">${escapeHtml(job.message || 'No extra message.')}</div>
                             </div>
                         </div>
-                        ${(cancelButton || retryButton || clearButton) ? `<div class="actions">${cancelButton}${retryButton}${clearButton}</div>` : ''}
+                        ${(pauseButton || cancelButton || retryButton || clearButton) ? `<div class="actions">${pauseButton}${cancelButton}${retryButton}${clearButton}</div>` : ''}
                     </div>
                 </details>`;
         }).join('');
@@ -1160,6 +1172,44 @@
                         return;
                     }
                     state.expandedJobs[jobId] = details.open;
+                });
+            }
+        );
+
+        Array.prototype.forEach.call(
+            jobsContainer.querySelectorAll('[data-pause-id]'),
+            function (button) {
+                button.addEventListener('click', async function () {
+                    button.disabled = true;
+                    button.textContent = 'Pausing...';
+                    try {
+                        const response = await fetchJson(`/jobs/${button.dataset.pauseId}/pause`, { method: 'POST' });
+                        setFormStatus(response.message || 'Conversion paused.', 'ok');
+                        await refreshJobs();
+                    } catch (error) {
+                        setFormStatus(error.message, 'error');
+                        button.disabled = false;
+                        button.textContent = 'Pause job';
+                    }
+                });
+            }
+        );
+
+        Array.prototype.forEach.call(
+            jobsContainer.querySelectorAll('[data-resume-id]'),
+            function (button) {
+                button.addEventListener('click', async function () {
+                    button.disabled = true;
+                    button.textContent = 'Resuming...';
+                    try {
+                        const response = await fetchJson(`/jobs/${button.dataset.resumeId}/resume`, { method: 'POST' });
+                        setFormStatus(response.message || 'Conversion resumed.', 'ok');
+                        await refreshJobs();
+                    } catch (error) {
+                        setFormStatus(error.message, 'error');
+                        button.disabled = false;
+                        button.textContent = 'Resume job';
+                    }
                 });
             }
         );
@@ -1515,7 +1565,7 @@
     });
 
     clearJobsButton.addEventListener('click', async function () {
-        if (!window.confirm('Remove all non-running jobs from the queue list?')) {
+        if (!window.confirm('Remove all inactive jobs from the queue list?')) {
             return;
         }
 
@@ -1523,10 +1573,23 @@
         try {
             const result = await fetchJson('/jobs', { method: 'DELETE' });
             const deletedCount = Number(result.deleted || 0);
+            const activeCount = Number(result.active || 0);
             const runningCount = Number(result.running || 0);
+            const pausedCount = Number(result.paused || 0);
+            const cancellingCount = Number(result.cancelling || 0);
             let message = `Removed ${deletedCount} job${deletedCount === 1 ? '' : 's'} from the queue.`;
-            if (runningCount > 0) {
-                message += ` ${runningCount} running job${runningCount === 1 ? '' : 's'} kept.`;
+            if (activeCount > 0) {
+                const kept = [];
+                if (runningCount > 0) {
+                    kept.push(`${runningCount} running job${runningCount === 1 ? '' : 's'}`);
+                }
+                if (pausedCount > 0) {
+                    kept.push(`${pausedCount} paused job${pausedCount === 1 ? '' : 's'}`);
+                }
+                if (cancellingCount > 0) {
+                    kept.push(`${cancellingCount} cancelling job${cancellingCount === 1 ? '' : 's'}`);
+                }
+                message += ` ${kept.join(', ')} kept.`;
             }
             setFormStatus(message, 'ok');
             await refreshJobs();
@@ -1551,7 +1614,7 @@
         if (state.release.update_available) {
             const targetVersion = state.release.remote_version || 'latest';
             const confirmed = window.confirm(
-                `Install clutch ${targetVersion} and restart the service now?\n\nAny running conversions will be stopped and returned to the queue.`
+                `Install clutch ${targetVersion} and restart the service now?\n\nAny active conversions will be stopped and returned to the queue from the beginning.`
             );
             if (!confirmed) {
                 return;

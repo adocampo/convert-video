@@ -21,7 +21,6 @@ ProtectSystem=strict
 ProtectHome=false
 PrivateTmp=true
 ReadWritePaths=%h/.local/state/clutch
-ReadWritePaths=%h/.local/state/convert-video
 
 [Install]
 WantedBy=default.target

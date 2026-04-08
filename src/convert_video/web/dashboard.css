@@ -24,6 +24,7 @@
     --theme-icon-bg: rgba(13, 107, 97, 0.1);
     --queued-bg: rgba(170, 109, 0, 0.12);
     --running-bg: rgba(13, 107, 97, 0.12);
+    --paused-bg: rgba(170, 109, 0, 0.18);
     --success-bg: rgba(34, 104, 74, 0.12);
     --failed-bg: rgba(159, 45, 45, 0.12);
     --neutral-bg: rgba(29, 41, 53, 0.08);
@@ -55,6 +56,7 @@
     --theme-icon-bg: rgba(73, 186, 167, 0.14);
     --queued-bg: rgba(239, 190, 99, 0.16);
     --running-bg: rgba(73, 186, 167, 0.16);
+    --paused-bg: rgba(239, 190, 99, 0.22);
     --success-bg: rgba(127, 214, 161, 0.16);
     --failed-bg: rgba(255, 139, 139, 0.16);
     --neutral-bg: rgba(237, 243, 240, 0.08);
@@ -675,6 +677,11 @@ button:disabled {
     color: var(--accent-strong);
 }
 
+.paused {
+    background: var(--paused-bg);
+    color: var(--warn);
+}
+
 .cancelling {
     background: var(--queued-bg);
     color: var(--warn);
@@ -713,6 +720,10 @@ button:disabled {
     border-radius: 999px;
     background: linear-gradient(135deg, var(--accent) 0%, #23a28f 100%);
     transition: width 220ms ease;
+}
+
+.progress-fill-paused {
+    background: linear-gradient(135deg, #c58a16 0%, #e0b14b 100%);
 }
 
 .progress-text {
