@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-04-09
+
+### Changed in 1.4.1
+
+- Removed ~870 lines of dead inline HTML/CSS/JS from the service module that were superseded by the external dashboard assets.
+
 ## [1.4.0] - 2026-04-08
 
 ### Added in 1.4.0
