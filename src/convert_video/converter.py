@@ -240,7 +240,7 @@ def get_visible_nvidia_gpus() -> list[dict[str, object]]:
     """Return visible NVIDIA GPUs detected through nvidia-smi."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
+            ["nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader"],
             capture_output=True,
             text=True,
             check=True,
@@ -252,8 +252,8 @@ def get_visible_nvidia_gpus() -> list[dict[str, object]]:
     devices: list[dict[str, object]] = []
     seen: set[int] = set()
     for line in result.stdout.splitlines():
-        parts = [part.strip() for part in line.split(",", 1)]
-        if len(parts) != 2:
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) < 2:
             continue
         try:
             index = int(parts[0])
@@ -262,7 +262,9 @@ def get_visible_nvidia_gpus() -> list[dict[str, object]]:
         if index in seen:
             continue
         seen.add(index)
-        devices.append({"index": index, "name": parts[1]})
+        name = parts[1].removeprefix("NVIDIA ") if len(parts) > 1 else "Unknown"
+        memory = parts[2] if len(parts) > 2 else ""
+        devices.append({"index": index, "name": name, "memory": memory})
     return devices
 
 

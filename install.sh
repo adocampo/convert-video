@@ -6,6 +6,8 @@ set -euo pipefail
 # Works on Linux, macOS, and WSL
 # ──────────────────────────────────────────────
 
+REPO_URL="https://github.com/adocampo/convert-video.git"
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -15,7 +17,16 @@ info()    { echo -e "${GREEN}[✓] $*${RESET}"; }
 warn()    { echo -e "${YELLOW}[!] $*${RESET}"; }
 fail()    { echo -e "${RED}[✗] $*${RESET}" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLEANUP_DIR=""
+cleanup() { [[ -n "$CLEANUP_DIR" ]] && rm -rf "$CLEANUP_DIR"; }
+trap cleanup EXIT
+
+# Detect whether we are running from a local repo checkout or piped
+if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR=""
+fi
 
 # ── Detect OS and package manager ────────────
 detect_pkg_manager() {
@@ -129,15 +140,77 @@ ensure_venv
 ensure_pipx
 echo
 
+# ── Ensure git is available ───────────────────
+ensure_git() {
+    if command -v git &>/dev/null; then
+        info "git found"
+        return
+    fi
+    install_pkg git "$PKG_MGR"
+}
+
+# ── Resolve source directory ─────────────────
+resolve_source() {
+    # If running from a repo checkout that has pyproject.toml, use it
+    if [[ -n "$SCRIPT_DIR" && -f "${SCRIPT_DIR}/pyproject.toml" ]]; then
+        SOURCE_DIR="$SCRIPT_DIR"
+        info "Installing from local checkout: ${SOURCE_DIR}"
+        return
+    fi
+    # Otherwise clone the repo to a temporary directory
+    ensure_git
+    CLEANUP_DIR=$(mktemp -d)
+    info "Cloning ${REPO_URL} into temporary directory..."
+    git clone --depth 1 "$REPO_URL" "$CLEANUP_DIR" >/dev/null 2>&1
+    SOURCE_DIR="$CLEANUP_DIR"
+    info "Cloned to ${SOURCE_DIR}"
+}
+
+resolve_source
+echo
+
 # ── Install convert-video ────────────────────
 info "Installing convert-video via pipx..."
 if pipx list 2>/dev/null | grep -q "convert-video"; then
-    pipx reinstall "$SCRIPT_DIR"
+    pipx reinstall "$SOURCE_DIR"
 else
-    pipx install "$SCRIPT_DIR"
+    pipx install "$SOURCE_DIR"
 fi
 
 echo
 ensure_external_deps
+
+# ── Install systemd user unit (Linux only) ───
+install_systemd_unit() {
+    local unit_src="${SOURCE_DIR}/convert-video.service"
+    local unit_dir="${HOME}/.config/systemd/user"
+    local unit_dst="${unit_dir}/convert-video.service"
+
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        return
+    fi
+    if [[ ! -f "$unit_src" ]]; then
+        warn "Systemd unit file not found in repo, skipping."
+        return
+    fi
+
+    mkdir -p "$unit_dir"
+    cp "$unit_src" "$unit_dst"
+    info "Installed systemd unit to ${unit_dst}"
+
+    if command -v systemctl &>/dev/null; then
+        if systemctl --user daemon-reload &>/dev/null; then
+            info "Reloaded systemd user daemon"
+        else
+            warn "Could not reload the systemd user daemon automatically."
+        fi
+        echo "  To enable and start the service:"
+        echo "    systemctl --user enable --now convert-video.service"
+        echo "  To check its status:"
+        echo "    systemctl --user status convert-video.service"
+    fi
+}
+install_systemd_unit
+
 echo
 info "Installation complete! Run 'convert-video --help' to get started."

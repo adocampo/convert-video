@@ -1,41 +1,44 @@
-# History and why I did this
+# convert-video
 
-## convert-video
+Convert and manage video transcodes with HandBrakeCLI from the command line or from a browser dashboard. `convert-video` handles single files, recursive libraries, watched folders, and a shared LAN service with a persistent queue.
 
-Usually, when you download from the internet movies and tv shows, you will have plenty of formats and codecs, and if the videos has some age, those codes will be quite unefficient (like AVC codec), occuping a lot of disk space when newer codecs (like AV1) are far more optimized (but not all players can play AV1 nowadays)
+![convert-video service dashboard](docs/images/service-dashboard.png)
 
-I have plenty of space in my home server, but I realized I could save 2/3 of it just by re-enconding all my videos.
+## Features at a glance
 
-At first, I used ffmpeg and when converting from AVC (or H264) to HVEC (or H265), and it saved almost the half of the space.
+- Convert single files, whole folders, recursive trees, file globs, and ISO images.
+- Encode with `nvenc_h265`, `nvenc_h264`, `x265`, or `av1`.
+- Preserve audio and subtitle tracks, with optional audio passthrough.
+- Run several local workers in parallel for faster batch processing.
+- Rotate NVENC jobs across selected NVIDIA GPUs with `--gpus 0,1`.
+- Skip wasteful re-encodes using codec-aware and muxer-aware detection.
+- Check for updates and upgrade in place with the built-in `--update` and `--upgrade` commands.
+- Expose an HTTP service with a built-in dashboard to inspect the queue and submit jobs remotely.
+- Persist service configuration, worker count, GPU list, and watched folders in SQLite.
+- Watch folders and auto-enqueue new videos once they stop changing on disk.
+- Include a `change-title` helper to sync MKV title metadata with the file name.
 
-Then, I've tried AV1, but as I only have an NVidia RTX 3070, I must encode videos in AV1 with my CPU, instead of my GPU, which is a pain in the ass, to be sincere. Compression is awesome, sometimes even x6 times less than H264, and usually x2 time less than H265.
+## Requirements
 
-So far, so good, so, I began to do a simple script to automate this with ffpmeg, which all of us have almost preinstalled in our linux boxes.
+You only need [HandBrakeCLI](https://handbrake.fr/downloads2.php) to run the main converter.
 
-### The good
-
-But recently I've dowloaded a set of BDRip movies, like 60GB each, and even my script reduced them a lot, still were around 10GB, which I found pretty much for a 100 or 120 minutes movie. So I gave a try to handbrake and used its AV1 preset. The result was impressive: from 60GB in H264 to 2GB in AV1... x30 times less!!!
-
-### The bad
-
-Unfortunately, if you don't have a Nvidia 40X family, you cannot use your GPU to encode with AV1, so enconding a 2h movie will be around 2h with a decent i7 12th generation CPU... too much if you have hundreds of movies, and that doing if via network with your PC, your NAS probably will have a less powerful CPU and it will take a lot longer and probably will hung in the process.
-
-### The ugly
-
-At this point, I find marvelous the preset in HandBrake, how well optimized was and I realized those guys (HandBrake devs) know a lot better than me about encodings ad so, so I did try the H265 preset, and compared the result with my ffmpeg encoding in H265. The results were also astonishing. Handbrake H265 encoding was almost on par (a 15% or so higher) than AV1 when compressing from H264, and it even was able to compress HVEC videos even more!! (ffmpeg wasn't able to reduce a single bit of them). Besides, I can use my GPU and encode them with HVEC_NVENC codec, so compressing 1h of video can take just 4 minutes.
-
-## Requisites
-
-You only need to have installed [HandBrakeCLI](https://handbrake.fr/downloads2.php).
-In order to use all the scripts without limitations, make sure to have installed all those:
+For the full feature set, install these tools as well:
 
 - `mediainfo`
 - `mkvpropedit`
-- `pv` (optional, used by the bash version)
+- `pv` (optional, used by the shell helpers)
 
 ## Installation
 
-### Quick install (automatic)
+### One-liner install (no manual clone needed)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash
+```
+
+The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, clones the repo to a temporary directory when needed, installs `convert-video` via pipx, checks runtime dependencies, and places the systemd user unit on Linux.
+
+### Install from a local clone
 
 ```bash
 git clone https://github.com/adocampo/convert-video.git
@@ -43,19 +46,10 @@ cd convert-video
 bash install.sh
 ```
 
-The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, installs `convert-video` via pipx, and checks for runtime dependencies.
-
-### Manual install with pipx
+### Direct install with pipx from GitHub
 
 ```bash
 pipx install git+https://github.com/adocampo/convert-video.git
-```
-
-### Manual install from local clone
-
-```bash
-git clone https://github.com/adocampo/convert-video.git
-pipx install ./convert-video
 ```
 
 ### Verify installation
@@ -63,6 +57,30 @@ pipx install ./convert-video
 ```bash
 convert-video --version
 ```
+
+## Why this exists
+
+Usually, when you download movies and TV shows, you end up with plenty of formats and codecs. Older codecs such as AVC waste a lot of disk space compared to newer ones such as AV1, but not every player can handle AV1 smoothly yet.
+
+I have plenty of space in my home server, but I realized I could save a huge part of it just by re-encoding my video library.
+
+At first, I used ffmpeg. Converting AVC (H.264) to HEVC (H.265) saved a lot of space, but I wanted better results.
+
+Then I tried AV1. Compression was excellent, but with an NVIDIA RTX 3070 I still had to encode AV1 on the CPU instead of the GPU, which is far too slow when you have hundreds of videos.
+
+So I started automating the workflow. After comparing outputs, HandBrake consistently produced much better compression for my media than the presets I had tuned manually in ffmpeg.
+
+### The good
+
+With the right HandBrake presets, I was able to shrink some 60 GB H.264 BDRips to around 2 GB in AV1 while keeping very good quality.
+
+### The bad
+
+If you do not have NVIDIA 40-series hardware, AV1 encoding on the GPU is not available, so large AV1 jobs can still take a long time.
+
+### The ugly
+
+HandBrake H.265 was good enough that it often got close to AV1 compression while still letting me use NVENC, which means a one-hour video can finish in just a few minutes on the GPU. That is the workflow this project is built around.
 
 ## Development setup
 
@@ -215,6 +233,30 @@ When you pass `--gpus`, `convert-video` routes NVENC jobs through those GPU indi
 You can now run `convert-video` as a service on machine A and submit jobs from another machine in the LAN.
 
 Important: in the first implementation, machine A must already be able to access the source and destination paths as normal filesystem paths. This works well with pre-mounted SMB or NFS shares. The service does not upload files from B to A and does not mount remote shares by itself.
+
+#### Running as a systemd service (Linux)
+
+The installer automatically places a systemd user unit file. To enable and start the service:
+
+```bash
+systemctl --user enable --now convert-video.service
+systemctl --user status convert-video.service
+```
+
+By default the unit runs `convert-video --serve` on `127.0.0.1:8765`. To customize options (bind address, allowed roots, watchers, GPUs, etc.), edit `~/.config/systemd/user/convert-video.service` and reload:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart convert-video.service
+```
+
+To keep the service running after you log out:
+
+```bash
+loginctl enable-linger $USER
+```
+
+#### Manual service launch
 
 Start the service on machine A:
 

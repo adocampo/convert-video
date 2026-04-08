@@ -708,7 +708,11 @@
         const visibleGpuDevices = Array.isArray(summary.visible_nvidia_gpus) ? summary.visible_nvidia_gpus : [];
         const configuredGpuLabel = configuredGpuDevices.length ? configuredGpuDevices.join(', ') : 'auto';
         const visibleGpuLabel = visibleGpuDevices.length
-            ? visibleGpuDevices.map(function (gpu) { return String(gpu.index); }).join(', ')
+            ? visibleGpuDevices.map(function (gpu) {
+                var label = gpu.name || String(gpu.index);
+                if (gpu.memory) label += ' (' + gpu.memory + ')';
+                return label;
+            }).join(', ')
             : 'none detected';
         const visibleGpuTitle = visibleGpuDevices.length
             ? visibleGpuDevices.map(function (gpu) {
