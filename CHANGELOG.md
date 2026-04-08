@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-04-08
+
+### Fixed in 1.3.1
+
+- HandBrake-produced HEVC files are now detected more reliably from MediaInfo metadata, including variants that expose `Writing_Application` and different encoder fields.
+- Local runs and service jobs now skip a source when its expected converted output already exists, is newer than the source, and is already recognized as converted, preventing duplicate files such as `_converted (1).mkv`.
+- Installer, updater, and current documentation references now point at the renamed GitHub repository `adocampo/clutch`.
+
+### Added in 1.3.1
+
+- Regression tests now cover HandBrake detection and duplicate-output skipping logic.
+
 ## [1.3.0] - 2026-04-08
 
 ### Added in 1.3.0
@@ -16,7 +28,7 @@ All notable changes to this project will be documented in this file.
 
 ### Repository status
 
-- The GitHub repository URL still uses `adocampo/convert-video` until the repository rename happens, so install and self-update commands continue to reference that URL.
+- The GitHub repository now lives at `adocampo/clutch`, and install and self-update commands use the renamed repo.
 
 ## [1.2.3] - 2026-04-08
 
@@ -34,7 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added in 1.2.2
 
-- **One-line installer**: `curl -fsSL https://raw.githubusercontent.com/adocampo/convert-video/master/install.sh | bash` now installs the tool without a manual clone.
+- **One-line installer**: `curl -fsSL https://raw.githubusercontent.com/adocampo/clutch/master/install.sh | bash` now installs the tool without a manual clone.
 - **Systemd user unit**: Linux installs now include a dedicated user unit for running the LAN service via `systemctl --user`.
 
 ### Changed in 1.2.2
