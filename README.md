@@ -1,4 +1,6 @@
-![clutch logo](docs/images/clutch.png)
+<p align="center">
+<img src="https://github.com/adocampo/clutch/blob/master/docs/images/clutch.png?raw=true" alt="Sublime's custom image"/
+</p>
 
 Clutch manages video transcodes through HandBrakeCLI from the command line or from a browser dashboard. `clutch` handles single files, recursive libraries, watched folders, and a shared LAN service with a persistent queue.
 
