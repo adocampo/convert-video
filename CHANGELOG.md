@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.3] - 2026-04-08
+
+### Added in 1.2.3
+
+- **Daily release checks**: the CLI and service now share a cached daily GitHub release check so users are warned about new versions without repeated requests on every run.
+- **Dashboard update control**: the web UI now includes a release icon that can check for updates, show a badge when a newer version is available, and display the changelog delta in the tooltip.
+
+### Changed in 1.2.3
+
+- Normal CLI runs now show the upgrade reminder at most once per day, while `--update` and `--upgrade` continue to work on demand.
+- The service now performs its own daily release check, exposes update status to the dashboard, and can install the latest version and restart itself after user confirmation.
+
 ## [1.2.2] - 2026-04-08
 
 ### Added in 1.2.2
