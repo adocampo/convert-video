@@ -16,6 +16,8 @@ Clutch manages video transcodes through HandBrakeCLI from the command line or fr
 - Skip wasteful re-encodes using codec-aware and muxer-aware detection.
 - Check for updates and upgrade in place with the built-in `--update` and `--upgrade` commands, plus daily release reminders in the CLI.
 - Expose an HTTP service with a built-in dashboard to inspect the queue and submit jobs remotely.
+- Pause and resume running conversions from the dashboard or the HTTP API.
+- Survive service restarts: active conversions are detached on shutdown and automatically reattached on the next start when the encoder process is still alive.
 - Show a dashboard release icon with a badge when the service detects a newer version, including one-click upgrade and restart.
 - Persist service configuration, worker count, GPU list, and watched folders in SQLite.
 - Watch folders and auto-enqueue new videos once they stop changing on disk.
@@ -286,14 +288,17 @@ http://machine-a:8765/
 The dashboard lets you:
 
 - submit conversion jobs without using the CLI
-- inspect queued, running, completed, skipped, and failed jobs
-- cancel queued jobs
+- inspect queued, running, paused, completed, skipped, and failed jobs
+- pause and resume running conversions instantly
+- cancel queued or running jobs
 - check for new releases from the dashboard and install them with confirmation when an update is available
 - review the service roots and watched directories exposed by machine A
 - change how many workers run in parallel on the shared queue
 - change which NVENC GPU indices the service rotates across
 - change the default conversion settings used by the service and future watched files
 - add and remove watched directories without restarting the service
+
+When the service is stopped (e.g. `Ctrl+C` or `systemctl --user stop clutch`), active conversions are paused and detached instead of killed. On the next start, the service reattaches to any encoder process that is still alive and resumes from where it left off. If the process is gone, the job is re-queued from the beginning automatically.
 
 The service also performs its own cached GitHub release check once per day. When a newer version is available, the dashboard release icon shows a badge and its tooltip changes to the changelog delta between the installed version and the latest release.
 
@@ -322,6 +327,9 @@ GET    /jobs/<job_id>
 POST   /config
 POST   /watchers
 POST   /jobs
+POST   /jobs/<job_id>/pause
+POST   /jobs/<job_id>/resume
+POST   /jobs/<job_id>/retry
 DELETE /watchers/<watcher_id>
 DELETE /jobs/<job_id>
 ```
