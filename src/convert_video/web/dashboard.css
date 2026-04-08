@@ -106,6 +106,14 @@ body {
     gap: 16px;
 }
 
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    align-items: flex-start;
+}
+
 .hero h1 {
     margin: 0;
     font-family: "IBM Plex Serif", Georgia, serif;
@@ -138,7 +146,8 @@ body {
     font-size: 0.92rem;
 }
 
-.theme-toggle {
+.theme-toggle,
+.release-toggle {
     display: inline-flex;
     align-items: center;
     gap: 12px;
@@ -150,6 +159,19 @@ body {
     color: var(--text);
 }
 
+.release-toggle {
+    position: relative;
+}
+
+.release-toggle.has-badge {
+    border-color: rgba(170, 109, 0, 0.45);
+    box-shadow: 0 0 0 3px rgba(170, 109, 0, 0.1);
+}
+
+.release-toggle[data-busy="true"] {
+    cursor: wait;
+}
+
 .theme-icons {
     display: grid;
     place-items: center;
@@ -158,6 +180,40 @@ body {
     border-radius: 999px;
     background: var(--theme-icon-bg);
     flex: 0 0 auto;
+}
+
+.release-icon-wrap {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warn) 14%, var(--theme-icon-bg));
+    color: var(--warn);
+    flex: 0 0 auto;
+}
+
+.release-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.85;
+}
+
+.release-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 0.78rem;
+    height: 0.78rem;
+    border-radius: 999px;
+    background: var(--fail);
+    border: 2px solid var(--panel);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--fail) 16%, transparent);
 }
 
 .theme-icon {
@@ -826,7 +882,12 @@ body.modal-open {
         align-items: stretch;
     }
 
-    .theme-toggle {
+    .hero-actions {
+        width: 100%;
+    }
+
+    .theme-toggle,
+    .release-toggle {
         width: 100%;
         justify-content: center;
     }

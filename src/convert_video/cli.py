@@ -22,7 +22,13 @@ from convert_video.converter import (
     parse_gpu_devices, request_all_conversion_stops,
 )
 from convert_video.service import build_service_db_path, run_service, submit_remote_job
-from convert_video.updater import check_for_updates, get_update_changelog, upgrade
+from convert_video.updater import (
+    check_for_updates,
+    get_update_changelog,
+    get_update_state,
+    mark_cli_notice_shown,
+    upgrade,
+)
 from convert_video.iso import is_iso_file, scan_iso, select_main_title, display_titles
 
 install_signal_handlers()
@@ -669,6 +675,15 @@ def main():
     if args.upgrade:
         upgrade()
         sys.exit(0)
+
+    daily_update_state = get_update_state(force=False, quiet=True)
+    if daily_update_state.get("update_available") and daily_update_state.get("cli_notice_date") != daily_update_state.get("checked_date"):
+        warning(
+            "A newer convert-video release is available: "
+            f"{daily_update_state.get('local_version')} -> {daily_update_state.get('remote_version')}. "
+            "Run 'convert-video --update' to review the changelog or '--upgrade' to install it."
+        )
+        mark_cli_notice_shown()
 
     if args.serve:
         check_dependency("HandBrakeCLI")

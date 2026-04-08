@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -10,10 +11,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from urllib import error, request
 from urllib.parse import parse_qs, quote, urlparse
 
+from convert_video import get_version
 from convert_video.converter import (
     clear_current_conversion_state,
     convert_video,
@@ -28,6 +30,7 @@ from convert_video.iso import display_titles, is_iso_file, scan_iso, select_main
 from convert_video.mediainfo import VIDEO_EXTENSIONS, check_already_converted
 from convert_video.output import error as print_error
 from convert_video.output import info, success, warning
+from convert_video.updater import get_update_state, install_latest_version, mark_update_installed
 
 
 def utc_now() -> str:
@@ -753,6 +756,11 @@ class ConversionService:
         self._job_control_lock = threading.Lock()
         self._cancel_requested_jobs: set[str] = set()
         self._loaded_persisted_state = False
+        self._update_monitor_thread: Optional[threading.Thread] = None
+        self._update_lock = threading.Lock()
+        self._upgrade_in_progress = False
+        self._restart_requested = False
+        self._restart_command = [sys.argv[0], *sys.argv[1:]]
         self._load_persisted_state(
             [os.path.abspath(path) for path in (allowed_roots or [])],
             self.default_job_settings,
@@ -815,6 +823,7 @@ class ConversionService:
     def start(self):
         self._service_started = True
         self._sync_worker_pool()
+        self._start_update_monitor()
 
     def stop(self):
         self.stop_event.set()
@@ -907,6 +916,92 @@ class ConversionService:
                 should_resync = True
         if should_resync:
             self._sync_worker_pool()
+
+    def _start_update_monitor(self):
+        if self._update_monitor_thread and self._update_monitor_thread.is_alive():
+            return
+        self._update_monitor_thread = threading.Thread(
+            target=self._update_monitor_loop,
+            daemon=True,
+            name="convert-video-update-monitor",
+        )
+        self._update_monitor_thread.start()
+
+    def _update_monitor_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                self.get_update_info(force_check=False)
+            except Exception as exc:
+                warning(f"Could not refresh release status: {exc}")
+            if self.stop_event.wait(3600):
+                break
+
+    def is_upgrade_in_progress(self) -> bool:
+        with self._update_lock:
+            return self._upgrade_in_progress
+
+    def should_restart(self) -> bool:
+        with self._update_lock:
+            return self._restart_requested
+
+    def get_restart_command(self) -> List[str]:
+        with self._update_lock:
+            return list(self._restart_command)
+
+    def get_update_info(self, *, force_check: bool = False) -> Dict[str, object]:
+        state = get_update_state(force=force_check, quiet=True)
+        return {
+            "local_version": str(state.get("local_version") or get_version()),
+            "remote_version": str(state.get("remote_version") or ""),
+            "update_available": bool(state.get("update_available", False)),
+            "checked_at": str(state.get("checked_at") or ""),
+            "changelog": str(state.get("changelog") or ""),
+            "last_error": str(state.get("last_error") or ""),
+            "update_in_progress": self.is_upgrade_in_progress(),
+        }
+
+    def schedule_self_upgrade(self, shutdown_callback: Callable[[], None]) -> Dict[str, object]:
+        update_info = self.get_update_info(force_check=False)
+        remote_version = str(update_info.get("remote_version") or "")
+        if not update_info.get("update_available"):
+            raise ValueError("No newer version is available.")
+
+        with self._update_lock:
+            if self._upgrade_in_progress:
+                raise ValueError("A service upgrade is already in progress.")
+            self._upgrade_in_progress = True
+
+        thread = threading.Thread(
+            target=self._run_self_upgrade,
+            args=(shutdown_callback, remote_version),
+            daemon=True,
+            name="convert-video-upgrade",
+        )
+        thread.start()
+        return {
+            "message": f"Installing convert-video {remote_version} and restarting the service.",
+            "update_info": self.get_update_info(force_check=False),
+        }
+
+    def _run_self_upgrade(self, shutdown_callback: Callable[[], None], target_version: str):
+        try:
+            info(f"Starting self-upgrade to {target_version or 'latest'}")
+            result = install_latest_version()
+            if result.returncode != 0:
+                raise RuntimeError("Upgrade failed. Check the service logs for details.")
+
+            mark_update_installed(target_version or get_version())
+            info("Latest version installed. Restarting convert-video service...")
+
+            with self._update_lock:
+                self._restart_requested = True
+
+            self.stop()
+            shutdown_callback()
+        except Exception as exc:
+            print_error(f"Self-upgrade failed: {exc}")
+            with self._update_lock:
+                self._upgrade_in_progress = False
 
     def add_watcher(
         self,
@@ -1284,7 +1379,7 @@ class ConversionService:
     def clear_jobs(self) -> Dict[str, int]:
         return self.store.clear()
 
-    def get_service_summary(self) -> Dict[str, object]:
+    def get_service_summary(self, *, force_update_check: bool = False) -> Dict[str, object]:
         return {
             "allowed_roots": self.allowed_roots,
             "default_job_settings": self.get_default_job_settings(),
@@ -1292,6 +1387,7 @@ class ConversionService:
             "worker_count": self.worker_count,
             "gpu_devices": list(self.gpu_devices),
             "visible_nvidia_gpus": get_visible_nvidia_gpus(),
+            "update_info": self.get_update_info(force_check=force_update_check),
         }
 
     def _request_running_job_cancel(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -2543,6 +2639,19 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path, _ = self._get_request_parts()
 
+        if path == "/updates/check":
+            self._send_json(200, self.server.service.get_update_info(force_check=True))
+            return
+
+        if path == "/updates/upgrade":
+            try:
+                payload = self.server.service.schedule_self_upgrade(self.server.shutdown)
+            except ValueError as exc:
+                self._send_json(409, {"error": str(exc)})
+                return
+            self._send_json(202, payload)
+            return
+
         if path.startswith("/jobs/") and path.endswith("/retry"):
             job_id = path[:-len("/retry")].rsplit("/", 1)[-1]
             try:
@@ -2746,6 +2855,15 @@ def run_service(
         server.server_close()
         service.stop()
         service.wait()
+
+    if service.should_restart():
+        restart_command = service.get_restart_command()
+        if restart_command and restart_command[0]:
+            info("Restarting convert-video service with the upgraded version...")
+            try:
+                os.execvp(restart_command[0], restart_command)
+            except OSError as exc:
+                print_error(f"Could not restart convert-video service automatically: {exc}")
 
 
 def submit_remote_job(server_url: str, payload: Dict[str, object]) -> Dict[str, object]:

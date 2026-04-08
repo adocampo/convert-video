@@ -4,6 +4,15 @@
         timerId: null,
         theme: 'light',
         allowedRoots: [],
+        release: {
+            local_version: '',
+            remote_version: '',
+            update_available: false,
+            changelog: '',
+            checked_at: '',
+            last_error: '',
+            update_in_progress: false,
+        },
         expandedJobs: {},
         activeQueueJobId: '',
         queueJobIds: [],
@@ -64,6 +73,10 @@
     const toggleAutoRefreshButton = document.getElementById('toggle-autorefresh');
     const toggleThemeButton = document.getElementById('toggle-theme');
     const themeLabel = document.getElementById('theme-label');
+    const releaseButton = document.getElementById('release-check');
+    const releaseLabel = document.getElementById('release-label');
+    const releaseBadge = document.getElementById('release-badge');
+    const releaseStatus = document.getElementById('release-status');
     const browserModal = document.getElementById('path-browser');
     const browserEyebrow = document.getElementById('path-browser-eyebrow');
     const browserTitle = document.getElementById('path-browser-title');
@@ -221,6 +234,122 @@
         toggleAutoRefreshButton.textContent = `Auto refresh: ${state.autoRefresh ? 'on' : 'off'}`;
         toggleAutoRefreshButton.setAttribute('title', getAutoRefreshTitle());
         toggleAutoRefreshButton.setAttribute('aria-label', getAutoRefreshTitle());
+    }
+
+    function delay(ms) {
+        return new Promise(function (resolve) {
+            window.setTimeout(resolve, ms);
+        });
+    }
+
+    function formatIsoTimestamp(value) {
+        if (!value) {
+            return '';
+        }
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return String(value);
+        }
+        return buildSubmittedDisplay(parsed);
+    }
+
+    function markdownToPlainText(markdown) {
+        return String(markdown || '')
+            .replace(/\r/g, '')
+            .replace(/^###\s+/gm, '')
+            .replace(/^##\s+/gm, '')
+            .replace(/^#\s+/gm, '')
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/^\s*-\s+/gm, '- ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    function buildReleaseTooltip(updateInfo) {
+        if (updateInfo.update_in_progress) {
+            return 'Installing the latest convert-video release and restarting the service.';
+        }
+
+        if (updateInfo.update_available) {
+            const heading = `New version available: ${updateInfo.local_version} -> ${updateInfo.remote_version}`;
+            const changelog = markdownToPlainText(updateInfo.changelog);
+            return changelog ? `${heading}\n\n${changelog}` : heading;
+        }
+
+        const checkedAt = formatIsoTimestamp(updateInfo.checked_at);
+        return checkedAt
+            ? `Check whether new versions are available. Last checked: ${checkedAt}.`
+            : 'Check whether new versions are available.';
+    }
+
+    function renderReleaseControl(updateInfo) {
+        const nextInfo = {
+            local_version: String(updateInfo.local_version || state.release.local_version || ''),
+            remote_version: String(updateInfo.remote_version || ''),
+            update_available: Boolean(updateInfo.update_available),
+            changelog: String(updateInfo.changelog || ''),
+            checked_at: String(updateInfo.checked_at || ''),
+            last_error: String(updateInfo.last_error || ''),
+            update_in_progress: Boolean(updateInfo.update_in_progress),
+        };
+
+        state.release = nextInfo;
+
+        if (!releaseButton || !releaseLabel || !releaseBadge) {
+            return;
+        }
+
+        let label = 'Check releases';
+        if (nextInfo.update_in_progress) {
+            label = 'Updating...';
+        } else if (nextInfo.update_available && nextInfo.remote_version) {
+            label = `Update v${nextInfo.remote_version}`;
+        } else if (nextInfo.local_version) {
+            label = `v${nextInfo.local_version}`;
+        }
+
+        const tooltip = buildReleaseTooltip(nextInfo);
+
+        releaseLabel.textContent = label;
+        releaseBadge.hidden = !nextInfo.update_available;
+        releaseButton.disabled = nextInfo.update_in_progress;
+        releaseButton.dataset.busy = nextInfo.update_in_progress ? 'true' : 'false';
+        releaseButton.classList.toggle('has-badge', nextInfo.update_available);
+        releaseButton.setAttribute('title', tooltip);
+        releaseButton.setAttribute('aria-label', tooltip);
+    }
+
+    async function waitForReleaseRestart(targetVersion) {
+        let lastError = '';
+
+        for (let attempt = 0; attempt < 45; attempt += 1) {
+            await delay(attempt < 5 ? 1000 : 2000);
+
+            try {
+                const payload = await fetchJson('/config');
+                renderMeta(payload);
+                applySummaryToForms(payload);
+                renderWatchers(payload.watchers || []);
+                renderReleaseControl(payload.update_info || {});
+
+                const updateInfo = payload.update_info || {};
+                if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
+                    setStatus(releaseStatus, `Service restarted on convert-video ${updateInfo.local_version || targetVersion}.`, 'ok');
+                    await refreshJobs();
+                    return;
+                }
+            } catch (error) {
+                lastError = error.message;
+            }
+        }
+
+        setStatus(
+            releaseStatus,
+            lastError || 'The service is restarting. Reload the page in a few seconds if it does not reconnect automatically.',
+            'error'
+        );
     }
 
     function applyTheme(theme) {
@@ -725,6 +854,7 @@
         chips.push(`<span class="chip" title="Configured NVENC GPU indices for queued jobs.">NVENC GPUs: ${escapeHtml(configuredGpuLabel)}</span>`);
         chips.push(`<span class="chip" title="${escapeHtml(visibleGpuTitle)}">Visible NVIDIA GPUs: ${escapeHtml(visibleGpuLabel)}</span>`);
         meta.innerHTML = chips.join('');
+        renderReleaseControl(summary.update_info || {});
     }
 
     function applySummaryToForms(summary) {
@@ -1409,6 +1539,67 @@
         persistTheme(nextTheme);
     });
 
+    releaseButton.addEventListener('click', async function () {
+        if (state.release.update_in_progress) {
+            return;
+        }
+
+        if (state.release.update_available) {
+            const targetVersion = state.release.remote_version || 'latest';
+            const confirmed = window.confirm(
+                `Install convert-video ${targetVersion} and restart the service now?\n\nAny running conversions will be stopped and returned to the queue.`
+            );
+            if (!confirmed) {
+                return;
+            }
+
+            releaseButton.disabled = true;
+            releaseButton.dataset.busy = 'true';
+            setStatus(releaseStatus, `Installing convert-video ${targetVersion} and restarting the service...`);
+
+            try {
+                const payload = await fetchJson('/updates/upgrade', { method: 'POST' });
+                renderReleaseControl(payload.update_info || {
+                    local_version: state.release.local_version,
+                    remote_version: targetVersion,
+                    update_available: true,
+                    changelog: state.release.changelog,
+                    checked_at: state.release.checked_at,
+                    last_error: '',
+                    update_in_progress: true,
+                });
+                setStatus(releaseStatus, payload.message || `Installing convert-video ${targetVersion} and restarting the service...`, 'ok');
+                waitForReleaseRestart(targetVersion);
+            } catch (error) {
+                renderReleaseControl(state.release);
+                setStatus(releaseStatus, error.message, 'error');
+            }
+            return;
+        }
+
+        releaseButton.disabled = true;
+        setStatus(releaseStatus, 'Checking GitHub for a new release...');
+
+        try {
+            const payload = await fetchJson('/updates/check', { method: 'POST' });
+            renderReleaseControl(payload);
+            if (payload.last_error) {
+                setStatus(releaseStatus, payload.last_error, 'error');
+            } else if (payload.update_available) {
+                setStatus(releaseStatus, `New version available: ${payload.local_version} -> ${payload.remote_version}`, 'ok');
+            } else {
+                setStatus(releaseStatus, `convert-video ${payload.local_version} is already up to date.`, 'ok');
+            }
+        } catch (error) {
+            setStatus(releaseStatus, error.message, 'error');
+        } finally {
+            if (!state.release.update_in_progress) {
+                releaseButton.disabled = false;
+                releaseButton.dataset.busy = 'false';
+            }
+        }
+    });
+
     toggleAutoRefreshButton.addEventListener('click', function () {
         state.autoRefresh = !state.autoRefresh;
         updateAutoRefreshButton();
@@ -1442,6 +1633,7 @@
     }
 
     applyTheme(getPreferredTheme());
+    renderReleaseControl(state.release);
     clearInputSelection();
     setWatcherDirectory('');
     updateAutoRefreshButton();

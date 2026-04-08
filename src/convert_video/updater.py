@@ -1,15 +1,107 @@
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
+import threading
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 
 from convert_video import get_version
-from convert_video.output import info, warning, error
+from convert_video.output import info, error
 
 GITHUB_REPO = "adocampo/convert-video"
+_UPDATE_STATE_LOCK = threading.Lock()
+
+
+def build_update_state_path() -> str:
+    """Return the shared state file used to cache update checks."""
+    state_home = os.environ.get("XDG_STATE_HOME")
+    if not state_home:
+        state_home = os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(state_home, "convert-video", "update-state.json")
+
+
+def _local_today() -> str:
+    return datetime.now().astimezone().strftime("%Y-%m-%d")
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _default_update_state(local_version: str | None = None) -> dict[str, object]:
+    return {
+        "checked_at": "",
+        "checked_date": "",
+        "cli_notice_date": "",
+        "local_version": local_version or get_version(),
+        "remote_version": "",
+        "update_available": False,
+        "changelog": "",
+        "last_error": "",
+    }
+
+
+def _normalize_update_state(raw_state: object, local_version: str | None = None) -> dict[str, object]:
+    current_version = local_version or get_version()
+    state = _default_update_state(current_version)
+
+    if isinstance(raw_state, dict):
+        state["checked_at"] = str(raw_state.get("checked_at") or "")
+        state["checked_date"] = str(raw_state.get("checked_date") or "")
+        state["cli_notice_date"] = str(raw_state.get("cli_notice_date") or "")
+        state["local_version"] = str(raw_state.get("local_version") or current_version)
+        state["remote_version"] = str(raw_state.get("remote_version") or "")
+        state["update_available"] = bool(raw_state.get("update_available", False))
+        state["changelog"] = str(raw_state.get("changelog") or "")
+        state["last_error"] = str(raw_state.get("last_error") or "")
+
+    # Invalidate stale cached state after upgrading or downgrading locally.
+    if state["local_version"] != current_version:
+        return _default_update_state(current_version)
+
+    if not state["remote_version"]:
+        state["update_available"] = False
+        state["changelog"] = ""
+
+    if state["remote_version"] == current_version:
+        state["update_available"] = False
+        state["changelog"] = ""
+
+    if not state["update_available"]:
+        state["changelog"] = ""
+
+    return state
+
+
+def _read_update_state_unlocked() -> dict[str, object]:
+    path = build_update_state_path()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    return _normalize_update_state(payload)
+
+
+def _write_update_state_unlocked(state: dict[str, object]) -> dict[str, object]:
+    path = build_update_state_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    normalized = _normalize_update_state(state, str(state.get("local_version") or get_version()))
+    temp_path = f"{path}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(normalized, handle, indent=2, sort_keys=True)
+    os.replace(temp_path, path)
+    return normalized
+
+
+def load_update_state() -> dict[str, object]:
+    """Load the cached update state, normalizing it for the current version."""
+    with _UPDATE_STATE_LOCK:
+        return _read_update_state_unlocked()
 
 
 def _parse_version_tuple(version: str) -> tuple:
@@ -71,11 +163,8 @@ def extract_changelog_between(changelog: str, current_ver: str, latest_ver: str)
     return "\n\n".join(result_parts)
 
 
-def check_for_updates() -> tuple:
-    """Query GitHub for the latest release and compare with local version.
-
-    Returns (local_version, remote_version, update_available).
-    """
+def check_for_updates(*, quiet: bool = False) -> tuple[str, str | None, bool]:
+    """Query GitHub for the latest release and compare with the local version."""
     local_ver = get_version()
     url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
@@ -83,16 +172,70 @@ def check_for_updates() -> tuple:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
     except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
-        error(f"Could not reach GitHub: {exc}")
+        if not quiet:
+            error(f"Could not reach GitHub: {exc}")
         return local_ver, None, False
 
     remote_ver = data.get("tag_name", "").lstrip("v")
     if not remote_ver:
-        error("Could not determine the latest remote version.")
+        if not quiet:
+            error("Could not determine the latest remote version.")
         return local_ver, None, False
 
-    update_available = remote_ver != local_ver
+    update_available = _parse_version_tuple(remote_ver) > _parse_version_tuple(local_ver)
     return local_ver, remote_ver, update_available
+
+
+def get_update_state(*, force: bool = False, quiet: bool = False) -> dict[str, object]:
+    """Return cached release info, refreshing it at most once per local day."""
+    with _UPDATE_STATE_LOCK:
+        cached_state = _read_update_state_unlocked()
+        if not force and cached_state["checked_date"] == _local_today():
+            return cached_state
+
+        local_ver, remote_ver, update_available = check_for_updates(quiet=quiet)
+        next_state = _normalize_update_state(cached_state, local_ver)
+        next_state["checked_at"] = _utc_now()
+        next_state["checked_date"] = _local_today()
+        next_state["local_version"] = local_ver
+
+        if remote_ver is None:
+            next_state["last_error"] = "Could not reach GitHub."
+            return _write_update_state_unlocked(next_state)
+
+        next_state["remote_version"] = remote_ver
+        next_state["update_available"] = update_available
+        next_state["changelog"] = get_update_changelog(local_ver, remote_ver) if update_available else ""
+        next_state["last_error"] = ""
+        return _write_update_state_unlocked(next_state)
+
+
+def mark_update_installed(installed_version: str | None = None) -> dict[str, object]:
+    """Persist that the current version is installed and no update badge is needed."""
+    local_ver = installed_version or get_version()
+    state = _default_update_state(local_ver)
+    state["checked_at"] = _utc_now()
+    state["checked_date"] = _local_today()
+    state["cli_notice_date"] = ""
+    state["remote_version"] = local_ver
+    with _UPDATE_STATE_LOCK:
+        return _write_update_state_unlocked(state)
+
+
+def mark_cli_notice_shown() -> dict[str, object]:
+    """Persist that the daily CLI update hint has already been displayed."""
+    with _UPDATE_STATE_LOCK:
+        state = _read_update_state_unlocked()
+        state["cli_notice_date"] = _local_today()
+        return _write_update_state_unlocked(state)
+
+
+def install_latest_version() -> subprocess.CompletedProcess:
+    """Install the latest convert-video version from GitHub via pipx."""
+    return subprocess.run(
+        ["pipx", "install", f"git+https://github.com/{GITHUB_REPO}.git", "--force"],
+        capture_output=False,
+    )
 
 
 def get_update_changelog(current_ver: str, latest_ver: str) -> str:
@@ -114,14 +257,13 @@ def upgrade():
 
     if not update_available:
         info("Already up to date.")
+        mark_update_installed(local_ver)
         sys.exit(0)
 
     print(f"\nUpgrading convert-video {local_ver} \u2192 {remote_ver} ...")
-    result = subprocess.run(
-        ["pipx", "install", f"git+https://github.com/{GITHUB_REPO}.git", "--force"],
-        capture_output=False,
-    )
+    result = install_latest_version()
     if result.returncode == 0:
+        mark_update_installed(remote_ver)
         info(f"Successfully upgraded to {remote_ver}.")
     else:
         error("Upgrade failed. Check the output above for details.")
