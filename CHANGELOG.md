@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-04-08
+
+### Added in 1.4.0
+
+- Service jobs can now be paused and resumed from the dashboard or HTTP API without stopping the service.
+- The service now persists live HandBrake runtime metadata so detached conversions can continue after the service process restarts when the encoder process is still alive.
+
+### Changed in 1.4.0
+
+- Stopping the service now pauses and detaches active conversions so the next service start can reattach to them instead of restarting them immediately from zero.
+- Queue management now treats paused jobs as active jobs for watcher duplicate suppression, queue clearing, cancellation, and dashboard status rendering.
+- Legacy runtime state now migrates into the branded `clutch` state directory, and the bundled systemd unit now only grants write access to `~/.local/state/clutch`.
+
+### Fixed in 1.4.0
+
+- Conversion ETA reporting now excludes time spent paused.
+- Detached conversions whose encoder process is gone now fall back cleanly to the queue with a restart-from-beginning message on the next service start.
+
 ## [1.3.1] - 2026-04-08
 
 ### Fixed in 1.3.1
