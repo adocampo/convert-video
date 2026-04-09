@@ -30,6 +30,14 @@
             parent: '',
             activeEntryIndex: -1,
         },
+        settings: {
+            open: false,
+            activeTab: 'general',
+        },
+        biddingZones: [],
+        scheduleConfig: {},
+        scheduleStatus: {},
+        scheduleRules: [],
     };
 
     const themeStorageKey = 'clutch-theme';
@@ -78,7 +86,7 @@
     const releaseButton = document.getElementById('release-check');
     const releaseLabel = document.getElementById('release-label');
     const releaseBadge = document.getElementById('release-badge');
-    const releaseStatus = document.getElementById('release-status');
+    const toastContainer = document.getElementById('toast-container');
     const browserModal = document.getElementById('path-browser');
     const browserEyebrow = document.getElementById('path-browser-eyebrow');
     const browserTitle = document.getElementById('path-browser-title');
@@ -91,6 +99,33 @@
     const browserList = document.getElementById('browser-list');
     const browserSelectCurrentButton = document.getElementById('browser-select-current');
     const closeBrowserButton = document.getElementById('close-browser');
+    const settingsModal = document.getElementById('settings-modal');
+    const closeSettingsButton = document.getElementById('close-settings');
+    const openSettingsButton = document.getElementById('open-settings');
+    const settingsTabs = document.querySelectorAll('.settings-tab');
+    const scheduleEnabled = document.getElementById('schedule-enabled');
+    const scheduleMode = document.getElementById('schedule-mode');
+    const schedulePriority = document.getElementById('schedule-priority');
+    const schedulePauseBehavior = document.getElementById('schedule-pause-behavior');
+    const scheduleRulesList = document.getElementById('schedule-rules-list');
+    const addScheduleRuleButton = document.getElementById('add-schedule-rule');
+    const priceProvider = document.getElementById('price-provider');
+    const priceBiddingZone = document.getElementById('price-bidding-zone');
+    const priceEntsoeKey = document.getElementById('price-entsoe-key');
+    const entsoeKeyLabel = document.getElementById('entsoe-key-label');
+    const priceStrategy = document.getElementById('price-strategy');
+    const priceThreshold = document.getElementById('price-threshold');
+    const priceThresholdLabel = document.getElementById('price-threshold-label');
+    const priceCheapestHours = document.getElementById('price-cheapest-hours');
+    const priceCheapestLabel = document.getElementById('price-cheapest-label');
+    const priceChart = document.getElementById('price-chart');
+    const priceChartLabel = document.getElementById('price-chart-label');
+    const priceChartWrap = document.getElementById('price-chart-wrap');
+    const scheduleStatusBar = document.getElementById('schedule-status-bar');
+    const scheduleManualSection = document.getElementById('schedule-manual-section');
+    const schedulePriceSection = document.getElementById('schedule-price-section');
+    const saveScheduleButton = document.getElementById('save-schedule-button');
+    const scheduleStatusEl = document.getElementById('schedule-status');
     const startupParams = new URLSearchParams(window.location.search);
     const systemThemeQuery = window.matchMedia
         ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -181,6 +216,25 @@
         const effectiveKind = kind || '';
         target.textContent = message || '';
         target.className = effectiveKind ? `status-line ${effectiveKind}` : 'status-line';
+    }
+
+    function showToast(message, kind, duration) {
+        if (!message) return;
+        var ms = duration != null ? duration : (kind === 'error' ? 8000 : 4000);
+        var cls = 'toast' + (kind ? ' toast-' + kind : '');
+        var el = document.createElement('div');
+        el.className = cls;
+        el.innerHTML = '<span class="toast-message">' + escapeHtml(message) + '</span>'
+            + '<button class="toast-close" type="button" title="Dismiss">&times;</button>';
+        toastContainer.appendChild(el);
+        var timer = null;
+        function dismiss() {
+            if (timer) clearTimeout(timer);
+            el.classList.add('toast-closing');
+            setTimeout(function () { el.remove(); }, 220);
+        }
+        el.querySelector('.toast-close').addEventListener('click', dismiss);
+        if (ms > 0) timer = setTimeout(dismiss, ms);
     }
 
     function isInteractiveTarget(target) {
@@ -343,7 +397,7 @@
 
                 const updateInfo = payload.update_info || {};
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
-                    setStatus(releaseStatus, `Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
+                    showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
                     await refreshJobs();
                     return;
                 }
@@ -352,10 +406,9 @@
             }
         }
 
-        setStatus(
-            releaseStatus,
+        showToast(
             lastError || 'The service is restarting. Reload the page in a few seconds if it does not reconnect automatically.',
-            'error'
+            'error', 0
         );
     }
 
@@ -565,6 +618,343 @@
         state.browser.filterQuery = '';
         state.browser.activeEntryIndex = -1;
         setBrowserStatus('', '');
+    }
+
+    /* ── Settings Modal ── */
+
+    function openSettings() {
+        state.settings = true;
+        settingsModal.hidden = false;
+        document.body.classList.add('modal-open');
+    }
+
+    function closeSettings() {
+        state.settings = false;
+        settingsModal.hidden = true;
+        document.body.classList.remove('modal-open');
+    }
+
+    function switchSettingsTab(tabName) {
+        settingsTabs.forEach(function (tab) {
+            var active = tab.dataset.tab === tabName;
+            tab.classList.toggle('settings-tab-active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        Array.prototype.forEach.call(
+            settingsModal.querySelectorAll('[data-tab-panel]'),
+            function (panel) {
+                panel.hidden = panel.dataset.tabPanel !== tabName;
+            }
+        );
+        if (tabName === 'schedule' && priceProvider.value) {
+            loadPriceChart();
+        }
+    }
+
+    /* ── Schedule UI ── */
+
+    var DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var DAY_VALUES = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+    function makeDefaultRule() {
+        return { days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '00:00', end: '07:00', action: 'allow' };
+    }
+
+    function renderScheduleRules() {
+        var rules = state.scheduleRules;
+        if (!rules.length) {
+            scheduleRulesList.innerHTML = '<div class="empty">No rules defined. Add a rule below.</div>';
+            return;
+        }
+
+        scheduleRulesList.innerHTML = rules.map(function (rule, index) {
+            var dayChecks = DAY_VALUES.map(function (d, di) {
+                var checked = (rule.days || []).indexOf(d) !== -1 ? ' checked' : '';
+                return '<label class="check check-compact" title="' + DAY_LABELS[di] + '">'
+                    + '<input type="checkbox" data-rule="' + index + '" data-day="' + d + '"' + checked + '>'
+                    + DAY_LABELS[di] + '</label>';
+            }).join('');
+
+            return '<div class="schedule-rule" data-rule-index="' + index + '">'
+                + '<div class="schedule-rule-fields">'
+                + '<div class="checks checks-inline">' + dayChecks + '</div>'
+                + '<label><span>From</span><input type="time" value="' + escapeHtml(rule.start || '00:00') + '" data-rule="' + index + '" data-field="start"></label>'
+                + '<label><span>To</span><input type="time" value="' + escapeHtml(rule.end || '07:00') + '" data-rule="' + index + '" data-field="end"></label>'
+                + '<label><span>Action</span><select data-rule="' + index + '" data-field="action">'
+                + '<option value="allow"' + (rule.action === 'allow' ? ' selected' : '') + '>Allow</option>'
+                + '<option value="block"' + (rule.action === 'block' ? ' selected' : '') + '>Block</option>'
+                + '</select></label>'
+                + '<button class="ghost" type="button" data-remove-rule="' + index + '" title="Remove this rule.">&times;</button>'
+                + '</div></div>';
+        }).join('');
+
+        Array.prototype.forEach.call(
+            scheduleRulesList.querySelectorAll('[data-remove-rule]'),
+            function (btn) {
+                btn.addEventListener('click', function () {
+                    var idx = Number(btn.dataset.removeRule);
+                    state.scheduleRules.splice(idx, 1);
+                    renderScheduleRules();
+                });
+            }
+        );
+
+        Array.prototype.forEach.call(
+            scheduleRulesList.querySelectorAll('[data-day]'),
+            function (cb) {
+                cb.addEventListener('change', function () {
+                    var idx = Number(cb.dataset.rule);
+                    var day = cb.dataset.day;
+                    var rule = state.scheduleRules[idx];
+                    if (!rule) return;
+                    if (cb.checked) {
+                        if (rule.days.indexOf(day) === -1) rule.days.push(day);
+                    } else {
+                        rule.days = rule.days.filter(function (d) { return d !== day; });
+                    }
+                });
+            }
+        );
+
+        Array.prototype.forEach.call(
+            scheduleRulesList.querySelectorAll('[data-field]'),
+            function (input) {
+                input.addEventListener('change', function () {
+                    var idx = Number(input.dataset.rule);
+                    var field = input.dataset.field;
+                    var rule = state.scheduleRules[idx];
+                    if (!rule) return;
+                    rule[field] = input.value;
+                });
+            }
+        );
+    }
+
+    function updateScheduleSections() {
+        var enabled = scheduleEnabled.checked;
+        var mode = scheduleMode.value;
+        var showManual = enabled && (mode === 'manual' || mode === 'both');
+        var showPrice = enabled && (mode === 'price' || mode === 'both');
+        var showPriority = enabled && mode === 'both';
+
+        scheduleManualSection.hidden = !showManual;
+        schedulePriceSection.hidden = !showPrice;
+        schedulePriority.closest('label').hidden = !showPriority;
+        schedulePauseBehavior.closest('label').parentElement.hidden = !enabled;
+        scheduleMode.closest('label').hidden = !enabled;
+
+        updatePriceSections();
+    }
+
+    function updatePriceSections() {
+        var pv = priceProvider.value;
+        var isEntsoe = pv === 'entsoe';
+        var isRee = pv === 'ree_pvpc';
+        entsoeKeyLabel.hidden = !isEntsoe;
+        // REE PVPC is Spain-only; hide bidding zone selector
+        priceBiddingZone.closest('label').hidden = isRee;
+
+        var strategy = priceStrategy.value;
+        priceThresholdLabel.hidden = strategy !== 'threshold';
+        priceCheapestLabel.hidden = strategy !== 'cheapest_n';
+    }
+
+    function renderPriceChart(prices, thresholdValue) {
+        if (!prices || !prices.length) {
+            priceChartWrap.hidden = true;
+            return;
+        }
+
+        priceChartWrap.hidden = false;
+        var maxPrice = Math.max.apply(null, prices.map(function (p) { return p.price; }));
+        if (maxPrice <= 0) maxPrice = 1;
+        var threshold = (Number(thresholdValue) || 0) * 1000; // kWh input → MWh for comparison
+        var now = Date.now() / 1000;
+
+        var sorted = prices.slice().sort(function (a, b) { return a.price - b.price; });
+        var cheapestCount = Number(priceCheapestHours.value) || 8;
+        var cheapHours = {};
+        for (var ci = 0; ci < Math.min(cheapestCount, sorted.length); ci++) {
+            cheapHours[sorted[ci].start] = true;
+        }
+
+        var bars = prices.map(function (p) {
+            var height = Math.max(1, (Math.abs(p.price) / maxPrice) * 100);
+            var isCurrent = p.start <= now && now < p.end;
+            var isOver = threshold > 0 && p.price > threshold;
+            var isCheap = cheapHours[p.start];
+            var cls = 'price-bar';
+            if (isCurrent) cls += ' price-bar-current';
+            if (isOver) cls += ' price-bar-over';
+            else if (isCheap) cls += ' price-bar-cheap';
+            var hour = new Date(p.start * 1000).getHours();
+            var label = String(hour).length < 2 ? '0' + hour : String(hour);
+            var pKwh = (p.price / 1000);
+            return '<div class="' + cls + '" style="height:' + height.toFixed(1) + '%" title="'
+                + label + ':00 — ' + pKwh.toFixed(5) + ' EUR/kWh">'
+                + '<span class="price-bar-label">' + label + '</span></div>';
+        }).join('');
+
+        var thresholdLine = '';
+        if (threshold > 0 && threshold < maxPrice) {
+            var linePos = (threshold / maxPrice) * 100;
+            thresholdLine = '<div class="price-threshold-line" style="bottom:' + linePos.toFixed(1) + '%"></div>';
+        }
+
+        priceChart.innerHTML = bars + thresholdLine;
+
+        var currentPrice = null;
+        for (var pi = 0; pi < prices.length; pi++) {
+            if (prices[pi].start <= now && now < prices[pi].end) {
+                currentPrice = prices[pi].price;
+                break;
+            }
+        }
+
+        var cheapestRange = '';
+        if (sorted.length >= cheapestCount) {
+            var cheapSorted = sorted.slice(0, cheapestCount).sort(function (a, b) { return a.start - b.start; });
+            var ranges = [];
+            var rStart = new Date(cheapSorted[0].start * 1000).getHours();
+            var rEnd = rStart;
+            for (var ri = 1; ri < cheapSorted.length; ri++) {
+                var h = new Date(cheapSorted[ri].start * 1000).getHours();
+                if (h === rEnd + 1 || (rEnd === 23 && h === 0)) {
+                    rEnd = h;
+                } else {
+                    ranges.push((rStart < 10 ? '0' : '') + rStart + ':00–' + (rEnd + 1 < 10 ? '0' : '') + ((rEnd + 1) % 24) + ':00');
+                    rStart = h;
+                    rEnd = h;
+                }
+            }
+            ranges.push((rStart < 10 ? '0' : '') + rStart + ':00–' + ((rEnd + 1) % 24 < 10 ? '0' : '') + ((rEnd + 1) % 24) + ':00');
+            cheapestRange = ' · Cheapest ' + cheapestCount + 'h: ' + ranges.join(', ');
+        }
+
+        var isRee = priceProvider.value === 'ree_pvpc';
+        var priceLabel = isRee ? 'PVPC' : 'spot';
+        var summary = 'Today\'s ' + priceLabel + ' prices — ' + prices.length + 'h loaded';
+        if (currentPrice != null) {
+            summary += ' · Now: ' + (currentPrice / 1000).toFixed(5) + ' EUR/kWh';
+        }
+        if (sorted.length) summary += ' · Min: ' + (sorted[0].price / 1000).toFixed(5) + ' · Max: ' + (sorted[sorted.length - 1].price / 1000).toFixed(5);
+        summary += cheapestRange;
+        priceChartLabel.textContent = summary;
+    }
+
+    function renderScheduleStatusBar(status) {
+        if (!status || !status.enabled) {
+            scheduleStatusBar.innerHTML = '';
+            scheduleStatusBar.className = 'schedule-status-bar schedule-disabled';
+            scheduleStatusBar.hidden = true;
+            return;
+        }
+
+        scheduleStatusBar.hidden = false;
+        var allowed = status.allowed !== false;
+        scheduleStatusBar.className = 'schedule-status-bar ' + (allowed ? 'schedule-allowed' : 'schedule-blocked');
+        var label = allowed ? 'Conversions allowed' : 'Conversions blocked';
+        if (status.reason) label += ' — ' + status.reason;
+        if (status.current_price != null) {
+            label += ' (current: ' + (Number(status.current_price) / 1000).toFixed(5) + ' EUR/kWh)';
+        }
+        scheduleStatusBar.textContent = label;
+    }
+
+    function populateBiddingZones(zones) {
+        if (!zones || !zones.length) return;
+        state.biddingZones = zones;
+        var current = priceBiddingZone.value;
+        var options = '<option value="">Select zone</option>';
+        zones.forEach(function (zone) {
+            var code = zone.code || '';
+            var label = zone.label || code;
+            var selected = code === current ? ' selected' : '';
+            options += '<option value="' + escapeHtml(code) + '"' + selected + '>'
+                + escapeHtml(label) + ' (' + escapeHtml(code) + ')</option>';
+        });
+        priceBiddingZone.innerHTML = options;
+        if (current) priceBiddingZone.value = current;
+    }
+
+    function applyScheduleToForm(config, status) {
+        if (!config) config = {};
+        scheduleEnabled.checked = Boolean(config.enabled);
+        scheduleMode.value = config.mode || 'manual';
+        schedulePriority.value = config.priority || 'both_must_allow';
+        schedulePauseBehavior.value = config.pause_behavior || 'block_new';
+
+        state.scheduleRules = (config.manual_rules || []).map(function (r) {
+            return { days: (r.days || []).slice(), start: r.start || '00:00', end: r.end || '07:00', action: r.action || 'allow' };
+        });
+        renderScheduleRules();
+
+        var price = config.price || {};
+        priceProvider.value = price.provider || '';
+        if (price.bidding_zone) priceBiddingZone.value = price.bidding_zone;
+        priceEntsoeKey.value = price.entsoe_api_key || '';
+        priceStrategy.value = price.strategy || 'threshold';
+        priceThreshold.value = price.threshold != null ? (Number(price.threshold) / 1000).toFixed(4) : '0.0000';
+        priceCheapestHours.value = price.cheapest_hours != null ? String(price.cheapest_hours) : '8';
+
+        renderScheduleStatusBar(status);
+        updateScheduleSections();
+
+        if (price.provider) {
+            loadPriceChart();
+        }
+    }
+
+    function collectScheduleConfig() {
+        var rules = state.scheduleRules.map(function (r) {
+            return { days: r.days.slice(), start: r.start, end: r.end, action: r.action };
+        });
+
+        return {
+            enabled: scheduleEnabled.checked,
+            mode: scheduleMode.value,
+            priority: schedulePriority.value,
+            pause_behavior: schedulePauseBehavior.value,
+            manual_rules: rules,
+            price: {
+                provider: priceProvider.value,
+                bidding_zone: priceProvider.value === 'ree_pvpc' ? 'ES' : priceBiddingZone.value,
+                entsoe_api_key: priceEntsoeKey.value,
+                strategy: priceStrategy.value,
+                threshold: (Number(priceThreshold.value) || 0) * 1000,
+                cheapest_hours: Number(priceCheapestHours.value) || 8,
+            },
+        };
+    }
+
+    async function saveSchedule() {
+        saveScheduleButton.disabled = true;
+        setStatus(scheduleStatusEl, 'Saving schedule...');
+
+        try {
+            await fetchJson('/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule_config: collectScheduleConfig() }),
+            });
+            setStatus(scheduleStatusEl, 'Schedule saved.', 'ok');
+            await Promise.all([refreshSummary(), refreshJobs()]);
+        } catch (error) {
+            setStatus(scheduleStatusEl, error.message, 'error');
+        } finally {
+            saveScheduleButton.disabled = false;
+        }
+    }
+
+    async function loadPriceChart() {
+        try {
+            var data = await fetchJson('/schedule/prices');
+            if (data.prices) {
+                renderPriceChart(data.prices, priceThreshold.value);
+            }
+        } catch (_) {
+            priceChartWrap.hidden = true;
+        }
     }
 
     function getFilteredBrowserEntries() {
@@ -861,6 +1251,16 @@
         chips.push(`<span class="chip">Workers: ${escapeHtml(String(workerCount))} on shared queue</span>`);
         chips.push(`<span class="chip" title="Configured NVENC GPU indices for queued jobs.">NVENC GPUs: ${escapeHtml(configuredGpuLabel)}</span>`);
         chips.push(`<span class="chip" title="${escapeHtml(visibleGpuTitle)}">Visible NVIDIA GPUs: ${escapeHtml(visibleGpuLabel)}</span>`);
+
+        const schedStatus = summary.schedule_status || {};
+        if (schedStatus.enabled) {
+            const schedAllowed = schedStatus.allowed !== false;
+            const schedClass = schedAllowed ? 'allowed' : 'blocked';
+            const schedLabel = schedAllowed ? 'Schedule: allowed' : 'Schedule: blocked';
+            const schedTip = schedStatus.reason || '';
+            chips.push(`<span class="chip schedule-chip-${schedClass}" title="${escapeHtml(schedTip)}">${escapeHtml(schedLabel)}</span>`);
+        }
+
         meta.innerHTML = chips.join('');
         renderReleaseControl(summary.update_info || {});
     }
@@ -878,6 +1278,9 @@
         settingsForm.elements.default_force.checked = Boolean(defaults.force);
         settingsForm.elements.default_verbose.checked = Boolean(defaults.verbose);
         watcherForm.elements.delete_source.checked = Boolean(defaults.delete_source);
+
+        populateBiddingZones(summary.bidding_zones || []);
+        applyScheduleToForm(summary.schedule_config, summary.schedule_status);
     }
 
     function renderWatchers(watchers) {
@@ -1495,6 +1898,64 @@
         }
     );
 
+    /* ── Settings Modal Events ── */
+
+    openSettingsButton.addEventListener('click', function () {
+        openSettings();
+    });
+
+    closeSettingsButton.addEventListener('click', function () {
+        closeSettings();
+    });
+
+    settingsModal.querySelector('.settings-backdrop').addEventListener('click', function () {
+        closeSettings();
+    });
+
+    settingsTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            switchSettingsTab(tab.dataset.tab);
+        });
+    });
+
+    scheduleEnabled.addEventListener('change', function () {
+        updateScheduleSections();
+    });
+
+    scheduleMode.addEventListener('change', function () {
+        updateScheduleSections();
+    });
+
+    priceProvider.addEventListener('change', function () {
+        updatePriceSections();
+        if (priceProvider.value) {
+            loadPriceChart();
+        }
+    });
+
+    priceStrategy.addEventListener('change', function () {
+        updatePriceSections();
+    });
+
+    addScheduleRuleButton.addEventListener('click', function () {
+        state.scheduleRules.push(makeDefaultRule());
+        renderScheduleRules();
+    });
+
+    saveScheduleButton.addEventListener('click', function () {
+        saveSchedule();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (settingsModal.hidden || !browserModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeSettings();
+        }
+    });
+
     document.addEventListener('keydown', function (event) {
         if (browserModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
             return;
@@ -1622,7 +2083,7 @@
 
             releaseButton.disabled = true;
             releaseButton.dataset.busy = 'true';
-            setStatus(releaseStatus, `Installing clutch ${targetVersion} and restarting the service...`);
+            showToast(`Installing clutch ${targetVersion} and restarting the service...`);
 
             try {
                 const payload = await fetchJson('/updates/upgrade', { method: 'POST' });
@@ -1635,30 +2096,29 @@
                     last_error: '',
                     update_in_progress: true,
                 });
-                setStatus(releaseStatus, payload.message || `Installing clutch ${targetVersion} and restarting the service...`, 'ok');
+                showToast(payload.message || `Installing clutch ${targetVersion} and restarting the service...`, 'ok', 0);
                 waitForReleaseRestart(targetVersion);
             } catch (error) {
                 renderReleaseControl(state.release);
-                setStatus(releaseStatus, error.message, 'error');
+                showToast(error.message, 'error');
             }
             return;
         }
 
         releaseButton.disabled = true;
-        setStatus(releaseStatus, 'Checking GitHub for a new release...');
 
         try {
             const payload = await fetchJson('/updates/check', { method: 'POST' });
             renderReleaseControl(payload);
             if (payload.last_error) {
-                setStatus(releaseStatus, payload.last_error, 'error');
+                showToast(payload.last_error, 'error');
             } else if (payload.update_available) {
-                setStatus(releaseStatus, `New version available: ${payload.local_version} -> ${payload.remote_version}`, 'ok');
+                showToast(`New version available: ${payload.local_version} \u2192 ${payload.remote_version}`, 'ok');
             } else {
-                setStatus(releaseStatus, `clutch ${payload.local_version} is already up to date.`, 'ok');
+                showToast(`clutch ${payload.local_version} is already up to date.`, 'ok');
             }
         } catch (error) {
-            setStatus(releaseStatus, error.message, 'error');
+            showToast(error.message, 'error');
         } finally {
             if (!state.release.update_in_progress) {
                 releaseButton.disabled = false;

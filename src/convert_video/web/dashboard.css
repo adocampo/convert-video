@@ -173,6 +173,8 @@ body {
     color: var(--accent-strong);
     font-size: 0.92rem;
 }
+.schedule-chip-allowed { color: var(--ok); }
+.schedule-chip-blocked { color: var(--fail); }
 
 .theme-toggle,
 .release-toggle {
@@ -995,5 +997,320 @@ body.modal-open {
 
     .job-detail-grid {
         grid-template-columns: 1fr;
+    }
+
+    .settings-dialog {
+        width: min(100vw - 16px, 100%);
+        height: calc(100dvh - 16px);
+        margin: 8px;
+        padding: 16px;
+    }
+}
+
+/* ── Settings modal ──────────────────────────────────────────────── */
+
+.settings-modal[hidden] {
+    display: none;
+}
+
+.settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 28;
+}
+
+.settings-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(17, 26, 30, 0.48);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+.settings-dialog {
+    position: relative;
+    width: min(780px, calc(100vw - 24px));
+    height: min(86vh, 820px);
+    margin: 24px auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.settings-header h3 {
+    margin: 0;
+}
+
+/* ── Tab bar ── */
+
+.settings-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--panel-separator);
+    padding-bottom: 0;
+    flex-shrink: 0;
+}
+
+.settings-tab {
+    padding: 8px 18px;
+    border: none;
+    background: transparent;
+    font: inherit;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    border-radius: 10px 10px 0 0;
+    transition: color 150ms, border-color 150ms, background 150ms;
+}
+
+.settings-tab:hover {
+    color: var(--text);
+    background: var(--ghost-bg);
+}
+
+.settings-tab-active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+/* ── Tab panels ── */
+
+.settings-tab-panels {
+    overflow-y: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    padding-right: 4px;
+}
+
+.settings-tab-panel[hidden] {
+    display: none;
+}
+
+.settings-tab-panel {
+    display: grid;
+    gap: 14px;
+}
+
+/* ── Schedule status bar ── */
+
+.schedule-status-bar {
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.schedule-status-bar.schedule-allowed {
+    background: var(--success-bg);
+    color: var(--ok);
+}
+
+.schedule-status-bar.schedule-blocked {
+    background: var(--failed-bg);
+    color: var(--fail);
+}
+
+.schedule-status-bar.schedule-disabled {
+    background: var(--neutral-bg);
+    color: var(--muted);
+}
+
+/* ── Schedule rules ── */
+
+.schedule-rules-list {
+    display: grid;
+    gap: 8px;
+}
+
+.schedule-rule {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--panel-separator);
+    background: var(--list-bg);
+}
+
+.schedule-rule-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.schedule-rule-fields select,
+.schedule-rule-fields input {
+    width: auto;
+    min-width: 0;
+}
+
+.schedule-rule-fields input[type="time"] {
+    width: 110px;
+}
+
+.schedule-rule-fields select {
+    width: 120px;
+}
+
+/* ── Price chart ── */
+
+.price-chart-wrap {
+    margin-top: 8px;
+}
+
+.price-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 80px;
+    padding: 0;
+    position: relative;
+}
+
+.price-bar {
+    flex: 1;
+    min-width: 4px;
+    border-radius: 3px 3px 0 0;
+    background: var(--accent);
+    opacity: 0.6;
+    position: relative;
+    transition: opacity 150ms;
+}
+
+.price-bar:hover {
+    opacity: 1;
+}
+
+.price-bar.price-bar-over {
+    background: var(--fail);
+    opacity: 0.7;
+}
+
+.price-bar.price-bar-over:hover {
+    opacity: 1;
+}
+
+.price-bar.price-bar-current {
+    opacity: 1;
+    box-shadow: 0 0 0 2px var(--accent-strong);
+}
+
+.price-threshold-line {
+    width: 100%;
+    height: 0;
+    border-top: 2px dashed var(--warn);
+    position: absolute;
+    left: 0;
+    pointer-events: none;
+}
+}
+
+.price-bar.price-bar-cheap {
+    background: var(--ok);
+    opacity: 0.7;
+}
+
+.price-bar.price-bar-cheap:hover {
+    opacity: 1;
+}
+
+/* ── Toast notifications ─────────────────────────────────────────── */
+
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    pointer-events: none;
+    max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-size: 0.92rem;
+    pointer-events: auto;
+    animation: toast-in 250ms ease-out;
+    transition: opacity 200ms, transform 200ms;
+}
+
+.toast-closing {
+    opacity: 0;
+    transform: translateX(40px);
+}
+
+.toast-message {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.toast-close:hover {
+    color: var(--text);
+}
+
+.toast.toast-ok {
+    border-color: var(--ok);
+}
+
+.toast.toast-ok .toast-message {
+    color: var(--ok);
+}
+
+.toast.toast-error {
+    border-color: var(--fail);
+}
+
+.toast.toast-error .toast-message {
+    color: var(--fail);
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }

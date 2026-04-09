@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-04-09
+
+### Added in 1.5.0
+
+- **Conversion scheduling system**: new Schedule tab in the settings modal lets you define manual time-window rules and electricity-price-based rules that automatically pause and resume conversions.
+- **REE PVPC provider**: real Spanish consumer electricity prices (PVPC) from Red Eléctrica, free and without API key, available as a price provider alongside Energy-Charts and ENTSO-E.
+- **Price chart**: the Schedule tab shows today's hourly electricity prices with cheapest-hours highlighting, a threshold line, and a summary with current price, min, max, and cheapest hour ranges.
+- **Toast notifications**: floating auto-dismiss notifications replace the old static status line in the hero section.
+- Schedule enforcement: saving settings that transition to "blocked" immediately pauses running jobs; manual resume is refused while the schedule blocks conversions.
+
+### Changed in 1.5.0
+
+- All electricity prices in the dashboard are now displayed in EUR/kWh instead of EUR/MWh.
+- The max-price threshold input uses cent-level precision (step 0.0001 EUR/kWh).
+- The update-check staleness window changed from once-per-calendar-day to a 12-hour TTL.
+- The `--version` flag now runs the daily update check before printing the version.
+
+### Fixed in 1.5.0
+
+- Schedule status bar in the settings modal now shows the correct red/green colours (CSS class prefix mismatch).
+- Schedule chip in the hero bar now correctly shows red when blocked (was using a non-existent CSS variable).
+- The disabled-schedule status bar is now hidden instead of leaving an empty grey strip.
+- Watchers checkboxes layout changed to an inline row.
+- The settings modal content area is now scrollable (was collapsing to zero height).
+- Bidding-zone selector now shows country names instead of raw codes.
+
 ## [1.4.1] - 2026-04-09
 
 ### Changed in 1.4.1

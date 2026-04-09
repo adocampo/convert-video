@@ -22,6 +22,7 @@ from convert_video.converter import (
     find_existing_converted_output, parse_gpu_devices, request_all_conversion_stops,
 )
 from convert_video.service import build_service_db_path, run_service, submit_remote_job
+from convert_video.scheduler import parse_schedule_rule
 from convert_video.updater import (
     check_for_updates,
     get_update_changelog,
@@ -645,12 +646,35 @@ def main():
     service_group.add_argument("--watch-settle-time", type=float, default=30.0,
                                help="Seconds a watched file must remain unchanged before enqueueing.")
 
+    # ── Schedule ─────────────────────────────
+    sched_group = parser.add_argument_group("schedule")
+    sched_group.add_argument("--schedule", action="append", default=[], metavar="RULE",
+                             help="Manual schedule rule, e.g. 'mon-fri 22:00-08:00' or '00:00-06:00'. Repeat for more rules.")
+    sched_group.add_argument("--schedule-mode", default="allow", choices=["allow", "block"],
+                             help="Whether --schedule rules define when conversions are ALLOWED or BLOCKED (default: allow).")
+    sched_group.add_argument("--price-provider", default="", choices=["", "energy_charts", "entsoe"],
+                             help="Electricity price provider for automatic schedule.")
+    sched_group.add_argument("--price-country", default="",
+                             help="Bidding zone code for price provider (e.g. ES, DE-LU, FR).")
+    sched_group.add_argument("--price-limit", type=float, default=0.0,
+                             help="Maximum electricity price in EUR/MWh. Conversions pause above this price.")
+    sched_group.add_argument("--price-cheapest-hours", type=int, default=0,
+                             help="Only convert during the N cheapest hours of the day.")
+    sched_group.add_argument("--entsoe-api-key", default="",
+                             help="ENTSO-E Transparency Platform API security token (free registration).")
+    sched_group.add_argument("--schedule-priority", default="both_must_allow",
+                             choices=["manual_first", "price_first", "both_must_allow"],
+                             help="How manual and price schedules interact (default: both_must_allow).")
+    sched_group.add_argument("--schedule-pause-behavior", default="block_new",
+                             choices=["block_new", "pause_running"],
+                             help="Whether to block new jobs or pause running ones when schedule blocks (default: block_new).")
+
     # ── Info ─────────────────────────────────
     info_group = parser.add_argument_group("info")
     info_group.add_argument("-si", "--source-info", action="store_true",
                             help="Show source information about a single video file.")
-    info_group.add_argument("-v", "--version", action="version",
-                            version=f"{APP_NAME} {get_version()}")
+    info_group.add_argument("-v", "--version", action="store_true",
+                            help="Show the installed version.")
     info_group.add_argument("--update", action="store_true",
                             help="Check if a newer version is available on GitHub.")
     info_group.add_argument("--upgrade", action="store_true",
@@ -695,6 +719,10 @@ def main():
         )
         mark_cli_notice_shown()
 
+    if args.version:
+        print(f"{APP_NAME} {get_version()}")
+        sys.exit(0)
+
     if args.serve:
         check_dependency("HandBrakeCLI")
         check_dependency("mediainfo")
@@ -707,6 +735,37 @@ def main():
                 sys.exit(1)
         if args.watch_dir and not allowed_roots:
             allowed_roots = [os.path.abspath(path) for path in args.watch_dir]
+
+        # Build schedule config from CLI flags
+        schedule_config = None
+        has_schedule = bool(args.schedule) or bool(args.price_provider)
+        if has_schedule:
+            manual_rules = [parse_schedule_rule(rule, args.schedule_mode).to_dict() for rule in args.schedule]
+            mode = "manual"
+            if args.schedule and args.price_provider:
+                mode = "both"
+            elif args.price_provider:
+                mode = "price"
+
+            price_strategy = "threshold"
+            if args.price_cheapest_hours > 0:
+                price_strategy = "cheapest_n"
+
+            schedule_config = {
+                "enabled": True,
+                "mode": mode,
+                "priority": args.schedule_priority,
+                "pause_behavior": args.schedule_pause_behavior,
+                "manual_rules": manual_rules,
+                "price": {
+                    "provider": args.price_provider,
+                    "api_key": args.entsoe_api_key,
+                    "bidding_zone": args.price_country,
+                    "strategy": price_strategy,
+                    "threshold_eur_mwh": args.price_limit,
+                    "cheapest_hours": args.price_cheapest_hours,
+                },
+            }
 
         run_service(
             bind_host=args.listen_host,
@@ -728,6 +787,7 @@ def main():
                 "verbose": args.verbose,
                 "force": args.force,
             },
+            schedule_config=schedule_config,
         )
         sys.exit(0)
 

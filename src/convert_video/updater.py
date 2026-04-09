@@ -182,11 +182,27 @@ def check_for_updates(*, quiet: bool = False) -> tuple[str, str | None, bool]:
     return local_ver, remote_ver, update_available
 
 
+_UPDATE_STALE_SECONDS = 12 * 3600  # Re-check at least every 12 hours
+
+
+def _checked_recently(state: dict[str, object]) -> bool:
+    """Return True if the last check is recent enough to skip re-fetching."""
+    checked_at = str(state.get("checked_at") or "")
+    if not checked_at:
+        return False
+    try:
+        ts = datetime.fromisoformat(checked_at)
+    except (ValueError, TypeError):
+        return False
+    age = (datetime.now(timezone.utc) - ts).total_seconds()
+    return age < _UPDATE_STALE_SECONDS
+
+
 def get_update_state(*, force: bool = False, quiet: bool = False) -> dict[str, object]:
-    """Return cached release info, refreshing it at most once per local day."""
+    """Return cached release info, refreshing if the cache is stale."""
     with _UPDATE_STATE_LOCK:
         cached_state = _read_update_state_unlocked()
-        if not force and cached_state["checked_date"] == _local_today():
+        if not force and _checked_recently(cached_state):
             return cached_state
 
         local_ver, remote_ver, update_available = check_for_updates(quiet=quiet)

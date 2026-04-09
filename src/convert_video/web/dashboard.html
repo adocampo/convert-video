@@ -56,12 +56,25 @@
                             <span class="theme-copy-value" id="theme-label">Light theme</span>
                         </span>
                     </button>
+
+                    <button class="theme-toggle" type="button" id="open-settings" aria-label="Open service settings"
+                        title="Configure service settings, schedule, and watchers">
+                        <span class="theme-icons" aria-hidden="true">
+                            <svg class="theme-icon" viewBox="0 0 24 24" focusable="false">
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z">
+                                </path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </span>
+                        <span class="theme-copy">
+                            <span class="theme-copy-label">Settings</span>
+                            <span class="theme-copy-value" id="settings-label">Service settings</span>
+                        </span>
+                    </button>
                 </div>
             </div>
-            <p>Use this page to submit conversions, inspect the queue, cancel jobs, and keep the service updated without
-                touching the CLI.</p>
             <div class="meta" id="service-meta"></div>
-            <div class="status-line" id="release-status"></div>
         </section>
 
         <div class="grid">
@@ -149,145 +162,6 @@
                         <div class="status-line" id="form-status"></div>
                     </form>
                 </section>
-
-                <section class="panel">
-                    <h2>Service Admin</h2>
-
-                    <div class="subpanel">
-                        <h3>Default Job Settings</h3>
-                        <form id="settings-form" method="post" action="/config">
-                            <div class="picker-block">
-                                <div class="picker-block-header">
-                                    <div>
-                                        <span>Allowed source roots</span>
-                                        <p class="small picker-help">Choose which directories on the source the service
-                                            can access.</p>
-                                    </div>
-                                    <button class="secondary" type="button" id="add-allowed-root"
-                                        title="Add a source directory that the service is allowed to browse and use.">Add
-                                        allowed root</button>
-                                </div>
-                                <textarea name="allowed_roots" hidden></textarea>
-                                <div id="allowed-roots-list" class="list-block"></div>
-                            </div>
-
-                            <label>
-                                <span>Parallel workers</span>
-                                <input name="worker_count" type="number" min="1" step="1" value="1"
-                                    title="Number of conversion workers that can run at the same time. Each worker processes one job at a time. All workers share the same queue.">
-                            </label>
-
-                            <label>
-                                <span>NVENC GPU devices</span>
-                                <input name="gpu_devices" placeholder="Leave empty for automatic selection"
-                                    title="Comma-separated NVIDIA GPU indices for NVENC jobs. Example: 0,1 rotates jobs across GPU 0 and GPU 1. Leave empty to let HandBrake choose automatically.">
-                            </label>
-
-                            <label>
-                                <span>Default destination directory</span>
-                                <input name="default_output_dir" placeholder="Leave empty to write next to source"
-                                    title="Default destination directory for new jobs and watchers. Leave empty to write next to each source file.">
-                            </label>
-
-                            <div class="row">
-                                <label>
-                                    <span>Default codec</span>
-                                    <select name="default_codec"
-                                        title="Default encoder profile for new jobs and watcher-created jobs.">
-                                        <option value="nvenc_h265">nvenc_h265</option>
-                                        <option value="nvenc_h264">nvenc_h264</option>
-                                        <option value="av1">av1</option>
-                                        <option value="x265">x265</option>
-                                    </select>
-                                </label>
-
-                                <label>
-                                    <span>Default speed</span>
-                                    <select name="default_encode_speed"
-                                        title="Default encoding preset for new jobs and watcher-created jobs.">
-                                        <option value="normal">normal</option>
-                                        <option value="slow">slow</option>
-                                        <option value="fast">fast</option>
-                                    </select>
-                                </label>
-                            </div>
-
-                            <div class="checks">
-                                <label class="check"
-                                    title="Use audio passthrough by default on new jobs and watcher-created jobs."><input
-                                        type="checkbox" name="default_audio_passthrough">Default audio
-                                    passthrough</label>
-                                <label class="check"
-                                    title="Delete source files by default after successful conversions."><input
-                                        type="checkbox" name="default_delete_source">Default delete source</label>
-                                <label class="check"
-                                    title="Force conversion by default, even when a file already looks converted."><input
-                                        type="checkbox" name="default_force">Default force conversion</label>
-                                <label class="check" title="Enable verbose HandBrake output by default."><input
-                                        type="checkbox" name="default_verbose">Default verbose mode</label>
-                            </div>
-
-                            <div class="actions">
-                                <button class="primary" type="submit" id="settings-button"
-                                    title="Save the default service settings and allowed source roots.">Save
-                                    settings</button>
-                            </div>
-                            <div class="status-line" id="settings-status"></div>
-                        </form>
-                    </div>
-
-                    <div class="subpanel">
-                        <h3>Watch Directories</h3>
-                        <form id="watcher-form" method="post" action="/watchers">
-                            <label>
-                                <span>Source directory</span>
-                                <div class="path-picker">
-                                    <input id="watcher-directory" name="directory"
-                                        placeholder="Choose a directory on the source"
-                                        title="Source directory to monitor for new files." readonly required>
-                                    <div class="actions">
-                                        <button class="secondary" type="button" id="browse-watcher-directory"
-                                            title="Browse the source and choose a directory to watch.">Choose
-                                            folder</button>
-                                        <button class="ghost" type="button" id="clear-watcher-directory"
-                                            title="Clear the current watcher directory.">Clear</button>
-                                    </div>
-                                </div>
-                            </label>
-
-                            <div class="row">
-                                <label>
-                                    <span>Poll interval</span>
-                                    <input name="poll_interval" type="number" min="1" step="1" value="5"
-                                        title="Seconds between scans for new files in this source directory.">
-                                </label>
-                                <label>
-                                    <span>Settle time</span>
-                                    <input name="settle_time" type="number" min="1" step="1" value="30"
-                                        title="Seconds a file must stay unchanged before the watcher queues it.">
-                                </label>
-                            </div>
-
-                            <div class="checks checks-single">
-                                <label class="check"
-                                    title="Also monitor subdirectories inside this source directory."><input
-                                        type="checkbox" name="recursive">Recursive watch</label>
-                                <label class="check"
-                                    title="Delete each source file after this watcher finishes a successful conversion."><input
-                                        type="checkbox" name="delete_source">Delete source on success for this
-                                    watcher</label>
-                            </div>
-
-                            <div class="actions">
-                                <button class="secondary" type="submit" id="watcher-button"
-                                    title="Start monitoring this source directory with the current watcher settings.">Add
-                                    watcher</button>
-                            </div>
-                            <div class="status-line" id="watcher-status"></div>
-                        </form>
-                        <div id="watchers-container" class="list-block"></div>
-                    </div>
-                </section>
             </section>
 
             <section class="panel panel-queue">
@@ -304,6 +178,267 @@
                 </div>
                 <div id="jobs-container"></div>
             </section>
+        </div>
+    </div>
+
+    <div class="settings-modal" id="settings-modal" hidden>
+        <div class="settings-backdrop" data-close-settings></div>
+        <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+            <div class="settings-header">
+                <h3 id="settings-modal-title">Service Settings</h3>
+                <button class="ghost" type="button" id="close-settings" title="Close settings.">Close</button>
+            </div>
+
+            <div class="settings-tabs" role="tablist">
+                <button class="settings-tab settings-tab-active" role="tab" data-tab="general"
+                    aria-selected="true">General</button>
+                <button class="settings-tab" role="tab" data-tab="schedule" aria-selected="false">Schedule</button>
+                <button class="settings-tab" role="tab" data-tab="watchers" aria-selected="false">Watchers</button>
+            </div>
+
+            <div class="settings-tab-panels">
+                <!-- ── General Tab ── -->
+                <div class="settings-tab-panel" id="tab-general" data-tab-panel="general">
+                    <form id="settings-form" method="post" action="/config">
+                        <div class="picker-block">
+                            <div class="picker-block-header">
+                                <div>
+                                    <span>Allowed source roots</span>
+                                    <p class="small picker-help">Choose which directories on the source the service
+                                        can access.</p>
+                                </div>
+                                <button class="secondary" type="button" id="add-allowed-root"
+                                    title="Add a source directory that the service is allowed to browse and use.">Add
+                                    allowed root</button>
+                            </div>
+                            <textarea name="allowed_roots" hidden></textarea>
+                            <div id="allowed-roots-list" class="list-block"></div>
+                        </div>
+
+                        <label>
+                            <span>Parallel workers</span>
+                            <input name="worker_count" type="number" min="1" step="1" value="1"
+                                title="Number of conversion workers that can run at the same time.">
+                        </label>
+
+                        <label>
+                            <span>NVENC GPU devices</span>
+                            <input name="gpu_devices" placeholder="Leave empty for automatic selection"
+                                title="Comma-separated NVIDIA GPU indices for NVENC jobs.">
+                        </label>
+
+                        <label>
+                            <span>Default destination directory</span>
+                            <input name="default_output_dir" placeholder="Leave empty to write next to source"
+                                title="Default destination directory for new jobs and watchers.">
+                        </label>
+
+                        <div class="row">
+                            <label>
+                                <span>Default codec</span>
+                                <select name="default_codec"
+                                    title="Default encoder profile for new jobs and watcher-created jobs.">
+                                    <option value="nvenc_h265">nvenc_h265</option>
+                                    <option value="nvenc_h264">nvenc_h264</option>
+                                    <option value="av1">av1</option>
+                                    <option value="x265">x265</option>
+                                </select>
+                            </label>
+
+                            <label>
+                                <span>Default speed</span>
+                                <select name="default_encode_speed"
+                                    title="Default encoding preset for new jobs and watcher-created jobs.">
+                                    <option value="normal">normal</option>
+                                    <option value="slow">slow</option>
+                                    <option value="fast">fast</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="checks">
+                            <label class="check"
+                                title="Use audio passthrough by default on new jobs and watcher-created jobs."><input
+                                    type="checkbox" name="default_audio_passthrough">Default audio
+                                passthrough</label>
+                            <label class="check"
+                                title="Delete source files by default after successful conversions."><input
+                                    type="checkbox" name="default_delete_source">Default delete source</label>
+                            <label class="check"
+                                title="Force conversion by default, even when a file already looks converted."><input
+                                    type="checkbox" name="default_force">Default force conversion</label>
+                            <label class="check" title="Enable verbose HandBrake output by default."><input
+                                    type="checkbox" name="default_verbose">Default verbose mode</label>
+                        </div>
+
+                        <div class="actions">
+                            <button class="primary" type="submit" id="settings-button"
+                                title="Save all service settings.">Save settings</button>
+                        </div>
+                        <div class="status-line" id="settings-status"></div>
+                    </form>
+                </div>
+
+                <!-- ── Schedule Tab ── -->
+                <div class="settings-tab-panel" id="tab-schedule" data-tab-panel="schedule" hidden>
+                    <div class="schedule-status-bar" id="schedule-status-bar"></div>
+
+                    <div class="subpanel">
+                        <div class="checks checks-single">
+                            <label class="check" title="Enable the conversion schedule."><input id="schedule-enabled"
+                                    type="checkbox">Enable schedule</label>
+                        </div>
+
+                        <label>
+                            <span>Schedule mode</span>
+                            <select id="schedule-mode" title="Use manual time windows, electricity prices, or both.">
+                                <option value="manual">Manual only</option>
+                                <option value="price">Price only</option>
+                                <option value="both">Manual + Price</option>
+                            </select>
+                        </label>
+
+                        <div class="row">
+                            <label>
+                                <span>Priority</span>
+                                <select id="schedule-priority" title="How manual schedule and price schedule interact.">
+                                    <option value="both_must_allow">Both must allow</option>
+                                    <option value="manual_first">Manual overrides price</option>
+                                    <option value="price_first">Price overrides manual</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>When blocked</span>
+                                <select id="schedule-pause-behavior"
+                                    title="What happens when the schedule blocks conversions.">
+                                    <option value="block_new">Block new jobs only</option>
+                                    <option value="pause_running">Pause running jobs</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="subpanel" id="schedule-manual-section">
+                        <h3>Manual Time Windows</h3>
+                        <div id="schedule-rules-list" class="schedule-rules-list"></div>
+                        <div class="actions">
+                            <button class="secondary" type="button" id="add-schedule-rule"
+                                title="Add a time window rule.">Add rule</button>
+                        </div>
+                    </div>
+
+                    <div class="subpanel" id="schedule-price-section">
+                        <h3>Electricity Price</h3>
+                        <div class="row">
+                            <label>
+                                <span>Provider</span>
+                                <select id="price-provider" title="Source for electricity spot prices.">
+                                    <option value="">Disabled</option>
+                                    <option value="ree_pvpc">REE PVPC Spain (free, no key)</option>
+                                    <option value="energy_charts">Energy-Charts (free, no key)</option>
+                                    <option value="entsoe">ENTSO-E (requires API key)</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Bidding zone</span>
+                                <select id="price-bidding-zone" title="European electricity bidding zone.">
+                                    <option value="">Select zone</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <label id="entsoe-key-label" hidden>
+                            <span>ENTSO-E API key</span>
+                            <input id="price-entsoe-key" type="password"
+                                placeholder="Security token from transparency.entsoe.eu"
+                                title="Your personal ENTSO-E Transparency Platform API security token.">
+                        </label>
+
+                        <label>
+                            <span>Price strategy</span>
+                            <select id="price-strategy" title="How to decide when prices are acceptable.">
+                                <option value="threshold">Maximum price threshold</option>
+                                <option value="cheapest_n">Cheapest N hours of the day</option>
+                            </select>
+                        </label>
+
+                        <div class="row">
+                            <label id="price-threshold-label">
+                                <span>Max price (EUR/kWh)</span>
+                                <input id="price-threshold" type="number" min="0" step="0.0001" value="0.0000"
+                                    title="Conversions pause when price exceeds this value.">
+                            </label>
+                            <label id="price-cheapest-label" hidden>
+                                <span>Cheapest hours</span>
+                                <input id="price-cheapest-hours" type="number" min="1" max="24" step="1" value="8"
+                                    title="Only convert during the N cheapest hours of the day.">
+                            </label>
+                        </div>
+
+                        <div class="price-chart-wrap" id="price-chart-wrap">
+                            <div class="price-chart" id="price-chart"></div>
+                            <div class="small" id="price-chart-label"></div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="primary" type="button" id="save-schedule-button"
+                            title="Save schedule settings.">Save schedule</button>
+                    </div>
+                    <div class="status-line" id="schedule-status"></div>
+                </div>
+
+                <!-- ── Watchers Tab ── -->
+                <div class="settings-tab-panel" id="tab-watchers" data-tab-panel="watchers" hidden>
+                    <form id="watcher-form" method="post" action="/watchers">
+                        <label>
+                            <span>Source directory</span>
+                            <div class="path-picker">
+                                <input id="watcher-directory" name="directory"
+                                    placeholder="Choose a directory on the source"
+                                    title="Source directory to monitor for new files." readonly required>
+                                <div class="actions">
+                                    <button class="secondary" type="button" id="browse-watcher-directory"
+                                        title="Browse the source and choose a directory to watch.">Choose
+                                        folder</button>
+                                    <button class="ghost" type="button" id="clear-watcher-directory"
+                                        title="Clear the current watcher directory.">Clear</button>
+                                </div>
+                            </div>
+                        </label>
+
+                        <div class="row">
+                            <label>
+                                <span>Poll interval</span>
+                                <input name="poll_interval" type="number" min="1" step="1" value="5"
+                                    title="Seconds between scans for new files in this source directory.">
+                            </label>
+                            <label>
+                                <span>Settle time</span>
+                                <input name="settle_time" type="number" min="1" step="1" value="30"
+                                    title="Seconds a file must stay unchanged before the watcher queues it.">
+                            </label>
+                        </div>
+
+                        <div class="checks">
+                            <label class="check"
+                                title="Also monitor subdirectories inside this source directory."><input type="checkbox"
+                                    name="recursive">Recursive watch</label>
+                            <label class="check"
+                                title="Delete each source file after this watcher finishes a successful conversion."><input
+                                    type="checkbox" name="delete_source">Delete source on success</label>
+                        </div>
+
+                        <div class="actions">
+                            <button class="secondary" type="submit" id="watcher-button"
+                                title="Start monitoring this source directory with the current watcher settings.">Add
+                                watcher</button>
+                        </div>
+                        <div class="status-line" id="watcher-status"></div>
+                    </form>
+                    <div id="watchers-container" class="list-block"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -338,6 +473,8 @@
             </div>
         </div>
     </div>
+
+    <div class="toast-container" id="toast-container"></div>
 
     <script src="/assets/dashboard.js"></script>
 </body>

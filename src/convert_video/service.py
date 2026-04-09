@@ -37,6 +37,7 @@ from convert_video.iso import display_titles, is_iso_file, scan_iso, select_main
 from convert_video.mediainfo import VIDEO_EXTENSIONS, check_already_converted
 from convert_video.output import error as print_error
 from convert_video.output import info, success, warning
+from convert_video.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
 from convert_video.updater import get_update_state, install_latest_version, mark_update_installed
 
 
@@ -287,6 +288,10 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN gpu_devices_json TEXT NOT NULL DEFAULT '[]'"
                 )
+            if "schedule_config_json" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN schedule_config_json TEXT NOT NULL DEFAULT '{}'"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchers (
@@ -461,7 +466,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -477,11 +482,16 @@ class JobStore:
             gpu_devices = parse_gpu_devices(json.loads(row["gpu_devices_json"] or "[]"))
         except (json.JSONDecodeError, ValueError):
             gpu_devices = []
+        try:
+            schedule_config = json.loads(row["schedule_config_json"] or "{}")
+        except json.JSONDecodeError:
+            schedule_config = {}
         return {
             "allowed_roots": allowed_roots,
             "default_job_settings": default_job_settings,
             "worker_count": int(row["worker_count"] or 1),
             "gpu_devices": gpu_devices,
+            "schedule_config": schedule_config,
         }
 
     def save_service_config(
@@ -490,23 +500,26 @@ class JobStore:
         default_job_settings: Dict[str, object],
         worker_count: int,
         gpu_devices: List[int],
+        schedule_config: Optional[Dict[str, object]] = None,
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json)
-                VALUES (1, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json)
+                VALUES (1, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
                     worker_count = excluded.worker_count,
-                    gpu_devices_json = excluded.gpu_devices_json
+                    gpu_devices_json = excluded.gpu_devices_json,
+                    schedule_config_json = excluded.schedule_config_json
                 """,
                 (
                     json.dumps(list(allowed_roots)),
                     json.dumps(dict(default_job_settings)),
                     int(worker_count),
                     json.dumps(list(gpu_devices)),
+                    json.dumps(schedule_config or {}),
                 ),
             )
 
@@ -963,6 +976,7 @@ class ConversionService:
         worker_count: int = 1,
         gpu_devices: Optional[object] = None,
         worker_poll_interval: float = 1.0,
+        schedule_config: Optional[Dict[str, object]] = None,
     ):
         self.store = JobStore(db_path)
         self.allowed_roots = [os.path.abspath(path) for path in (allowed_roots or [])]
@@ -991,11 +1005,16 @@ class ConversionService:
         self._upgrade_in_progress = False
         self._restart_requested = False
         self._restart_command = [sys.argv[0], *sys.argv[1:]]
+        self.scheduler = ScheduleEngine()
+        self._schedule_monitor_thread: Optional[threading.Thread] = None
+        self._schedule_paused_jobs: set[str] = set()
+        self._schedule_wake_event = threading.Event()
         self._load_persisted_state(
             [os.path.abspath(path) for path in (allowed_roots or [])],
             self.default_job_settings,
             self.worker_count,
             self.gpu_devices,
+            schedule_config or {},
         )
 
     def _load_persisted_state(
@@ -1004,6 +1023,7 @@ class ConversionService:
         initial_default_job_settings: Dict[str, object],
         initial_worker_count: int,
         initial_gpu_devices: List[int],
+        initial_schedule_config: Dict[str, object],
     ):
         persisted_config = self.store.load_service_config()
         persisted_watchers = self.store.list_watcher_configs()
@@ -1014,11 +1034,14 @@ class ConversionService:
             self.default_job_settings = self._normalize_default_job_settings(initial_default_job_settings)
             self.worker_count = self._normalize_worker_count(initial_worker_count)
             self.gpu_devices = parse_gpu_devices(initial_gpu_devices)
+            schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
+            self.scheduler.update_config(schedule_cfg)
             self.store.save_service_config(
                 self.allowed_roots,
                 self.default_job_settings,
                 self.worker_count,
                 self.gpu_devices,
+                schedule_cfg.to_dict(),
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -1033,6 +1056,8 @@ class ConversionService:
                 self.gpu_devices = parse_gpu_devices(persisted_config.get("gpu_devices"))
             except ValueError:
                 self.gpu_devices = []
+            schedule_raw = persisted_config.get("schedule_config") or {}
+            self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
 
         with self._watchers_lock:
             for watcher_config in persisted_watchers:
@@ -1055,6 +1080,7 @@ class ConversionService:
         self._prime_recoverable_jobs()
         self._sync_worker_pool()
         self._start_update_monitor()
+        self._start_schedule_monitor()
 
     def stop(self):
         self._service_started = False
@@ -1222,6 +1248,105 @@ class ConversionService:
             name=f"{APP_NAME}-update-monitor",
         )
         self._update_monitor_thread.start()
+
+    def _start_schedule_monitor(self):
+        if self._schedule_monitor_thread and self._schedule_monitor_thread.is_alive():
+            return
+        self._schedule_monitor_thread = threading.Thread(
+            target=self._schedule_monitor_loop,
+            daemon=True,
+            name=f"{APP_NAME}-schedule-monitor",
+        )
+        self._schedule_monitor_thread.start()
+
+    def _schedule_monitor_loop(self):
+        """Background loop that handles schedule-based pause/resume of running jobs
+        and periodic price refresh."""
+        was_allowed = True
+        while not self.stop_event.is_set():
+            self._schedule_wake_event.clear()
+            cfg = self.scheduler.config
+            if cfg.enabled:
+                # Refresh prices periodically if price mode is active
+                if cfg.mode in ("price", "both") and cfg.price.provider:
+                    try:
+                        self.scheduler.fetch_prices()
+                    except Exception as exc:
+                        warning(f"Schedule price refresh failed: {exc}")
+
+                allowed = self.scheduler.is_conversion_allowed()
+
+                # Handle pause_running behavior: SIGSTOP/SIGCONT active jobs
+                if cfg.pause_behavior == "pause_running":
+                    if not allowed and was_allowed:
+                        self._schedule_pause_all_running()
+                    elif allowed and not was_allowed:
+                        self._schedule_resume_all_paused()
+
+                # block_new: pause all running when transitioning to blocked
+                if cfg.pause_behavior == "block_new":
+                    if not allowed and was_allowed:
+                        self._schedule_pause_all_running()
+                    elif allowed and not was_allowed:
+                        self._schedule_resume_all_paused()
+
+                if allowed and not was_allowed:
+                    # Wake workers so they can pick up queued jobs immediately
+                    self._wake_event.set()
+
+                was_allowed = allowed
+            else:
+                was_allowed = True
+
+            # Wait up to 30s, but wake early if config changed
+            self.stop_event.wait(0.1)
+            if self.stop_event.is_set():
+                break
+            self._schedule_wake_event.wait(30)
+
+    def _schedule_pause_all_running(self):
+        """Pause all running jobs due to schedule block."""
+        for record in self.store.list_active_jobs():
+            job_id = str(record["id"])
+            status = str(record.get("status") or "")
+            if status != "running":
+                continue
+            with self._job_control_lock:
+                active_thread_id = self._active_jobs.get(job_id)
+            if active_thread_id is not None:
+                request_current_conversion_pause(active_thread_id)
+            else:
+                request_conversion_pause_by_pid(record.get("process_id"))
+            self.store.pause(
+                job_id,
+                "Paused by schedule. Conversion will resume when the schedule allows.",
+                resume_on_start=False,
+            )
+            self._schedule_paused_jobs.add(job_id)
+            info(f"[{job_id[:8]}] Paused by schedule.")
+
+    def _schedule_resume_all_paused(self):
+        """Resume jobs that were paused by the schedule."""
+        for job_id in list(self._schedule_paused_jobs):
+            record = self.store.get(job_id)
+            if not record or record.get("status") != "paused":
+                self._schedule_paused_jobs.discard(job_id)
+                continue
+            with self._job_control_lock:
+                active_thread_id = self._active_jobs.get(job_id)
+            if active_thread_id is not None:
+                request_current_conversion_resume(active_thread_id)
+                self.store.resume(job_id, "Resumed by schedule.", resume_on_start=False)
+                info(f"[{job_id[:8]}] Resumed by schedule.")
+            elif record_has_recoverable_runtime(record):
+                self.store.resume(
+                    job_id,
+                    "Waiting for a worker to resume the paused conversion.",
+                    resume_on_start=True,
+                )
+                self._enqueue_recoverable_job(job_id)
+                info(f"[{job_id[:8]}] Queued for resume by schedule.")
+            self._schedule_paused_jobs.discard(job_id)
 
     def _update_monitor_loop(self):
         while not self.stop_event.is_set():
@@ -1427,11 +1552,22 @@ class ConversionService:
         worker_count_changed = next_worker_count != self.worker_count
         self.worker_count = next_worker_count
         self.gpu_devices = next_gpu_devices
+
+        # Update schedule config if present in payload
+        if "schedule_config" in payload:
+            schedule_raw = payload.get("schedule_config") or {}
+            if isinstance(schedule_raw, dict):
+                schedule_cfg = ScheduleConfig.from_dict(schedule_raw)
+                self.scheduler.update_config(schedule_cfg)
+                # Wake the schedule monitor immediately so it re-evaluates
+                self._schedule_wake_event.set()
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
             self.worker_count,
             self.gpu_devices,
+            self.scheduler.config.to_dict(),
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -1663,6 +1799,10 @@ class ConversionService:
         return self._request_running_job_pause(job_id)
 
     def resume_job(self, job_id: str) -> Optional[Dict[str, object]]:
+        # Check if the schedule currently blocks conversions
+        if self.scheduler.config.enabled and not self.scheduler.is_conversion_allowed():
+            raise ValueError("Cannot resume: schedule is currently blocking conversions.")
+
         record = self.store.get(job_id)
         if not record:
             return None
@@ -1704,6 +1844,9 @@ class ConversionService:
             "gpu_devices": list(self.gpu_devices),
             "visible_nvidia_gpus": get_visible_nvidia_gpus(),
             "update_info": self.get_update_info(force_check=force_update_check),
+            "schedule_config": self.scheduler.config.to_dict(),
+            "schedule_status": self.scheduler.get_status(),
+            "bidding_zones": BIDDING_ZONES,
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -1799,6 +1942,12 @@ class ConversionService:
     def _worker_loop(self, worker_id: str, worker_stop_event: threading.Event):
         info(f"Worker thread started: {worker_id}")
         while not self.stop_event.is_set() and not worker_stop_event.is_set():
+            # Schedule gate: wait until conversions are allowed
+            if not self.scheduler.is_conversion_allowed():
+                self._wake_event.wait(min(self.worker_poll_interval, 5.0))
+                self._wake_event.clear()
+                continue
+
             record = None
             try:
                 record = self._claim_recoverable_job()
@@ -2230,6 +2379,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, record)
             return
 
+        if path == "/schedule/prices":
+            prices = self.server.service.scheduler.get_cached_prices_list()
+            self._send_json(200, {"prices": prices})
+            return
+
         self._send_json(404, {"error": "Not found."})
 
     def do_POST(self):
@@ -2436,6 +2590,7 @@ def run_service(
     watch_poll_interval: float,
     watch_settle_time: float,
     watch_job_template: Dict[str, object],
+    schedule_config: Optional[Dict[str, object]] = None,
 ):
     import signal as _signal
 
@@ -2450,6 +2605,7 @@ def run_service(
         default_job_settings=watch_job_template,
         worker_count=worker_count,
         gpu_devices=gpu_devices,
+        schedule_config=schedule_config,
     )
     if not service.has_persisted_configuration():
         for watch_dir in watch_dirs:
