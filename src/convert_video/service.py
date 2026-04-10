@@ -570,7 +570,16 @@ class JobStore:
     def list_jobs(self, limit: int = 50) -> List[Dict[str, object]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT ?", (limit,)
+                """
+                SELECT * FROM jobs WHERE status IN ('running', 'paused', 'cancelling', 'queued')
+                UNION
+                SELECT * FROM (
+                    SELECT * FROM jobs WHERE status NOT IN ('running', 'paused', 'cancelling', 'queued')
+                    ORDER BY submitted_at DESC LIMIT ?
+                )
+                ORDER BY submitted_at DESC
+                """,
+                (limit,),
             ).fetchall()
         return [self._hydrate_record(row) for row in rows]
 
@@ -812,28 +821,39 @@ class JobStore:
             )
         return updated.rowcount == 1
 
-    def clear(self) -> Dict[str, int]:
+    def clear(self, mode: str = "all") -> Dict[str, int]:
+        if mode == "finished":
+            target_statuses = ('succeeded', 'failed', 'cancelled', 'skipped')
+        elif mode == "queued":
+            target_statuses = ('queued',)
+        else:
+            target_statuses = ('queued', 'succeeded', 'failed', 'cancelled', 'skipped')
+        placeholders = ','.join('?' for _ in target_statuses)
         with self._lock, self._conn:
             counts = self._conn.execute(
                 """
                 SELECT
                     SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
                     SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused,
-                    SUM(CASE WHEN status = 'cancelling' THEN 1 ELSE 0 END) AS cancelling
+                    SUM(CASE WHEN status = 'cancelling' THEN 1 ELSE 0 END) AS cancelling,
+                    SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued
                 FROM jobs
                 """
             ).fetchone()
             deleted = self._conn.execute(
-                "DELETE FROM jobs WHERE status NOT IN ('running', 'paused', 'cancelling')"
+                f"DELETE FROM jobs WHERE status IN ({placeholders})",
+                target_statuses,
             )
         running_count = int(counts["running"] if counts and counts["running"] else 0)
         paused_count = int(counts["paused"] if counts and counts["paused"] else 0)
         cancelling_count = int(counts["cancelling"] if counts and counts["cancelling"] else 0)
+        queued_count = int(counts["queued"] if counts and counts["queued"] else 0)
         return {
             "deleted": int(deleted.rowcount),
             "running": running_count,
             "paused": paused_count,
             "cancelling": cancelling_count,
+            "queued": queued_count,
             "active": running_count + paused_count + cancelling_count,
         }
 
@@ -1462,6 +1482,44 @@ class ConversionService:
         for watcher in watchers:
             watcher.start()
 
+    def update_watcher(
+        self,
+        watcher_id: str,
+        directory: str,
+        *,
+        recursive: bool,
+        poll_interval: float,
+        settle_time: float,
+        delete_source: bool = False,
+    ) -> Dict[str, object]:
+        if not directory.strip():
+            raise ValueError("Watcher directory is required.")
+        self._validate_path(directory, require_directory=True)
+        with self._watchers_lock:
+            old_watcher = self._watchers.pop(watcher_id, None)
+            if old_watcher is None:
+                raise ValueError("Watcher not found.")
+            for existing in self._watchers.values():
+                if existing.directory == os.path.abspath(directory):
+                    self._watchers[watcher_id] = old_watcher
+                    raise ValueError(f"Directory is already being watched: {existing.directory}")
+        old_watcher.stop()
+        new_watcher = DirectoryWatcher(
+            self,
+            watcher_id,
+            directory,
+            recursive=recursive,
+            poll_interval=poll_interval,
+            settle_time=settle_time,
+            delete_source=delete_source,
+        )
+        with self._watchers_lock:
+            self._watchers[watcher_id] = new_watcher
+        self.store.save_watcher_config(new_watcher.to_summary())
+        if self._service_started:
+            new_watcher.start()
+        return new_watcher.to_summary()
+
     def remove_watcher(self, watcher_id: str) -> Optional[Dict[str, object]]:
         with self._watchers_lock:
             watcher = self._watchers.pop(watcher_id, None)
@@ -1832,8 +1890,8 @@ class ConversionService:
     def delete_job(self, job_id: str) -> bool:
         return self.store.delete(job_id)
 
-    def clear_jobs(self) -> Dict[str, int]:
-        return self.store.clear()
+    def clear_jobs(self, mode: str = "all") -> Dict[str, int]:
+        return self.store.clear(mode=mode)
 
     def get_service_summary(self, *, force_update_check: bool = False) -> Dict[str, object]:
         return {
@@ -2535,11 +2593,40 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         else:
             self._redirect_with_message(notice=str(record.get("message") or f"Queued job {record['id']}"))
 
+    def do_PUT(self):
+        path, _query = self._get_request_parts()
+
+        if path.startswith("/watchers/"):
+            watcher_id = path.rsplit("/", 1)[-1]
+            try:
+                payload = self._read_json()
+                watcher = self.server.service.update_watcher(
+                    watcher_id,
+                    str(payload.get("directory") or "").strip(),
+                    recursive=bool(payload.get("recursive", False)),
+                    poll_interval=float(payload.get("poll_interval") or 5.0),
+                    settle_time=float(payload.get("settle_time") or 30.0),
+                    delete_source=bool(payload.get("delete_source", False)),
+                )
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            except (TypeError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, watcher)
+            return
+
+        self._send_json(404, {"error": "Not found."})
+
     def do_DELETE(self):
         path, query = self._get_request_parts()
 
         if path == "/jobs":
-            self._send_json(200, self.server.service.clear_jobs())
+            mode = query.get("mode", "all")
+            if mode not in ("all", "finished", "queued"):
+                mode = "all"
+            self._send_json(200, self.server.service.clear_jobs(mode=mode))
             return
 
         if path.startswith("/watchers/"):

@@ -38,6 +38,7 @@
         scheduleConfig: {},
         scheduleStatus: {},
         scheduleRules: [],
+        editingWatcherId: null,
     };
 
     const themeStorageKey = 'clutch-theme';
@@ -56,6 +57,10 @@
 
     const meta = document.getElementById('service-meta');
     const jobsContainer = document.getElementById('jobs-container');
+    const jobsFilterText = document.getElementById('jobs-filter-text');
+    const jobsFilterStatus = document.getElementById('jobs-filter-status');
+    const jobsCount = document.getElementById('jobs-count');
+    const toggleExpandJobsButton = document.getElementById('toggle-expand-jobs');
     const form = document.getElementById('job-form');
     const inputFileField = document.getElementById('input-file');
     const inputKindField = document.getElementById('input-kind');
@@ -78,8 +83,10 @@
     const submitButton = document.getElementById('submit-button');
     const settingsButton = document.getElementById('settings-button');
     const watcherButton = document.getElementById('watcher-button');
+    const cancelEditWatcherButton = document.getElementById('cancel-edit-watcher');
     const refreshButton = document.getElementById('refresh-button');
     const clearJobsButton = document.getElementById('clear-jobs');
+    const clearJobsDropdown = document.getElementById('clear-jobs-dropdown');
     const toggleAutoRefreshButton = document.getElementById('toggle-autorefresh');
     const toggleThemeButton = document.getElementById('toggle-theme');
     const themeLabel = document.getElementById('theme-label');
@@ -206,10 +213,105 @@
         return job.message || job.input_file || '';
     }
 
+    var arrowSvg = '<svg class="custom-select-arrow" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">'
+        + '<path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    function buildCustomSelect(selectEl) {
+        if (selectEl.dataset.customized) return;
+        selectEl.dataset.customized = '1';
+        selectEl.classList.add('custom-select-source');
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'custom-select';
+
+        var trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'custom-select-trigger';
+
+        var optionsPanel = document.createElement('div');
+        optionsPanel.className = 'custom-select-options';
+        optionsPanel.hidden = true;
+
+        selectEl.parentNode.insertBefore(wrapper, selectEl);
+        wrapper.appendChild(trigger);
+        wrapper.appendChild(optionsPanel);
+        wrapper.appendChild(selectEl);
+
+        function renderOptions() {
+            var current = selectEl.value;
+            optionsPanel.innerHTML = '';
+            Array.prototype.forEach.call(selectEl.options, function (opt) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'custom-select-option' + (opt.value === current ? ' selected' : '');
+                btn.textContent = opt.textContent;
+                btn.dataset.value = opt.value;
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    selectEl.value = opt.value;
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    optionsPanel.hidden = true;
+                    wrapper.classList.remove('open');
+                    syncTrigger();
+                });
+                optionsPanel.appendChild(btn);
+            });
+        }
+
+        function syncTrigger() {
+            var selected = selectEl.options[selectEl.selectedIndex];
+            trigger.innerHTML = escapeHtml(selected ? selected.textContent : '') + ' ' + arrowSvg;
+        }
+
+        trigger.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var isOpen = !optionsPanel.hidden;
+            closeAllCustomSelects();
+            if (!isOpen) {
+                renderOptions();
+                optionsPanel.hidden = false;
+                wrapper.classList.add('open');
+            }
+        });
+
+        syncTrigger();
+        selectEl._customSelect = { syncTrigger: syncTrigger, renderOptions: renderOptions, wrapper: wrapper, optionsPanel: optionsPanel };
+    }
+
+    function closeAllCustomSelects() {
+        Array.prototype.forEach.call(
+            document.querySelectorAll('.custom-select.open'),
+            function (w) {
+                w.classList.remove('open');
+                var panel = w.querySelector('.custom-select-options');
+                if (panel) panel.hidden = true;
+            }
+        );
+    }
+
+    function syncCustomSelect(selectEl) {
+        if (selectEl._customSelect) {
+            selectEl._customSelect.syncTrigger();
+        }
+    }
+
+    function initCustomSelects() {
+        Array.prototype.forEach.call(
+            document.querySelectorAll('select:not([data-customized])'),
+            function (sel) { buildCustomSelect(sel); }
+        );
+    }
+
+    function syncAllCustomSelects() {
+        Array.prototype.forEach.call(
+            document.querySelectorAll('select[data-customized]'),
+            function (sel) { syncCustomSelect(sel); }
+        );
+    }
+
     function setFormStatus(message, kind) {
-        const effectiveKind = kind || '';
-        formStatus.textContent = message || '';
-        formStatus.className = effectiveKind ? `status-line ${effectiveKind}` : 'status-line';
+        if (!message) return;
+        showToast(message, kind);
     }
 
     function setStatus(target, message, kind) {
@@ -517,6 +619,17 @@
         );
     }
 
+    function resetWatcherForm() {
+        state.editingWatcherId = null;
+        watcherForm.reset();
+        setWatcherDirectory('');
+        watcherForm.elements.poll_interval.value = '5';
+        watcherForm.elements.settle_time.value = '30';
+        watcherForm.elements.delete_source.checked = settingsForm.elements.default_delete_source.checked;
+        watcherButton.textContent = 'Add watcher';
+        cancelEditWatcherButton.hidden = true;
+    }
+
     function syncAllowedRootsField() {
         settingsForm.elements.allowed_roots.value = state.allowedRoots.join('\n');
     }
@@ -632,6 +745,9 @@
         state.settings = false;
         settingsModal.hidden = true;
         document.body.classList.remove('modal-open');
+        if (state.editingWatcherId !== null) {
+            resetWatcherForm();
+        }
     }
 
     function switchSettingsTab(tabName) {
@@ -728,6 +844,8 @@
                 });
             }
         );
+
+        initCustomSelects();
     }
 
     function updateScheduleSections() {
@@ -1281,6 +1399,7 @@
 
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
+        syncAllCustomSelects();
     }
 
     function renderWatchers(watchers) {
@@ -1295,10 +1414,30 @@
                     <div class="job-name" title="${escapeHtml(watcher.directory)}">${escapeHtml(watcher.directory)}</div>
                     <div class="small">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete source: ${escapeHtml(String(Boolean(watcher.delete_source)))}</div>
                     <div class="actions">
+                        <button class="inline-button" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings.">Edit</button>
                         <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="Stop monitoring this source directory.">Remove</button>
                     </div>
                 </div>`;
         }).join('');
+
+        Array.prototype.forEach.call(
+            watchersContainer.querySelectorAll('[data-edit-watcher]'),
+            function (button) {
+                button.addEventListener('click', function () {
+                    var watcher = watchers.find(function (w) { return w.id === button.dataset.editWatcher; });
+                    if (!watcher) return;
+                    state.editingWatcherId = watcher.id;
+                    setWatcherDirectory(watcher.directory);
+                    watcherForm.elements.poll_interval.value = String(watcher.poll_interval);
+                    watcherForm.elements.settle_time.value = String(watcher.settle_time);
+                    watcherForm.elements.recursive.checked = Boolean(watcher.recursive);
+                    watcherForm.elements.delete_source.checked = Boolean(watcher.delete_source);
+                    watcherButton.textContent = 'Update watcher';
+                    cancelEditWatcherButton.hidden = false;
+                    watcherForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+        );
 
         Array.prototype.forEach.call(
             watchersContainer.querySelectorAll('[data-remove-watcher]'),
@@ -1331,9 +1470,28 @@
                 return leftRank - rightRank;
             }
 
-            const leftTime = String(left.started_at || left.submitted_at || '');
-            const rightTime = String(right.started_at || right.submitted_at || '');
+            // Active/queued jobs: oldest first (queue order)
+            var activeStatuses = { running: 1, paused: 1, cancelling: 1, queued: 1 };
+            if (Object.prototype.hasOwnProperty.call(activeStatuses, left.status)) {
+                const leftTime = String(left.submitted_at || '');
+                const rightTime = String(right.submitted_at || '');
+                return leftTime.localeCompare(rightTime);
+            }
+
+            // Finished jobs: newest first
+            const leftTime = String(left.finished_at || left.submitted_at || '');
+            const rightTime = String(right.finished_at || right.submitted_at || '');
             return rightTime.localeCompare(leftTime);
+        });
+    }
+
+    function filterJobs(jobs) {
+        var text = jobsFilterText.value.trim().toLowerCase();
+        var status = jobsFilterStatus.value;
+        return jobs.filter(function (job) {
+            if (status && job.status !== status) return false;
+            if (text && basename(job.input_file).toLowerCase().indexOf(text) === -1) return false;
+            return true;
         });
     }
 
@@ -1432,19 +1590,43 @@
         state.expandedJobs[state.activeQueueJobId] = activeCard.open;
     }
 
+    function updateJobsCount(filtered, total) {
+        if (!total) {
+            jobsCount.textContent = '';
+        } else if (filtered === total) {
+            jobsCount.textContent = `${total} jobs`;
+        } else {
+            jobsCount.textContent = `${filtered} / ${total} jobs`;
+        }
+    }
+
+    function updateToggleExpandButton() {
+        var cards = jobsContainer.querySelectorAll('.job-card');
+        var anyOpen = false;
+        Array.prototype.forEach.call(cards, function (card) {
+            if (card.open) anyOpen = true;
+        });
+        toggleExpandJobsButton.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+    }
+
     function renderJobs(jobs) {
         state.lastJobs = jobs.slice();
-        if (!jobs.length) {
+        var filtered = filterJobs(jobs);
+        updateJobsCount(filtered.length, jobs.length);
+        if (!filtered.length) {
             state.expandedJobs = {};
             state.activeQueueJobId = '';
             state.queueJobIds = [];
-            jobsContainer.innerHTML = '<div class="empty">No jobs yet.</div>';
+            jobsContainer.innerHTML = jobs.length
+                ? '<div class="empty">No jobs match the current filter.</div>'
+                : '<div class="empty">No jobs yet.</div>';
+            updateToggleExpandButton();
             return;
         }
 
-        pruneExpandedJobs(jobs);
+        pruneExpandedJobs(filtered);
 
-        const sortedJobs = sortJobs(jobs);
+        const sortedJobs = sortJobs(filtered);
         ensureActiveQueueJob(sortedJobs);
 
         const cards = sortedJobs.map(function (job) {
@@ -1478,7 +1660,6 @@
 
             const submitted = job.submitted_display || job.submitted_at || '';
             const detailsOpen = shouldShowJobOpen(job) ? ' open' : '';
-            const preview = summarizeMessage(job);
             const pauseButton = job.status === 'running'
                 ? `<button class="secondary" type="button" data-pause-id="${job.id}" title="Pause this conversion without removing it from the worker.">Pause job</button>`
                 : job.status === 'paused'
@@ -1503,7 +1684,6 @@
                                 <span class="job-id">${escapeHtml(job.id.slice(0, 8))}</span>
                             </div>
                             <div class="job-title">${escapeHtml(basename(job.input_file))}</div>
-                            <div class="job-preview">${escapeHtml(preview)}</div>
                         </div>
                         <div class="job-summary-side progress-cell">
                             <div class="job-summary-caption">Progress</div>
@@ -1575,6 +1755,7 @@
                         return;
                     }
                     state.expandedJobs[jobId] = details.open;
+                    updateToggleExpandButton();
                 });
             }
         );
@@ -1676,6 +1857,7 @@
         );
 
         updateActiveQueueSelection();
+        updateToggleExpandButton();
     }
 
     async function refreshSummary() {
@@ -1775,7 +1957,8 @@
     watcherForm.addEventListener('submit', async function (event) {
         event.preventDefault();
         watcherButton.disabled = true;
-        setStatus(watcherStatus, 'Adding watcher...');
+        var isEditing = state.editingWatcherId !== null;
+        setStatus(watcherStatus, isEditing ? 'Updating watcher...' : 'Adding watcher...');
 
         const formData = new FormData(watcherForm);
         const payload = {
@@ -1787,17 +1970,22 @@
         };
 
         try {
-            await fetchJson('/watchers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            watcherForm.reset();
-            setWatcherDirectory('');
-            watcherForm.elements.poll_interval.value = '5';
-            watcherForm.elements.settle_time.value = '30';
-            watcherForm.elements.delete_source.checked = settingsForm.elements.default_delete_source.checked;
-            setStatus(watcherStatus, 'Watcher added.', 'ok');
+            if (isEditing) {
+                await fetchJson(`/watchers/${state.editingWatcherId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                setStatus(watcherStatus, 'Watcher updated.', 'ok');
+            } else {
+                await fetchJson('/watchers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                setStatus(watcherStatus, 'Watcher added.', 'ok');
+            }
+            resetWatcherForm();
             await refreshSummary();
         } catch (error) {
             setStatus(watcherStatus, error.message, 'error');
@@ -1806,8 +1994,36 @@
         }
     });
 
+    cancelEditWatcherButton.addEventListener('click', function () {
+        resetWatcherForm();
+        setStatus(watcherStatus, '', '');
+    });
+
     refreshButton.addEventListener('click', function () {
         refreshAll();
+    });
+
+    jobsFilterText.addEventListener('input', function () {
+        renderJobs(state.lastJobs);
+    });
+
+    jobsFilterStatus.addEventListener('change', function () {
+        renderJobs(state.lastJobs);
+    });
+
+    toggleExpandJobsButton.addEventListener('click', function () {
+        var cards = jobsContainer.querySelectorAll('.job-card');
+        var anyOpen = false;
+        Array.prototype.forEach.call(cards, function (card) {
+            if (card.open) anyOpen = true;
+        });
+        var expand = !anyOpen;
+        state.expandedJobs = {};
+        Array.prototype.forEach.call(cards, function (card) {
+            card.open = expand;
+            state.expandedJobs[card.dataset.jobId] = expand;
+        });
+        updateToggleExpandButton();
     });
 
     browseInputFileButton.addEventListener('click', function () {
@@ -2025,41 +2241,41 @@
         toggleActiveQueueJob();
     });
 
-    clearJobsButton.addEventListener('click', async function () {
-        if (!window.confirm('Remove all inactive jobs from the queue list?')) {
-            return;
-        }
+    clearJobsButton.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var menu = clearJobsDropdown.querySelector('.dropdown-menu');
+        menu.hidden = !menu.hidden;
+    });
 
-        clearJobsButton.disabled = true;
-        try {
-            const result = await fetchJson('/jobs', { method: 'DELETE' });
-            const deletedCount = Number(result.deleted || 0);
-            const activeCount = Number(result.active || 0);
-            const runningCount = Number(result.running || 0);
-            const pausedCount = Number(result.paused || 0);
-            const cancellingCount = Number(result.cancelling || 0);
-            let message = `Removed ${deletedCount} job${deletedCount === 1 ? '' : 's'} from the queue.`;
-            if (activeCount > 0) {
-                const kept = [];
-                if (runningCount > 0) {
-                    kept.push(`${runningCount} running job${runningCount === 1 ? '' : 's'}`);
-                }
-                if (pausedCount > 0) {
-                    kept.push(`${pausedCount} paused job${pausedCount === 1 ? '' : 's'}`);
-                }
-                if (cancellingCount > 0) {
-                    kept.push(`${cancellingCount} cancelling job${cancellingCount === 1 ? '' : 's'}`);
-                }
-                message += ` ${kept.join(', ')} kept.`;
-            }
-            setFormStatus(message, 'ok');
-            await refreshJobs();
-        } catch (error) {
-            setFormStatus(error.message, 'error');
-        } finally {
-            clearJobsButton.disabled = false;
+    document.addEventListener('mousedown', function (event) {
+        var menu = clearJobsDropdown.querySelector('.dropdown-menu');
+        if (menu && !menu.hidden && !clearJobsDropdown.contains(event.target)) {
+            menu.hidden = true;
         }
     });
+
+    var clearModeLabels = { finished: 'finished', queued: 'queued', all: 'inactive' };
+    Array.prototype.forEach.call(
+        clearJobsDropdown.querySelectorAll('[data-clear-mode]'),
+        function (button) {
+            button.addEventListener('click', async function (event) {
+                event.stopPropagation();
+                var mode = button.dataset.clearMode;
+                var label = clearModeLabels[mode] || 'inactive';
+
+                clearJobsDropdown.querySelector('.dropdown-menu').hidden = true;
+
+                try {
+                    const result = await fetchJson(`/jobs?mode=${mode}`, { method: 'DELETE' });
+                    const deletedCount = Number(result.deleted || 0);
+                    setFormStatus(`Removed ${deletedCount} ${label} job${deletedCount === 1 ? '' : 's'}.`, 'ok');
+                    await refreshJobs();
+                } catch (error) {
+                    setFormStatus(error.message, 'error');
+                }
+            });
+        }
+    );
 
     toggleThemeButton.addEventListener('click', function () {
         const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
@@ -2172,6 +2388,14 @@
         setFormStatus(startupParams.get('error'), 'error');
         history.replaceState(null, '', window.location.pathname);
     }
+
+    initCustomSelects();
+
+    document.addEventListener('mousedown', function (e) {
+        if (!e.target.closest('.custom-select')) {
+            closeAllCustomSelects();
+        }
+    });
 
     refreshAll();
     scheduleRefresh();

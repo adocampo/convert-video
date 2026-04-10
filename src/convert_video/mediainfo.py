@@ -281,7 +281,7 @@ def check_already_converted(input_file: str, target_codec: str, force: bool, qui
     if force:
         return 'convert'
 
-    tracks = data.get('media', {}).get('track', [])
+    tracks = (data.get('media') or {}).get('track', [])
     general = next((t for t in tracks if t['@type'] == 'General'), None)
     video = next((t for t in tracks if t['@type'] == 'Video'), None)
 

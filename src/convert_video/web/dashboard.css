@@ -373,6 +373,99 @@ textarea {
     color: var(--text);
 }
 
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 36px;
+    cursor: pointer;
+}
+
+select.custom-select-source {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.custom-select {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 18px;
+    background: var(--ghost-bg);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    gap: 8px;
+}
+
+.custom-select-arrow {
+    flex-shrink: 0;
+    width: 12px;
+    height: 8px;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.custom-select.open .custom-select-arrow {
+    transform: rotate(180deg);
+}
+
+.custom-select-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    margin-top: 4px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 4px;
+    display: grid;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.custom-select-options[hidden] {
+    display: none;
+}
+
+.custom-select-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.custom-select-option:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.custom-select-option.selected {
+    background: var(--accent);
+    color: #fff;
+}
+
 textarea {
     min-height: 110px;
     resize: vertical;
@@ -467,8 +560,12 @@ button:disabled {
 }
 
 .status-line {
-    min-height: 1.4em;
+    min-height: 0;
     color: var(--muted);
+}
+
+.status-line:empty {
+    display: none;
 }
 
 .status-line.error {
@@ -492,6 +589,70 @@ button:disabled {
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+.dropdown {
+    position: relative;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    margin-top: 4px;
+    min-width: 160px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 4px;
+    display: grid;
+    gap: 2px;
+}
+
+.dropdown-menu[hidden] {
+    display: none;
+}
+
+.dropdown-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+}
+
+.dropdown-menu button:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.jobs-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.jobs-filters input[type="search"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.jobs-filters .custom-select {
+    width: auto;
+    min-width: 140px;
+}
+
+.jobs-count {
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+    align-self: center;
 }
 
 .jobs-wrap {
@@ -1157,6 +1318,7 @@ body.modal-open {
 }
 
 .schedule-rule-fields select,
+.schedule-rule-fields .custom-select,
 .schedule-rule-fields input {
     width: auto;
     min-width: 0;
@@ -1166,7 +1328,8 @@ body.modal-open {
     width: 110px;
 }
 
-.schedule-rule-fields select {
+.schedule-rule-fields select,
+.schedule-rule-fields .custom-select {
     width: 120px;
 }
 
@@ -1236,14 +1399,16 @@ body.modal-open {
 
 .toast-container {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 100;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: 8px;
     pointer-events: none;
     max-width: min(420px, calc(100vw - 32px));
+    width: max-content;
 }
 
 .toast {
@@ -1264,7 +1429,7 @@ body.modal-open {
 
 .toast-closing {
     opacity: 0;
-    transform: translateX(40px);
+    transform: translateY(-12px);
 }
 
 .toast-message {
@@ -1307,7 +1472,7 @@ body.modal-open {
 @keyframes toast-in {
     from {
         opacity: 0;
-        transform: translateY(12px) scale(0.96);
+        transform: translateY(-12px) scale(0.96);
     }
     to {
         opacity: 1;

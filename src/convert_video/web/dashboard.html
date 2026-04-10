@@ -168,13 +168,43 @@
                 <div class="jobs-header">
                     <h2>Queue</h2>
                     <div class="jobs-header-actions">
-                        <button class="ghost" type="button" id="clear-jobs"
-                            title="Remove finished jobs from the queue list. Running jobs stay in place.">Clear
-                            queue</button>
+                        <button class="ghost" type="button" id="toggle-expand-jobs"
+                            title="Expand or collapse all job details.">Collapse all</button>
+                        <div class="dropdown" id="clear-jobs-dropdown">
+                            <button class="ghost" type="button" id="clear-jobs"
+                                title="Remove jobs from the queue list.">Clear
+                                queue &#x25BE;</button>
+                            <div class="dropdown-menu" hidden>
+                                <button type="button" data-clear-mode="finished"
+                                    title="Remove succeeded, failed, cancelled and skipped jobs. Keep running and queued.">Clear
+                                    finished</button>
+                                <button type="button" data-clear-mode="queued"
+                                    title="Remove queued jobs only. Keep running and finished.">Clear queued</button>
+                                <button type="button" data-clear-mode="all"
+                                    title="Remove everything except running, paused and cancelling jobs.">Clear
+                                    all</button>
+                            </div>
+                        </div>
                         <button class="ghost" type="button" id="toggle-autorefresh"
                             title="Automatically refresh the queue every 2 seconds. Click to pause or resume.">Auto
                             refresh: on</button>
                     </div>
+                </div>
+                <div class="jobs-filters">
+                    <input id="jobs-filter-text" type="search" placeholder="Filter by filename"
+                        title="Type to filter the queue by filename.">
+                    <select id="jobs-filter-status" title="Filter the queue by job status.">
+
+                        <option value="">All statuses</option>
+                        <option value="running">Running</option>
+                        <option value="paused">Paused</option>
+                        <option value="queued">Queued</option>
+                        <option value="failed">Failed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="skipped">Skipped</option>
+                        <option value="succeeded">Succeeded</option>
+                    </select>
+                    <span class="jobs-count" id="jobs-count"></span>
                 </div>
                 <div id="jobs-container"></div>
             </section>
@@ -433,6 +463,8 @@
                             <button class="secondary" type="submit" id="watcher-button"
                                 title="Start monitoring this source directory with the current watcher settings.">Add
                                 watcher</button>
+                            <button class="ghost" type="button" id="cancel-edit-watcher"
+                                title="Cancel editing and reset the form." hidden>Cancel</button>
                         </div>
                         <div class="status-line" id="watcher-status"></div>
                     </form>

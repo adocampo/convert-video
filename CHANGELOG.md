@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-04-10
+
+### Added in 1.5.1
+
+- **Watcher editing**: existing watchers can now be edited in-place from the dashboard instead of having to remove and re-add them.
+- **Queue filters**: the queue panel now has a filename search box and a status dropdown to filter visible jobs.
+- **Collapse / Expand all**: a toggle button in the queue header collapses or expands every job card at once.
+- **Job counter**: the queue header shows a filtered/total job count.
+- **Clear queue modes**: the "Clear queue" button is now a dropdown with three options — clear finished, clear queued, or clear all.
+- **Custom dropdown selects**: all native `<select>` elements in the dashboard are replaced with styled dropdown components matching the rest of the UI.
+
+### Changed in 1.5.1
+
+- Toast notifications now appear centered at the top of the screen instead of the bottom-right corner.
+- Form status messages (queue job, pause, resume, cancel, clear, etc.) are now shown as toasts instead of inline text.
+- Active/queued jobs in the queue list now sort in submission order (ascending); finished jobs sort newest-first.
+
+### Fixed in 1.5.1
+
+- Fixed `AttributeError: 'NoneType' object has no attribute 'get'` in `check_already_converted()` when MediaInfo outputs `{"media": null}`.
+- Fixed active jobs disappearing from the dashboard when more than 50 jobs were queued (query now uses a UNION to fetch all active jobs without limit).
+- Removed empty vertical space left by unused status-line elements.
+
 ## [1.5.0] - 2026-04-09
 
 ### Added in 1.5.0
