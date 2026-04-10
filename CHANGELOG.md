@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-04-10
+
+### Added in 1.5.2
+
+- **`--install-service` flag**: new CLI option that installs the systemd user unit file for running clutch as a background service on Linux, with automatic binary path detection and daemon reload.
+
 ## [1.5.1] - 2026-04-10
 
 ### Added in 1.5.1

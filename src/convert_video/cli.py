@@ -582,6 +582,70 @@ def run_local_conversions(input_files: List[str], args, speed: str) -> dict[str,
     return summary
 
 
+SYSTEMD_UNIT_TEMPLATE = """\
+[Unit]
+Description=clutch media conversion service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={exec_start} --serve --listen-host 127.0.0.1 --listen-port 8765
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=true
+ReadWritePaths=%h/.local/state/clutch
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def install_systemd_service():
+    if sys.platform != "linux":
+        error("Systemd service installation is only supported on Linux.")
+        sys.exit(1)
+
+    unit_dir = os.path.join(os.path.expanduser("~"), ".config", "systemd", "user")
+    unit_path = os.path.join(unit_dir, "clutch.service")
+
+    clutch_bin = shutil.which("clutch")
+    if not clutch_bin:
+        clutch_bin = os.path.join(os.path.expanduser("~"), ".local", "bin", "clutch")
+
+    unit_content = SYSTEMD_UNIT_TEMPLATE.format(exec_start=clutch_bin)
+
+    os.makedirs(unit_dir, exist_ok=True)
+    with open(unit_path, "w") as f:
+        f.write(unit_content)
+    info(f"Installed systemd unit to {unit_path}")
+
+    # Remove legacy unit if present
+    legacy_path = os.path.join(unit_dir, "convert-video.service")
+    if os.path.isfile(legacy_path):
+        os.remove(legacy_path)
+        info(f"Removed legacy unit {legacy_path}")
+
+    # Reload daemon
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "daemon-reload"],
+            capture_output=True, check=True,
+        )
+        info("Reloaded systemd user daemon.")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        warning("Could not reload the systemd user daemon automatically.")
+
+    print()
+    print("  To enable and start the service:")
+    print("    systemctl --user enable --now clutch.service")
+    print("  To check its status:")
+    print("    systemctl --user status clutch.service")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Convert video files using HandBrakeCLI and preserve all audio and subtitle tracks."
@@ -679,6 +743,8 @@ def main():
                             help="Check if a newer version is available on GitHub.")
     info_group.add_argument("--upgrade", action="store_true",
                             help="Upgrade to the latest version from GitHub.")
+    info_group.add_argument("--install-service", action="store_true",
+                            help="Install the systemd user unit file for running clutch as a background service (Linux only).")
 
     args = parser.parse_args()
 
@@ -708,6 +774,10 @@ def main():
 
     if args.upgrade:
         upgrade()
+        sys.exit(0)
+
+    if args.install_service:
+        install_systemd_service()
         sys.exit(0)
 
     daily_update_state = get_update_state(force=False, quiet=True)
