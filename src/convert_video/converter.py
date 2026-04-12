@@ -463,11 +463,17 @@ def generate_unique_filename(base_name: str, extension: str, output_path: str) -
     return output_file
 
 
-def build_output_subdir(input_file: str, output_dir: str) -> str:
+def build_output_subdir(input_file: str, output_dir: str, base_dir: str = "") -> str:
     if output_dir:
-        relative_path = os.path.relpath(input_file, os.getcwd())
-        relative_dir = os.path.dirname(relative_path)
-        return os.path.join(output_dir, relative_dir)
+        abs_output = os.path.abspath(output_dir)
+        if base_dir:
+            # Preserve subdirectory structure relative to base_dir
+            abs_input_dir = os.path.dirname(os.path.abspath(input_file))
+            abs_base = os.path.abspath(base_dir)
+            rel = os.path.relpath(abs_input_dir, abs_base)
+            if rel and rel != ".":
+                return os.path.join(abs_output, rel)
+        return abs_output
     return os.path.dirname(os.path.abspath(input_file))
 
 
@@ -689,7 +695,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                    initial_progress: float = 0.0,
                    resume_existing_process: bool = False,
                    detach_when: Optional[Callable[[], bool]] = None,
-                   runtime_callback: Optional[Callable[[dict[str, object]], None]] = None) -> str:
+                   runtime_callback: Optional[Callable[[dict[str, object]], None]] = None,
+                   output_base_dir: str = "") -> str:
     thread_id = threading.get_ident()
 
     is_iso = title is not None
@@ -781,7 +788,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             ]
 
     # Determine output path and create temp file
-    output_subdir = build_output_subdir(input_file, output_dir)
+    output_subdir = build_output_subdir(input_file, output_dir, base_dir=output_base_dir)
 
     os.makedirs(output_subdir, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(input_file))[0]

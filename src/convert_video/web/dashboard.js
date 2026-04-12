@@ -69,15 +69,25 @@
     const browseInputFileButton = document.getElementById('browse-input-file');
     const browseInputDirectoryButton = document.getElementById('browse-input-directory');
     const clearInputFileButton = document.getElementById('clear-input-file');
+    const outputDirField = document.getElementById('output-dir');
+    const browseOutputDirButton = document.getElementById('browse-output-dir');
+    const clearOutputDirButton = document.getElementById('clear-output-dir');
     const formStatus = document.getElementById('form-status');
     const settingsForm = document.getElementById('settings-form');
     const allowedRootsList = document.getElementById('allowed-roots-list');
     const addAllowedRootButton = document.getElementById('add-allowed-root');
     const settingsStatus = document.getElementById('settings-status');
+    const defaultOutputDirField = document.getElementById('default-output-dir');
+    const browseDefaultOutputDirButton = document.getElementById('browse-default-output-dir');
+    const clearDefaultOutputDirButton = document.getElementById('clear-default-output-dir');
     const watcherForm = document.getElementById('watcher-form');
     const watcherDirectoryField = document.getElementById('watcher-directory');
     const browseWatcherDirectoryButton = document.getElementById('browse-watcher-directory');
     const clearWatcherDirectoryButton = document.getElementById('clear-watcher-directory');
+    const watcherOutputDirField = document.getElementById('watcher-output-dir');
+    const browseWatcherOutputDirButton = document.getElementById('browse-watcher-output-dir');
+    const clearWatcherOutputDirButton = document.getElementById('clear-watcher-output-dir');
+    const watcherOverridesDetails = document.getElementById('watcher-overrides');
     const watcherStatus = document.getElementById('watcher-status');
     const watchersContainer = document.getElementById('watchers-container');
     const submitButton = document.getElementById('submit-button');
@@ -211,6 +221,54 @@
             return job.message || 'Waiting in queue.';
         }
         return job.message || job.input_file || '';
+    }
+
+    function renderMediaSection(label, media) {
+        if (!media) return '';
+        var lines = [];
+        // General line
+        var gen = [];
+        if (media.container) gen.push(media.container);
+        if (media.duration) gen.push(media.duration);
+        if (media.bitrate) gen.push(media.bitrate);
+        if (gen.length) lines.push(`<div class="media-row"><span class="media-label">General</span> ${escapeHtml(gen.join(' · '))}</div>`);
+        // Video tracks
+        if (media.video && media.video.length) {
+            media.video.forEach(function (v) {
+                var parts = [];
+                if (v.codec) parts.push(v.codec);
+                if (v.resolution) parts.push(v.resolution);
+                if (v.fps) parts.push(v.fps + ' fps');
+                if (v.bitrate) parts.push(v.bitrate);
+                if (v.bit_depth) parts.push(v.bit_depth + '-bit');
+                lines.push(`<div class="media-row"><span class="media-label">Video</span> ${escapeHtml(parts.join(' · '))}</div>`);
+            });
+        }
+        // Audio tracks
+        if (media.audio && media.audio.length) {
+            media.audio.forEach(function (a) {
+                var parts = [];
+                if (a.codec) parts.push(a.codec);
+                if (a.channels) parts.push(a.channels);
+                if (a.bitrate) parts.push(a.bitrate);
+                if (a.lang) parts.push(a.lang);
+                if (a.title) parts.push(a.title);
+                lines.push(`<div class="media-row"><span class="media-label">Audio</span> ${escapeHtml(parts.join(' · '))}</div>`);
+            });
+        }
+        // Subtitle tracks
+        if (media.subtitles && media.subtitles.length) {
+            media.subtitles.forEach(function (s) {
+                var parts = [];
+                if (s.codec) parts.push(s.codec);
+                if (s.lang) parts.push(s.lang);
+                if (s.title) parts.push(s.title);
+                if (s.forced) parts.push('forced');
+                lines.push(`<div class="media-row"><span class="media-label">Subtitle</span> ${escapeHtml(parts.join(' · '))}</div>`);
+            });
+        }
+        if (!lines.length) return '';
+        return `<div class="job-detail job-detail-wide"><div class="job-detail-label">${escapeHtml(label)}</div><div class="job-detail-value media-info">${lines.join('')}</div></div>`;
     }
 
     var arrowSvg = '<svg class="custom-select-arrow" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -619,13 +677,30 @@
         );
     }
 
+    function setWatcherOutputDir(path) {
+        watcherOutputDirField.value = path || '';
+        watcherOutputDirField.setAttribute(
+            'title',
+            path
+                ? `Override output directory: ${path}`
+                : 'Override the output directory for files converted by this watcher.'
+        );
+    }
+
     function resetWatcherForm() {
         state.editingWatcherId = null;
         watcherForm.reset();
         setWatcherDirectory('');
+        setWatcherOutputDir('');
         watcherForm.elements.poll_interval.value = '5';
         watcherForm.elements.settle_time.value = '30';
         watcherForm.elements.delete_source.checked = settingsForm.elements.default_delete_source.checked;
+        watcherForm.elements.codec.value = '';
+        watcherForm.elements.encode_speed.value = '';
+        watcherForm.elements.audio_passthrough.checked = false;
+        watcherForm.elements.force.checked = false;
+        watcherOverridesDetails.removeAttribute('open');
+        syncAllCustomSelects();
         watcherButton.textContent = 'Add watcher';
         cancelEditWatcherButton.hidden = true;
     }
@@ -1110,6 +1185,15 @@
         } else if (state.browser.target === 'watcher_directory') {
             setWatcherDirectory(path);
             setStatus(watcherStatus, 'Source watch directory selected.', 'ok');
+        } else if (state.browser.target === 'watcher_output_directory') {
+            setWatcherOutputDir(path);
+            setStatus(watcherStatus, 'Watcher output directory selected.', 'ok');
+        } else if (state.browser.target === 'output_directory') {
+            outputDirField.value = path;
+            setFormStatus('Destination folder selected.', 'ok');
+        } else if (state.browser.target === 'default_output_directory') {
+            defaultOutputDirField.value = path;
+            setStatus(settingsStatus, 'Default destination folder selected.', 'ok');
         }
         closePathBrowser();
     }
@@ -1409,12 +1493,21 @@
         }
 
         watchersContainer.innerHTML = watchers.map(function (watcher) {
+            var overrides = [];
+            if (watcher.output_dir) overrides.push('output: ' + escapeHtml(watcher.output_dir));
+            if (watcher.codec) overrides.push('codec: ' + escapeHtml(watcher.codec));
+            if (watcher.encode_speed) overrides.push('speed: ' + escapeHtml(watcher.encode_speed));
+            if (watcher.audio_passthrough === true) overrides.push('audio passthrough');
+            if (watcher.force === true) overrides.push('force');
+            var overridesLine = overrides.length
+                ? `\n                    <div class="small" style="color:var(--accent)">overrides: ${overrides.join(' | ')}</div>`
+                : '';
             return `
                 <div class="list-item">
                     <div class="job-name" title="${escapeHtml(watcher.directory)}">${escapeHtml(watcher.directory)}</div>
-                    <div class="small">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete source: ${escapeHtml(String(Boolean(watcher.delete_source)))}</div>
+                    <div class="small">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete source: ${escapeHtml(String(Boolean(watcher.delete_source)))}</div>${overridesLine}
                     <div class="actions">
-                        <button class="inline-button" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings.">Edit</button>
+                        <button class="inline-button-warn" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings.">Edit</button>
                         <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="Stop monitoring this source directory.">Remove</button>
                     </div>
                 </div>`;
@@ -1432,6 +1525,15 @@
                     watcherForm.elements.settle_time.value = String(watcher.settle_time);
                     watcherForm.elements.recursive.checked = Boolean(watcher.recursive);
                     watcherForm.elements.delete_source.checked = Boolean(watcher.delete_source);
+                    setWatcherOutputDir(watcher.output_dir || '');
+                    watcherForm.elements.codec.value = watcher.codec || '';
+                    watcherForm.elements.encode_speed.value = watcher.encode_speed || '';
+                    watcherForm.elements.audio_passthrough.checked = Boolean(watcher.audio_passthrough);
+                    watcherForm.elements.force.checked = Boolean(watcher.force);
+                    syncAllCustomSelects();
+                    if (watcher.output_dir || watcher.codec || watcher.encode_speed || watcher.audio_passthrough != null || watcher.force != null) {
+                        watcherOverridesDetails.setAttribute('open', '');
+                    }
                     watcherButton.textContent = 'Update watcher';
                     cancelEditWatcherButton.hidden = false;
                     watcherForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1714,6 +1816,8 @@
                                 <div class="job-detail-label">Compression</div>
                                 <div class="job-detail-value">${escapeHtml(formatCompression(job.compression_percent))}</div>
                             </div>
+                            ${renderMediaSection('Source media', job.input_media)}
+                            ${renderMediaSection('Output media', job.output_media)}
                             <div class="job-detail job-detail-wide">
                                 <div class="job-detail-label">Source path</div>
                                 <div class="job-detail-value job-detail-code">${escapeHtml(job.input_file)}</div>
@@ -1961,12 +2065,19 @@
         setStatus(watcherStatus, isEditing ? 'Updating watcher...' : 'Adding watcher...');
 
         const formData = new FormData(watcherForm);
+        const codecVal = formData.get('codec') || '';
+        const speedVal = formData.get('encode_speed') || '';
         const payload = {
             directory: formData.get('directory'),
             recursive: formData.get('recursive') === 'on',
             poll_interval: Number(formData.get('poll_interval') || 5),
             settle_time: Number(formData.get('settle_time') || 30),
             delete_source: formData.get('delete_source') === 'on',
+            output_dir: (formData.get('output_dir') || '').trim(),
+            codec: codecVal,
+            encode_speed: speedVal,
+            audio_passthrough: formData.get('audio_passthrough') === 'on' ? true : null,
+            force: formData.get('force') === 'on' ? true : null,
         };
 
         try {
@@ -2076,6 +2187,51 @@
 
     clearWatcherDirectoryButton.addEventListener('click', function () {
         setWatcherDirectory('');
+    });
+
+    browseWatcherOutputDirButton.addEventListener('click', function () {
+        openPathBrowser({
+            target: 'watcher_output_directory',
+            selection: 'directory',
+            scope: 'all',
+            path: watcherOutputDirField.value || '',
+            eyebrow: 'Watcher output directory',
+            title: 'Choose an output directory for this watcher',
+        });
+    });
+
+    clearWatcherOutputDirButton.addEventListener('click', function () {
+        setWatcherOutputDir('');
+    });
+
+    browseOutputDirButton.addEventListener('click', function () {
+        openPathBrowser({
+            target: 'output_directory',
+            selection: 'directory',
+            scope: 'all',
+            path: outputDirField.value || '',
+            eyebrow: 'Destination folder',
+            title: 'Choose a destination directory',
+        });
+    });
+
+    clearOutputDirButton.addEventListener('click', function () {
+        outputDirField.value = '';
+    });
+
+    browseDefaultOutputDirButton.addEventListener('click', function () {
+        openPathBrowser({
+            target: 'default_output_directory',
+            selection: 'directory',
+            scope: 'all',
+            path: defaultOutputDirField.value || '',
+            eyebrow: 'Default destination folder',
+            title: 'Choose a default destination directory',
+        });
+    });
+
+    clearDefaultOutputDirButton.addEventListener('click', function () {
+        defaultOutputDirField.value = '';
     });
 
     browserUpButton.addEventListener('click', function () {

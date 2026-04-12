@@ -113,8 +113,19 @@
 
                         <label>
                             <span>Destination directory</span>
-                            <input name="output_dir" placeholder="/mnt/destination/converted"
-                                title="Destination directory for converted files. Leave empty to write next to each source file.">
+                            <div class="path-picker">
+                                <input id="output-dir" name="output_dir"
+                                    placeholder="Leave empty to write next to source"
+                                    title="Destination directory for converted files. Leave empty to write next to each source file."
+                                    readonly>
+                                <div class="actions">
+                                    <button class="secondary" type="button" id="browse-output-dir"
+                                        title="Browse the source and choose a destination directory.">Choose
+                                        folder</button>
+                                    <button class="ghost" type="button" id="clear-output-dir"
+                                        title="Clear the destination directory.">Clear</button>
+                                </div>
+                            </div>
                         </label>
 
                         <div class="row">
@@ -259,8 +270,18 @@
 
                         <label>
                             <span>Default destination directory</span>
-                            <input name="default_output_dir" placeholder="Leave empty to write next to source"
-                                title="Default destination directory for new jobs and watchers.">
+                            <div class="path-picker">
+                                <input id="default-output-dir" name="default_output_dir"
+                                    placeholder="Leave empty to write next to source"
+                                    title="Default destination directory for new jobs and watchers." readonly>
+                                <div class="actions">
+                                    <button class="secondary" type="button" id="browse-default-output-dir"
+                                        title="Browse the source and choose a default destination directory.">Choose
+                                        folder</button>
+                                    <button class="ghost" type="button" id="clear-default-output-dir"
+                                        title="Clear the default destination directory.">Clear</button>
+                                </div>
+                            </div>
                         </label>
 
                         <div class="row">
@@ -458,6 +479,56 @@
                                 title="Delete each source file after this watcher finishes a successful conversion."><input
                                     type="checkbox" name="delete_source">Delete source on success</label>
                         </div>
+
+                        <details class="overrides-section" id="watcher-overrides">
+                            <summary>Conversion overrides</summary>
+                            <label>
+                                <span>Output directory</span>
+                                <div class="path-picker">
+                                    <input id="watcher-output-dir" name="output_dir"
+                                        placeholder="Leave empty to use default"
+                                        title="Override the output directory for files converted by this watcher."
+                                        readonly>
+                                    <div class="actions">
+                                        <button class="secondary" type="button" id="browse-watcher-output-dir"
+                                            title="Browse and choose an output directory for this watcher.">Choose
+                                            folder</button>
+                                        <button class="ghost" type="button" id="clear-watcher-output-dir"
+                                            title="Clear the override and use the default output directory.">Clear</button>
+                                    </div>
+                                </div>
+                            </label>
+                            <div class="row">
+                                <label>
+                                    <span>Codec</span>
+                                    <select name="codec"
+                                        title="Override the encoder for this watcher. Leave on default to use the global setting.">
+                                        <option value="">Use default</option>
+                                        <option value="nvenc_h265">nvenc_h265</option>
+                                        <option value="nvenc_h264">nvenc_h264</option>
+                                        <option value="av1">av1</option>
+                                        <option value="x265">x265</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Encode speed</span>
+                                    <select name="encode_speed"
+                                        title="Override the encoding preset for this watcher. Leave on default to use the global setting.">
+                                        <option value="">Use default</option>
+                                        <option value="normal">normal</option>
+                                        <option value="slow">slow</option>
+                                        <option value="fast">fast</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="checks">
+                                <label class="check" title="Override audio passthrough for this watcher."><input
+                                        type="checkbox" name="audio_passthrough" id="watcher-audio-passthrough">Audio
+                                    passthrough</label>
+                                <label class="check" title="Override force re-encode for this watcher."><input
+                                        type="checkbox" name="force" id="watcher-force">Force re-encode</label>
+                            </div>
+                        </details>
 
                         <div class="actions">
                             <button class="secondary" type="submit" id="watcher-button"

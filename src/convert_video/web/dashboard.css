@@ -20,6 +20,7 @@
     --progress-track-bg: rgba(29, 41, 53, 0.08);
     --list-bg: rgba(255, 255, 255, 0.7);
     --danger-soft: rgba(159, 45, 45, 0.08);
+    --warn-soft: rgba(170, 109, 0, 0.08);
     --theme-toggle-bg: rgba(255, 255, 255, 0.74);
     --theme-icon-bg: rgba(13, 107, 97, 0.1);
     --queued-bg: rgba(170, 109, 0, 0.12);
@@ -52,6 +53,7 @@
     --progress-track-bg: rgba(237, 243, 240, 0.08);
     --list-bg: rgba(13, 22, 27, 0.86);
     --danger-soft: rgba(255, 139, 139, 0.12);
+    --warn-soft: rgba(239, 190, 99, 0.12);
     --theme-toggle-bg: rgba(11, 19, 23, 0.82);
     --theme-icon-bg: rgba(73, 186, 167, 0.14);
     --queued-bg: rgba(239, 190, 99, 0.16);
@@ -401,7 +403,7 @@ select.custom-select-source {
     width: 100%;
     border: 0;
     border-radius: 999px;
-    padding: 12px 18px;
+    padding: 8px 14px;
     background: var(--ghost-bg);
     color: var(--text);
     cursor: pointer;
@@ -497,6 +499,50 @@ textarea {
     margin: 0;
 }
 
+.overrides-section {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 0;
+}
+
+.overrides-section > summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.92em;
+    list-style: none;
+    user-select: none;
+}
+
+.overrides-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+.overrides-section > summary::before {
+    content: '▸ ';
+}
+
+.overrides-section[open] > summary::before {
+    content: '▾ ';
+}
+
+.overrides-section[open] > summary {
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0;
+}
+
+.overrides-section > :not(summary) {
+    padding: 0 16px;
+}
+
+.overrides-section > :not(summary):first-of-type {
+    padding-top: 14px;
+}
+
+.overrides-section > :last-child {
+    padding-bottom: 14px;
+}
+
 .actions {
     display: flex;
     gap: 10px;
@@ -529,7 +575,7 @@ textarea {
 button {
     border: 0;
     border-radius: 999px;
-    padding: 12px 18px;
+    padding: 8px 14px;
     cursor: pointer;
     transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
 }
@@ -818,6 +864,27 @@ button:disabled {
     color: var(--muted);
 }
 
+.media-info {
+    display: grid;
+    gap: 4px;
+}
+
+.media-row {
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.media-label {
+    display: inline-block;
+    min-width: 60px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    margin-right: 6px;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -900,6 +967,13 @@ button:disabled {
     font-size: 0.85rem;
     background: var(--danger-soft);
     color: var(--fail);
+}
+
+.inline-button-warn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    background: var(--warn-soft);
+    color: var(--warn);
 }
 
 .empty {

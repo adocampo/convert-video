@@ -357,6 +357,81 @@ When you use `--workers` in normal CLI mode, `clutch` runs that many local conve
 
 The configured GPU indices must be visible to the process running `clutch`. If the service only sees GPU `0`, configuring `0,1` will not make GPU `1` usable until that second GPU is also exposed to HandBrake and NVENC on that machine.
 
+### qBittorrent integration
+
+The repository includes `qbt-hardlink-to-watch.sh`, a standalone script that bridges qBittorrent downloads with clutch watchers. When a torrent finishes, the script creates hardlinks of the downloaded video files into the appropriate watch directory so clutch picks them up for conversion automatically.
+
+Using hardlinks instead of copies means:
+
+- No extra disk space is consumed.
+- qBittorrent keeps seeding normally from its own download path.
+- clutch can be configured with `--watch-dir` and `delete_source` so the hardlink is removed after conversion, without affecting the original seeding file.
+
+#### How it works
+
+1. qBittorrent calls the script when a torrent completes.
+2. The script classifies the torrent as **series** or **movie** based on the qBittorrent category and torrent name:
+   - **Series** — the category is `sonarr`, or the name contains `PACK`, `serie`, or an `S01`..`S99` season pattern (case-insensitive).
+   - **Movies** — the category is `radarr`, or everything else that does not match a series pattern.
+3. Video files (`mp4`, `mkv`, `avi`, `mov`, `ts`, `iso`, `mpg`, `mpeg`) are hardlinked into the matching watch directory.
+4. For multi-file torrents, a subfolder named after the torrent is created inside the watch directory and the files are linked there, preserving the original structure.
+
+#### Setup
+
+1. **Configure watch directories** in clutch (via the dashboard or CLI). For example:
+
+   | Watch directory        | Purpose |
+   |------------------------|---------|
+   | `/data/Downloads/Movies` | Incoming movies for conversion |
+   | `/data/Downloads/Series` | Incoming series for conversion |
+
+   Enable `delete_source` on those watchers so the hardlinks are cleaned up after conversion.
+
+2. **Edit the script variables** at the top of `qbt-hardlink-to-watch.sh` to match your paths:
+
+   ```bash
+   MOVIES_WATCH="/data/Downloads/Movies"
+   SERIES_WATCH="/data/Downloads/Series"
+   LOG_FILE="/config/qbt-hardlink-to-watch.log"   # optional, set empty to disable
+   ```
+
+3. **Register the script in qBittorrent.** Go to *Options → Downloads → Run external program on torrent finished* and enter:
+
+   ```text
+   /path/to/qbt-hardlink-to-watch.sh "%N" "%L" "%F"
+   ```
+
+   | Parameter | Meaning |
+   |-----------|---------|
+   | `%N` | Torrent name |
+   | `%L` | Category (e.g. `radarr`, `sonarr`) |
+   | `%F` | Content path (root path for multi-file torrents) |
+
+4. Make the script executable:
+
+   ```bash
+   chmod +x /path/to/qbt-hardlink-to-watch.sh
+   ```
+
+#### Typical workflow (Sonarr / Radarr → qBittorrent → clutch)
+
+```text
+Sonarr/Radarr sends download to qBittorrent
+        │
+        ▼
+qBittorrent finishes download
+        │
+        ▼
+qbt-hardlink-to-watch.sh creates hardlinks in watch dir
+        │
+        ▼
+clutch watcher detects new files and enqueues conversion
+        │
+        ▼
+Conversion completes → hardlinks removed (delete_source)
+qBittorrent originals untouched → seeding continues
+```
+
 ### Advanced options
 
 Convert with audio passthrough (no re-encoding audio):

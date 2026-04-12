@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-04-12
+
+### Added in 1.5.3
+
+- **Per-watcher conversion overrides**: each watcher can now override output directory, codec, encode speed, audio passthrough, and force re-encode independently from the global defaults.
+- **Media info in job details**: the dashboard now shows source and output media metadata (video codec, resolution, audio tracks, subtitle tracks) for each job.
+- **Subdirectory structure preservation**: when a watcher has an output directory and is recursive, the relative subfolder structure from the watched directory is mirrored in the output.
+- **Empty subdirectory cleanup**: watchers with recursive + delete_source now automatically remove empty subdirectories after each scan.
+- **qBittorrent integration script** (`qbt-hardlink-to-watch.sh`): standalone post-download script that hardlinks completed torrent video files into clutch watch directories, with automatic series/movie classification by qBittorrent category (`sonarr`/`radarr`) or torrent name patterns.
+
+### Changed in 1.5.3
+
+- Button and custom-select padding reduced for a more compact UI.
+
+### Fixed in 1.5.3
+
+- Fixed `build_output_subdir` producing invalid `../../../` paths when the input file and working directory were on different filesystem trees.
+
 ## [1.5.2] - 2026-04-10
 
 ### Added in 1.5.2

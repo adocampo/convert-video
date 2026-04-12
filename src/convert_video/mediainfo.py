@@ -68,6 +68,87 @@ def get_mediainfo_json(filepath: str) -> dict:
         return {}
 
 
+def extract_media_summary(filepath: str) -> dict:
+    """Extract a compact media summary suitable for storing in job metadata."""
+    data = get_mediainfo_json(filepath)
+    if not data:
+        return {}
+    tracks = (data.get("media") or {}).get("track") or []
+
+    general = next((t for t in tracks if t.get("@type") == "General"), None)
+    summary: dict = {}
+    if general:
+        summary["container"] = general.get("Format", "")
+        duration = general.get("Duration", "")
+        if duration:
+            summary["duration"] = _format_duration(duration)
+        bitrate = general.get("OverallBitRate", "")
+        if bitrate:
+            summary["bitrate"] = _format_bitrate(bitrate)
+
+    video_tracks = [t for t in tracks if t.get("@type") == "Video"]
+    if video_tracks:
+        vids = []
+        for t in video_tracks:
+            fmt = t.get("Format", "")
+            profile = t.get("Format_Profile", "")
+            entry: dict = {
+                "codec": f"{fmt}@{profile}" if profile else fmt,
+                "resolution": f"{t.get('Width', '?')}x{t.get('Height', '?')}",
+            }
+            fps = t.get("FrameRate", "")
+            if fps:
+                entry["fps"] = fps
+            br = t.get("BitRate", "")
+            if br:
+                entry["bitrate"] = _format_bitrate(br)
+            depth = t.get("BitDepth", "")
+            if depth:
+                entry["bit_depth"] = depth
+            vids.append(entry)
+        summary["video"] = vids
+
+    audio_tracks = [t for t in tracks if t.get("@type") == "Audio"]
+    if audio_tracks:
+        auds = []
+        for t in audio_tracks:
+            entry = {"codec": t.get("Format", "")}
+            channels = t.get("Channels", "")
+            layout = t.get("ChannelLayout", "")
+            if channels:
+                entry["channels"] = f"{channels} ch" + (f" ({layout})" if layout else "")
+            lang = t.get("Language", "")
+            if lang:
+                entry["lang"] = lang
+            br = t.get("BitRate", "")
+            if br:
+                entry["bitrate"] = _format_bitrate(br)
+            title = t.get("Title", "")
+            if title:
+                entry["title"] = title
+            auds.append(entry)
+        summary["audio"] = auds
+
+    text_tracks = [t for t in tracks if t.get("@type") == "Text"]
+    if text_tracks:
+        subs = []
+        for t in text_tracks:
+            entry = {"codec": t.get("Format", "")}
+            lang = t.get("Language", "")
+            if lang:
+                entry["lang"] = lang
+            title = t.get("Title", "")
+            if title:
+                entry["title"] = title
+            forced = t.get("Forced", "")
+            if forced and forced.lower() == "yes":
+                entry["forced"] = True
+            subs.append(entry)
+        summary["subtitles"] = subs
+
+    return summary
+
+
 def get_resolution(filepath: str) -> str:
     try:
         result = subprocess.run(

@@ -34,7 +34,7 @@ from convert_video.converter import (
     uses_nvenc_encoder,
 )
 from convert_video.iso import display_titles, is_iso_file, scan_iso, select_main_title
-from convert_video.mediainfo import VIDEO_EXTENSIONS, check_already_converted
+from convert_video.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_media_summary
 from convert_video.output import error as print_error
 from convert_video.output import info, success, warning
 from convert_video.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
@@ -116,6 +116,7 @@ class ConversionJob:
     resolution_override: Optional[str] = None
     audio_tracks: List[dict] = field(default_factory=list)
     submitted_display: str = ""
+    output_base_dir: str = ""
 
     def to_record(self) -> Dict[str, object]:
         return {
@@ -134,6 +135,7 @@ class ConversionJob:
                     "resolution_override": self.resolution_override,
                     "audio_tracks": self.audio_tracks,
                     "submitted_display": self.submitted_display,
+                    "output_base_dir": os.path.abspath(self.output_base_dir) if self.output_base_dir else "",
                 }
             ),
         }
@@ -155,6 +157,7 @@ class ConversionJob:
             resolution_override=extra.get("resolution_override"),
             audio_tracks=extra.get("audio_tracks") or [],
             submitted_display=str(extra.get("submitted_display") or "").strip(),
+            output_base_dir=str(extra.get("output_base_dir") or "").strip(),
         )
 
     @classmethod
@@ -193,6 +196,7 @@ class ConversionJob:
             resolution_override=str(payload.get("resolution_override") or "").strip() or None,
             audio_tracks=audio_tracks,
             submitted_display=submitted_display,
+            output_base_dir=str(payload.get("output_base_dir") or "").strip(),
         )
 
 
@@ -300,7 +304,12 @@ class JobStore:
                     recursive INTEGER NOT NULL,
                     poll_interval REAL NOT NULL,
                     settle_time REAL NOT NULL,
-                    delete_source INTEGER NOT NULL DEFAULT 0
+                    delete_source INTEGER NOT NULL DEFAULT 0,
+                    output_dir TEXT NOT NULL DEFAULT '',
+                    codec TEXT NOT NULL DEFAULT '',
+                    encode_speed TEXT NOT NULL DEFAULT '',
+                    audio_passthrough INTEGER,
+                    force INTEGER
                 )
                 """
             )
@@ -311,6 +320,15 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE watchers ADD COLUMN delete_source INTEGER NOT NULL DEFAULT 0"
                 )
+            for col, definition in [
+                ("output_dir", "TEXT NOT NULL DEFAULT ''"),
+                ("codec", "TEXT NOT NULL DEFAULT ''"),
+                ("encode_speed", "TEXT NOT NULL DEFAULT ''"),
+                ("audio_passthrough", "INTEGER"),
+                ("force", "INTEGER"),
+            ]:
+                if col not in watcher_columns:
+                    self._conn.execute(f"ALTER TABLE watchers ADD COLUMN {col} {definition}")
 
     def _recover_stale_jobs(self):
         recoverable = 0
@@ -396,6 +414,15 @@ class JobStore:
             input_size_bytes = os.path.getsize(record["input_file"])
         except OSError:
             input_size_bytes = 0
+        # Enrich extra_json with input media summary
+        try:
+            extra = json.loads(record["extra_json"] or "{}")
+        except json.JSONDecodeError:
+            extra = {}
+        input_summary = extract_media_summary(record["input_file"])
+        if input_summary:
+            extra["input_media"] = input_summary
+        record["extra_json"] = json.dumps(extra)
         with self._lock, self._conn:
             self._conn.execute(
                 """
@@ -447,12 +474,31 @@ class JobStore:
         record["submitted_display"] = str(extra.get("submitted_display") or "").strip() or format_display_timestamp(
             str(record.get("submitted_at") or "")
         )
+        record["input_media"] = extra.get("input_media") or None
+        record["output_media"] = extra.get("output_media") or None
         return record
 
     def get(self, job_id: str) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._hydrate_record(row) if row else None
+
+    def merge_extra_json(self, job_id: str, updates: Dict[str, object]):
+        """Merge key-value pairs into the extra_json field of a job."""
+        with self._lock:
+            row = self._conn.execute("SELECT extra_json FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not row:
+                return
+            try:
+                extra = json.loads(row["extra_json"] or "{}")
+            except json.JSONDecodeError:
+                extra = {}
+            extra.update(updates)
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE jobs SET extra_json = ? WHERE id = ?",
+                    (json.dumps(extra), job_id),
+                )
 
     def get_latest_for_input(self, input_file: str) -> Optional[Dict[str, object]]:
         normalized_input = os.path.abspath(input_file)
@@ -526,7 +572,7 @@ class JobStore:
     def list_watcher_configs(self) -> List[Dict[str, object]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, directory, recursive, poll_interval, settle_time, delete_source FROM watchers ORDER BY directory ASC"
+                "SELECT id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force FROM watchers ORDER BY directory ASC"
             ).fetchall()
         return [
             {
@@ -536,6 +582,11 @@ class JobStore:
                 "poll_interval": float(row["poll_interval"]),
                 "settle_time": float(row["settle_time"]),
                 "delete_source": bool(row["delete_source"]),
+                "output_dir": str(row["output_dir"] or ""),
+                "codec": str(row["codec"] or ""),
+                "encode_speed": str(row["encode_speed"] or ""),
+                "audio_passthrough": None if row["audio_passthrough"] is None else bool(row["audio_passthrough"]),
+                "force": None if row["force"] is None else bool(row["force"]),
             }
             for row in rows
         ]
@@ -544,14 +595,19 @@ class JobStore:
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO watchers (id, directory, recursive, poll_interval, settle_time, delete_source)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO watchers (id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     directory = excluded.directory,
                     recursive = excluded.recursive,
                     poll_interval = excluded.poll_interval,
                     settle_time = excluded.settle_time,
-                    delete_source = excluded.delete_source
+                    delete_source = excluded.delete_source,
+                    output_dir = excluded.output_dir,
+                    codec = excluded.codec,
+                    encode_speed = excluded.encode_speed,
+                    audio_passthrough = excluded.audio_passthrough,
+                    force = excluded.force
                 """,
                 (
                     str(watcher["id"]),
@@ -560,6 +616,11 @@ class JobStore:
                     float(watcher["poll_interval"]),
                     float(watcher["settle_time"]),
                     int(bool(watcher.get("delete_source", False))),
+                    str(watcher.get("output_dir") or ""),
+                    str(watcher.get("codec") or ""),
+                    str(watcher.get("encode_speed") or ""),
+                    None if watcher.get("audio_passthrough") is None else int(bool(watcher["audio_passthrough"])),
+                    None if watcher.get("force") is None else int(bool(watcher["force"])),
                 ),
             )
 
@@ -869,6 +930,11 @@ class DirectoryWatcher(threading.Thread):
         poll_interval: float,
         settle_time: float,
         delete_source: bool,
+        output_dir: str = "",
+        codec: str = "",
+        encode_speed: str = "",
+        audio_passthrough: Optional[bool] = None,
+        force: Optional[bool] = None,
     ):
         super().__init__(daemon=True)
         self.service = service
@@ -878,6 +944,11 @@ class DirectoryWatcher(threading.Thread):
         self.poll_interval = poll_interval
         self.settle_time = settle_time
         self.delete_source = delete_source
+        self.output_dir = (output_dir or "").strip()
+        self.codec = (codec or "").strip()
+        self.encode_speed = (encode_speed or "").strip()
+        self.audio_passthrough = audio_passthrough
+        self.force = force
         self.stop_event = threading.Event()
         self._observed: Dict[str, Dict[str, float]] = {}
         self._submitted = set()
@@ -891,7 +962,28 @@ class DirectoryWatcher(threading.Thread):
             "poll_interval": self.poll_interval,
             "settle_time": self.settle_time,
             "delete_source": self.delete_source,
+            "output_dir": self.output_dir,
+            "codec": self.codec,
+            "encode_speed": self.encode_speed,
+            "audio_passthrough": self.audio_passthrough,
+            "force": self.force,
         }
+
+    def _apply_overrides(self, payload: Dict[str, object]):
+        """Apply watcher-specific overrides to a job payload."""
+        payload["delete_source"] = self.delete_source
+        if self.output_dir:
+            payload["output_dir"] = self.output_dir
+            if self.recursive:
+                payload["output_base_dir"] = self.directory
+        if self.codec:
+            payload["codec"] = self.codec
+        if self.encode_speed:
+            payload["encode_speed"] = self.encode_speed
+        if self.audio_passthrough is not None:
+            payload["audio_passthrough"] = self.audio_passthrough
+        if self.force is not None:
+            payload["force"] = self.force
 
     def stop(self):
         self.stop_event.set()
@@ -930,6 +1022,18 @@ class DirectoryWatcher(threading.Thread):
                 return []
         return matches
 
+    def _prune_empty_subdirs(self):
+        """Remove empty subdirectories inside the watched directory (bottom-up)."""
+        for root, dirs, filenames in os.walk(self.directory, topdown=False):
+            if root == self.directory:
+                continue
+            try:
+                if not os.listdir(root):
+                    os.rmdir(root)
+                    info(f"Removed empty directory: {root}")
+            except OSError:
+                pass
+
     def run(self):
         info(f"Watching directory: {self.directory}")
         while not self.service.stop_event.is_set() and not self.stop_event.is_set():
@@ -962,7 +1066,7 @@ class DirectoryWatcher(threading.Thread):
                     self._submitted.add(path)
                     self._observed.pop(path, None)
                     continue
-                payload["delete_source"] = self.delete_source
+                self._apply_overrides(payload)
                 payload["input_file"] = path
                 try:
                     record = self.service.submit_job(ConversionJob.from_payload(payload, source="watch"))
@@ -975,6 +1079,9 @@ class DirectoryWatcher(threading.Thread):
             for missing in list(self._observed):
                 if missing not in current_paths:
                     self._observed.pop(missing, None)
+
+            if self.recursive and self.delete_source:
+                self._prune_empty_subdirs()
 
             self.stop_event.wait(self.poll_interval)
 
@@ -1089,6 +1196,11 @@ class ConversionService:
                     poll_interval=float(watcher_config["poll_interval"]),
                     settle_time=float(watcher_config["settle_time"]),
                     delete_source=bool(watcher_config.get("delete_source", False)),
+                    output_dir=str(watcher_config.get("output_dir") or ""),
+                    codec=str(watcher_config.get("codec") or ""),
+                    encode_speed=str(watcher_config.get("encode_speed") or ""),
+                    audio_passthrough=watcher_config.get("audio_passthrough"),
+                    force=watcher_config.get("force"),
                 )
                 self._watchers[watcher.watcher_id] = watcher
 
@@ -1452,6 +1564,11 @@ class ConversionService:
         poll_interval: float,
         settle_time: float,
         delete_source: bool = False,
+        output_dir: str = "",
+        codec: str = "",
+        encode_speed: str = "",
+        audio_passthrough: Optional[bool] = None,
+        force: Optional[bool] = None,
     ) -> Dict[str, object]:
         if not directory.strip():
             raise ValueError("Watcher directory is required.")
@@ -1465,6 +1582,11 @@ class ConversionService:
             poll_interval=poll_interval,
             settle_time=settle_time,
             delete_source=delete_source,
+            output_dir=output_dir,
+            codec=codec,
+            encode_speed=encode_speed,
+            audio_passthrough=audio_passthrough,
+            force=force,
         )
         with self._watchers_lock:
             for existing in self._watchers.values():
@@ -1491,6 +1613,11 @@ class ConversionService:
         poll_interval: float,
         settle_time: float,
         delete_source: bool = False,
+        output_dir: str = "",
+        codec: str = "",
+        encode_speed: str = "",
+        audio_passthrough: Optional[bool] = None,
+        force: Optional[bool] = None,
     ) -> Dict[str, object]:
         if not directory.strip():
             raise ValueError("Watcher directory is required.")
@@ -1512,6 +1639,11 @@ class ConversionService:
             poll_interval=poll_interval,
             settle_time=settle_time,
             delete_source=delete_source,
+            output_dir=output_dir,
+            codec=codec,
+            encode_speed=encode_speed,
+            audio_passthrough=audio_passthrough,
+            force=force,
         )
         with self._watchers_lock:
             self._watchers[watcher_id] = new_watcher
@@ -2062,6 +2194,9 @@ class ConversionService:
                     output_size_bytes = os.path.getsize(output_path)
                 except OSError:
                     output_size_bytes = 0
+                output_summary = extract_media_summary(output_path)
+                if output_summary:
+                    self.store.merge_extra_json(job_id, {"output_media": output_summary})
                 if job.delete_source:
                     try:
                         os.remove(job.input_file)
@@ -2196,6 +2331,7 @@ class ConversionService:
                     final_output_file=str(runtime.get("final_output_file") or ""),
                     resume_on_start=False,
                 ),
+                output_base_dir=job.output_base_dir,
             )
         except ConversionDetached:
             return "detached", "", "Service stopped while the conversion was still running."
@@ -2263,6 +2399,7 @@ class ConversionService:
                     final_output_file=str(runtime.get("final_output_file") or ""),
                     resume_on_start=False,
                 ),
+                output_base_dir=job.output_base_dir,
             )
         except ConversionDetached:
             return "detached", "", "Service stopped while the conversion was still running."
@@ -2546,12 +2683,20 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if path == "/watchers":
             try:
                 payload = self._read_json() if self._is_json_request() else self._read_form()
+                is_json = self._is_json_request()
+                _bool = lambda k, d=False: bool(payload.get(k, d)) if is_json else payload.get(k) == "on"
+                _nbool = lambda k: payload.get(k) if (is_json and k in payload and payload[k] is not None) else (True if not is_json and payload.get(k) == "on" else None)
                 watcher = self.server.service.add_watcher(
                     str(payload.get("directory") or "").strip(),
-                    recursive=bool(payload.get("recursive", False)) if self._is_json_request() else payload.get("recursive") == "on",
+                    recursive=_bool("recursive"),
                     poll_interval=float(payload.get("poll_interval") or 5.0),
                     settle_time=float(payload.get("settle_time") or 30.0),
-                    delete_source=bool(payload.get("delete_source", False)) if self._is_json_request() else payload.get("delete_source") == "on",
+                    delete_source=_bool("delete_source"),
+                    output_dir=str(payload.get("output_dir") or "").strip(),
+                    codec=str(payload.get("codec") or "").strip(),
+                    encode_speed=str(payload.get("encode_speed") or "").strip(),
+                    audio_passthrough=_nbool("audio_passthrough"),
+                    force=_nbool("force"),
                 )
             except json.JSONDecodeError as exc:
                 self._send_json(400, {"error": f"Invalid JSON: {exc}"})
@@ -2600,6 +2745,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             watcher_id = path.rsplit("/", 1)[-1]
             try:
                 payload = self._read_json()
+                _nbool = lambda k: payload.get(k) if (k in payload and payload[k] is not None) else None
                 watcher = self.server.service.update_watcher(
                     watcher_id,
                     str(payload.get("directory") or "").strip(),
@@ -2607,6 +2753,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                     poll_interval=float(payload.get("poll_interval") or 5.0),
                     settle_time=float(payload.get("settle_time") or 30.0),
                     delete_source=bool(payload.get("delete_source", False)),
+                    output_dir=str(payload.get("output_dir") or "").strip(),
+                    codec=str(payload.get("codec") or "").strip(),
+                    encode_speed=str(payload.get("encode_speed") or "").strip(),
+                    audio_passthrough=_nbool("audio_passthrough"),
+                    force=_nbool("force"),
                 )
             except json.JSONDecodeError as exc:
                 self._send_json(400, {"error": f"Invalid JSON: {exc}"})
