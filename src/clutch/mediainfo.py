@@ -3,7 +3,7 @@ import os
 import subprocess
 from typing import List
 
-from convert_video.output import info, warning, error, skip
+from clutch.output import info, warning, error, skip
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.ts', '.iso')
 
@@ -66,6 +66,21 @@ def get_mediainfo_json(filepath: str) -> dict:
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         error(f"Error getting media info for {filepath}: {e}")
         return {}
+
+
+def get_media_duration_seconds(filepath: str) -> float:
+    """Return the duration in seconds of a media file, or 0.0 if unknown."""
+    data = get_mediainfo_json(filepath)
+    if not data:
+        return 0.0
+    tracks = (data.get("media") or {}).get("track") or []
+    general = next((t for t in tracks if t.get("@type") == "General"), None)
+    if not general:
+        return 0.0
+    try:
+        return float(general.get("Duration", 0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def extract_media_summary(filepath: str) -> dict:

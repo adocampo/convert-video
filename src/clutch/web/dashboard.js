@@ -1572,9 +1572,14 @@
                 return leftRank - rightRank;
             }
 
-            // Active/queued jobs: oldest first (queue order)
+            // Active/queued jobs: oldest first (queue order), queued respect priority
             var activeStatuses = { running: 1, paused: 1, cancelling: 1, queued: 1 };
             if (Object.prototype.hasOwnProperty.call(activeStatuses, left.status)) {
+                var leftPri = left.priority || 0;
+                var rightPri = right.priority || 0;
+                if (left.status === 'queued' && right.status === 'queued' && leftPri !== rightPri) {
+                    return rightPri - leftPri;  // higher priority first
+                }
                 const leftTime = String(left.submitted_at || '');
                 const rightTime = String(right.submitted_at || '');
                 return leftTime.localeCompare(rightTime);
@@ -1770,6 +1775,9 @@
             const cancelButton = (job.status === 'queued' || job.status === 'running' || job.status === 'paused')
                 ? `<button class="inline-button" type="button" data-cancel-id="${job.id}" title="Request cancellation for this job.">Cancel job</button>`
                 : '';
+            const moveNextButton = job.status === 'queued'
+                ? `<button class="secondary" type="button" data-move-next-id="${job.id}" title="Promote this job so it converts next.">Convert next</button>`
+                : '';
             const retryButton = (job.status === 'failed' || job.status === 'cancelled')
                 ? `<button class="secondary" type="button" data-retry-id="${job.id}" title="Queue this job again with the same settings.">Retry job</button>`
                 : '';
@@ -1832,7 +1840,7 @@
                                 <div class="job-detail-value job-detail-code">${escapeHtml(job.message || 'No extra message.')}</div>
                             </div>
                         </div>
-                        ${(pauseButton || cancelButton || retryButton || clearButton) ? `<div class="actions">${pauseButton}${cancelButton}${retryButton}${clearButton}</div>` : ''}
+                        ${(pauseButton || cancelButton || retryButton || clearButton || moveNextButton) ? `<div class="actions">${moveNextButton}${pauseButton}${cancelButton}${retryButton}${clearButton}</div>` : ''}
                     </div>
                 </details>`;
         }).join('');
@@ -1955,6 +1963,25 @@
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
                         button.textContent = 'Retry job';
+                    }
+                });
+            }
+        );
+
+        Array.prototype.forEach.call(
+            jobsContainer.querySelectorAll('[data-move-next-id]'),
+            function (button) {
+                button.addEventListener('click', async function () {
+                    button.disabled = true;
+                    button.textContent = 'Moving...';
+                    try {
+                        await fetchJson(`/jobs/${button.dataset.moveNextId}/move-next`, { method: 'POST' });
+                        setFormStatus('Job promoted to convert next.', 'ok');
+                        await refreshJobs();
+                    } catch (error) {
+                        setFormStatus(error.message, 'error');
+                        button.disabled = false;
+                        button.textContent = 'Convert next';
                     }
                 });
             }

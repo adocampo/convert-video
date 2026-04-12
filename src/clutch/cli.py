@@ -14,23 +14,23 @@ import time
 from typing import List
 from tqdm import tqdm
 
-from convert_video import APP_NAME, get_version
-from convert_video.output import info, warning, error, deleted, skip, success
-from convert_video.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
-from convert_video.converter import (
+from clutch import APP_NAME, get_version
+from clutch.output import info, warning, error, deleted, skip, success
+from clutch.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
+from clutch.converter import (
     install_signal_handlers, convert_video, confirm_prompt, poweroff_with_countdown,
     find_existing_converted_output, parse_gpu_devices, request_all_conversion_stops,
 )
-from convert_video.service import build_service_db_path, run_service, submit_remote_job
-from convert_video.scheduler import parse_schedule_rule
-from convert_video.updater import (
+from clutch.service import build_service_db_path, run_service, submit_remote_job
+from clutch.scheduler import parse_schedule_rule
+from clutch.updater import (
     check_for_updates,
     get_update_changelog,
     get_update_state,
     mark_cli_notice_shown,
     upgrade,
 )
-from convert_video.iso import is_iso_file, scan_iso, select_main_title, display_titles
+from clutch.iso import is_iso_file, scan_iso, select_main_title, display_titles
 
 install_signal_handlers()
 
@@ -128,7 +128,7 @@ class MultiProgressRenderer:
             if started_at is not None:
                 elapsed_text = tqdm.format_interval(time.monotonic() - float(started_at))
 
-            from convert_video.output import (
+            from clutch.output import (
                 GREEN_COLOR, RED_COLOR, BLUE_COLOR, YELLOW_COLOR, RESET_COLOR,
             )
             if status == "succeeded":

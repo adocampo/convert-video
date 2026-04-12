@@ -15,9 +15,11 @@ from typing import Callable, Dict, List, Optional
 from urllib import error, request
 from urllib.parse import parse_qs, quote, urlparse
 
-from convert_video import APP_NAME, build_state_dir, get_version
-from convert_video.converter import (
+from clutch import APP_NAME, build_state_dir, get_version
+from clutch.converter import (
     ConversionDetached,
+    RESUME_MIN_DURATION,
+    RESUME_SAFETY_MARGIN,
     clear_current_conversion_state,
     convert_video,
     find_existing_converted_output,
@@ -33,12 +35,12 @@ from convert_video.converter import (
     request_current_conversion_stop,
     uses_nvenc_encoder,
 )
-from convert_video.iso import display_titles, is_iso_file, scan_iso, select_main_title
-from convert_video.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_media_summary
-from convert_video.output import error as print_error
-from convert_video.output import info, success, warning
-from convert_video.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
-from convert_video.updater import get_update_state, install_latest_version, mark_update_installed
+from clutch.iso import display_titles, is_iso_file, scan_iso, select_main_title
+from clutch.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_media_summary, get_media_duration_seconds
+from clutch.output import error as print_error
+from clutch.output import info, success, warning
+from clutch.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
+from clutch.updater import get_update_state, install_latest_version, mark_update_installed
 
 
 def utc_now() -> str:
@@ -71,11 +73,11 @@ def format_eta(seconds: float) -> str:
 
 
 def read_web_asset(name: str) -> str:
-    return files("convert_video.web").joinpath(name).read_text(encoding="utf-8")
+    return files("clutch.web").joinpath(name).read_text(encoding="utf-8")
 
 
 def read_web_asset_bytes(name: str) -> bytes:
-    return files("convert_video.web").joinpath(name).read_bytes()
+    return files("clutch.web").joinpath(name).read_bytes()
 
 
 def normalize_path(path: str) -> str:
@@ -270,6 +272,10 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE jobs ADD COLUMN resume_on_start INTEGER NOT NULL DEFAULT 0"
                 )
+            if "priority" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS service_config (
@@ -330,6 +336,22 @@ class JobStore:
                 if col not in watcher_columns:
                     self._conn.execute(f"ALTER TABLE watchers ADD COLUMN {col} {definition}")
 
+    def _remove_temp_artifacts(self, record: Dict[str, object]):
+        """Physically delete temp file and its companion progress log from disk."""
+        for key in ("temp_file", "log_file"):
+            path = str(record.get(key) or "").strip()
+            if not path:
+                continue
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            progress_log = f"{path}.progress.log"
+            try:
+                os.remove(progress_log)
+            except OSError:
+                pass
+
     def _recover_stale_jobs(self):
         recoverable = 0
         requeued = 0
@@ -345,6 +367,7 @@ class JobStore:
 
                 if status == "cancelling":
                     request_conversion_stop_by_pid(record.get("process_id"))
+                    self._remove_temp_artifacts(record)
                     self._conn.execute(
                         """
                         UPDATE jobs
@@ -371,6 +394,45 @@ class JobStore:
                     recoverable += 1
                     continue
 
+                # Check if the partial temp file has enough content to resume
+                temp_file = str(record.get("temp_file") or "").strip()
+                partial_duration = 0.0
+                if temp_file and os.path.isfile(temp_file):
+                    try:
+                        partial_duration = get_media_duration_seconds(temp_file)
+                    except Exception:
+                        partial_duration = 0.0
+
+                if partial_duration > RESUME_MIN_DURATION:
+                    # Keep the partial temp file for resume — only clear runtime state
+                    resume_offset = max(0.0, partial_duration - RESUME_SAFETY_MARGIN)
+                    self._conn.execute(
+                        """
+                        UPDATE jobs
+                        SET status = 'queued',
+                            started_at = NULL,
+                            finished_at = NULL,
+                            progress_percent = 0,
+                            output_size_bytes = 0,
+                            output_file = NULL,
+                            process_id = NULL,
+                            log_file = NULL,
+                            final_output_file = NULL,
+                            resume_on_start = 0,
+                            message = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            f"Service recovered: partial encode ({partial_duration:.0f}s) will resume from {resume_offset:.0f}s.",
+                            job_id,
+                        ),
+                    )
+                    info(f"[{job_id[:8]}] Keeping partial encode ({partial_duration:.0f}s) for resume.")
+                    requeued += 1
+                    continue
+
+                # No usable partial — clean up and requeue from scratch
+                self._remove_temp_artifacts(record)
                 self._conn.execute(
                     """
                     UPDATE jobs
@@ -672,10 +734,26 @@ class JobStore:
             if record_has_recoverable_runtime(record)
         ]
 
+    def set_priority(self, job_id: str, priority: int) -> Optional[Dict[str, object]]:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE jobs SET priority = ? WHERE id = ? AND status = 'queued'", (priority, job_id))
+        return self.get(job_id)
+
+    def move_to_next(self, job_id: str) -> Optional[Dict[str, object]]:
+        """Set the given job's priority so it will be picked next."""
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT MAX(priority) as max_p FROM jobs WHERE status = 'queued'").fetchone()
+            max_priority = int(row["max_p"] or 0) if row else 0
+            self._conn.execute(
+                "UPDATE jobs SET priority = ? WHERE id = ? AND status = 'queued'",
+                (max_priority + 1, job_id),
+            )
+        return self.get(job_id)
+
     def claim_next(self) -> Optional[Dict[str, object]]:
         with self._lock, self._conn:
             row = self._conn.execute(
-                "SELECT id FROM jobs WHERE status = 'queued' ORDER BY submitted_at ASC LIMIT 1"
+                "SELECT id FROM jobs WHERE status = 'queued' ORDER BY priority DESC, submitted_at ASC LIMIT 1"
             ).fetchone()
             if not row:
                 return None
@@ -823,12 +901,18 @@ class JobStore:
             )
         return self.get(job_id)
 
-    def set_resume_on_start(self, job_id: str, enabled: bool) -> Optional[Dict[str, object]]:
+    def set_resume_on_start(self, job_id: str, enabled: bool, message: str = "") -> Optional[Dict[str, object]]:
         with self._lock, self._conn:
-            self._conn.execute(
-                "UPDATE jobs SET resume_on_start = ? WHERE id = ?",
-                (int(bool(enabled)), job_id),
-            )
+            if message:
+                self._conn.execute(
+                    "UPDATE jobs SET resume_on_start = ?, message = ? WHERE id = ?",
+                    (int(bool(enabled)), message, job_id),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE jobs SET resume_on_start = ? WHERE id = ?",
+                    (int(bool(enabled)), job_id),
+                )
         return self.get(job_id)
 
     def cancel(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -1124,6 +1208,7 @@ class ConversionService:
         self._active_jobs: Dict[str, int] = {}
         self._job_control_lock = threading.Lock()
         self._cancel_requested_jobs: set[str] = set()
+        self._pause_detach_jobs: set[str] = set()
         self._recoverable_job_ids: List[str] = []
         self._recoverable_jobs_lock = threading.Lock()
         self._loaded_persisted_state = False
@@ -1300,7 +1385,13 @@ class ConversionService:
             try:
                 os.remove(path)
             except OSError:
-                continue
+                pass
+            # Also remove the companion .progress.log created by the converter
+            progress_log = f"{path}.progress.log"
+            try:
+                os.remove(progress_log)
+            except OSError:
+                pass
 
     def _normalize_worker_count(self, value: object) -> int:
         try:
@@ -2059,6 +2150,10 @@ class ConversionService:
         paused = self.store.pause(job_id, "Paused manually.", resume_on_start=False)
         if not paused and active_thread_id is not None:
             request_current_conversion_resume(active_thread_id)
+            return paused
+        if paused and active_thread_id is not None:
+            with self._job_control_lock:
+                self._pause_detach_jobs.add(job_id)
         return paused
 
     def _request_running_job_resume(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -2075,14 +2170,13 @@ class ConversionService:
         if active_thread_id is None:
             if not record_has_recoverable_runtime(record):
                 raise ValueError("Paused job is no longer attached to an active worker.")
-            resumed = self.store.resume(
-                job_id,
-                "Waiting for a worker to resume the paused conversion.",
-                resume_on_start=True,
+            # Keep status as "paused" — the worker will set "running" when it picks this up.
+            result = self.store.set_resume_on_start(
+                job_id, True,
+                message="Waiting for a worker to resume the paused conversion.",
             )
-            if resumed:
-                self._enqueue_recoverable_job(job_id)
-            return resumed
+            self._enqueue_recoverable_job(job_id)
+            return result
         if not request_current_conversion_resume(active_thread_id):
             raise ValueError("Could not resume the active HandBrake process.")
 
@@ -2118,6 +2212,19 @@ class ConversionService:
             self._cancel_requested_jobs.remove(job_id)
             return True
 
+    def _consume_pause_detach(self, job_id: str) -> bool:
+        with self._job_control_lock:
+            if job_id not in self._pause_detach_jobs:
+                return False
+            self._pause_detach_jobs.discard(job_id)
+            return True
+
+    def _should_detach(self, job_id: str) -> bool:
+        if self.stop_event.is_set():
+            return True
+        with self._job_control_lock:
+            return job_id in self._pause_detach_jobs
+
     def _set_active_job(self, job_id: Optional[str]):
         if job_id is None:
             return
@@ -2128,6 +2235,7 @@ class ConversionService:
         with self._job_control_lock:
             self._active_jobs.pop(job_id, None)
             self._cancel_requested_jobs.discard(job_id)
+            self._pause_detach_jobs.discard(job_id)
 
     def _worker_loop(self, worker_id: str, worker_stop_event: threading.Event):
         info(f"Worker thread started: {worker_id}")
@@ -2284,7 +2392,7 @@ class ConversionService:
         existing_process_id = int(record.get("process_id") or 0) or None
         if existing_process_id:
             if record.get("status") == "paused" and bool(record.get("resume_on_start")):
-                self.store.resume(job_id, "Resuming conversion after service restart.", resume_on_start=False)
+                self.store.resume(job_id, "Resuming paused conversion.", resume_on_start=False)
             else:
                 self.store.set_resume_on_start(job_id, False)
 
@@ -2302,6 +2410,23 @@ class ConversionService:
         if gpu_device is not None:
             info(f"[{job_id[:8]}] Using NVENC GPU {gpu_device}")
 
+        # Detect resumable partial encode: temp file exists but process is dead
+        resume_partial = ""
+        resume_offset = 0.0
+        temp_file = str(record.get("temp_file") or "").strip()
+        if temp_file and not existing_process_id and os.path.isfile(temp_file):
+            try:
+                partial_dur = get_media_duration_seconds(temp_file)
+                if partial_dur > RESUME_MIN_DURATION:
+                    resume_partial = temp_file
+                    resume_offset = max(0.0, partial_dur - RESUME_SAFETY_MARGIN)
+                    info(f"[{job_id[:8]}] Resuming from partial encode ({partial_dur:.0f}s, offset {resume_offset:.0f}s)")
+                else:
+                    self._remove_temp_artifacts(record)
+            except Exception as exc:
+                warning(f"[{job_id[:8]}] Could not probe partial encode, starting fresh: {exc}")
+                self._remove_temp_artifacts(record)
+
         try:
             output_path = convert_video(
                 job.input_file,
@@ -2318,11 +2443,11 @@ class ConversionService:
                 progress_callback=self._build_progress_callback(job_id),
                 progress_log_path=str(record.get("log_file") or ""),
                 existing_process_id=existing_process_id,
-                existing_temp_file=str(record.get("temp_file") or ""),
+                existing_temp_file=str(record.get("temp_file") or "") if not resume_partial else "",
                 existing_output_file=str(record.get("final_output_file") or ""),
                 initial_progress=float(record.get("progress_percent") or 0.0),
                 resume_existing_process=bool(record.get("resume_on_start")),
-                detach_when=self.stop_event.is_set,
+                detach_when=lambda: self._should_detach(job_id),
                 runtime_callback=lambda runtime: self.store.set_runtime(
                     job_id,
                     process_id=runtime.get("process_id"),
@@ -2332,15 +2457,26 @@ class ConversionService:
                     resume_on_start=False,
                 ),
                 output_base_dir=job.output_base_dir,
+                resume_partial_file=resume_partial,
+                resume_offset_seconds=resume_offset,
             )
         except ConversionDetached:
+            if self._consume_pause_detach(job_id):
+                self._wake_event.set()
+                return "detached", "", "Paused and detached from worker."
             return "detached", "", "Service stopped while the conversion was still running."
         if output_path:
             return "succeeded", output_path, "Conversion successful."
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
+        if self._consume_pause_detach(job_id):
+            self._wake_event.set()
+            return "detached", "", "Paused and detached from worker."
         if self.stop_event.is_set():
             return "detached", "", "Service stopped while the conversion was still running."
+        # If this was a resume attempt that failed to join, requeue for fresh encode
+        if resume_partial:
+            return "queued", "", "Resume join failed — re-encoding from the beginning."
         return "failed", "", "Conversion failed."
 
     def _execute_iso_job(self, job_id: str, job: ConversionJob, record: Dict[str, object]) -> tuple[str, str, str]:
@@ -2350,7 +2486,7 @@ class ConversionService:
         existing_process_id = int(record.get("process_id") or 0) or None
         if existing_process_id:
             if record.get("status") == "paused" and bool(record.get("resume_on_start")):
-                self.store.resume(job_id, "Resuming conversion after service restart.", resume_on_start=False)
+                self.store.resume(job_id, "Resuming paused conversion.", resume_on_start=False)
             else:
                 self.store.set_resume_on_start(job_id, False)
 
@@ -2370,6 +2506,24 @@ class ConversionService:
         gpu_device = self._select_gpu_device(job.codec, job.encode_speed)
         if gpu_device is not None:
             info(f"[{job_id[:8]}] Using NVENC GPU {gpu_device}")
+
+        # Detect resumable partial encode for ISO jobs
+        resume_partial = ""
+        resume_offset = 0.0
+        temp_file = str(record.get("temp_file") or "").strip()
+        if temp_file and not existing_process_id and os.path.isfile(temp_file):
+            try:
+                partial_dur = get_media_duration_seconds(temp_file)
+                if partial_dur > RESUME_MIN_DURATION:
+                    resume_partial = temp_file
+                    resume_offset = max(0.0, partial_dur - RESUME_SAFETY_MARGIN)
+                    info(f"[{job_id[:8]}] Resuming from partial encode ({partial_dur:.0f}s, offset {resume_offset:.0f}s)")
+                else:
+                    self._remove_temp_artifacts(record)
+            except Exception as exc:
+                warning(f"[{job_id[:8]}] Could not probe partial encode, starting fresh: {exc}")
+                self._remove_temp_artifacts(record)
+
         try:
             output_path = convert_video(
                 job.input_file,
@@ -2386,11 +2540,11 @@ class ConversionService:
                 progress_callback=self._build_progress_callback(job_id),
                 progress_log_path=str(record.get("log_file") or ""),
                 existing_process_id=existing_process_id,
-                existing_temp_file=str(record.get("temp_file") or ""),
+                existing_temp_file=str(record.get("temp_file") or "") if not resume_partial else "",
                 existing_output_file=str(record.get("final_output_file") or ""),
                 initial_progress=float(record.get("progress_percent") or 0.0),
                 resume_existing_process=bool(record.get("resume_on_start")),
-                detach_when=self.stop_event.is_set,
+                detach_when=lambda: self._should_detach(job_id),
                 runtime_callback=lambda runtime: self.store.set_runtime(
                     job_id,
                     process_id=runtime.get("process_id"),
@@ -2400,15 +2554,25 @@ class ConversionService:
                     resume_on_start=False,
                 ),
                 output_base_dir=job.output_base_dir,
+                resume_partial_file=resume_partial,
+                resume_offset_seconds=resume_offset,
             )
         except ConversionDetached:
+            if self._consume_pause_detach(job_id):
+                self._wake_event.set()
+                return "detached", "", "Paused and detached from worker."
             return "detached", "", "Service stopped while the conversion was still running."
         if output_path:
             return "succeeded", output_path, "Conversion successful."
         if self._consume_cancel_request(job_id):
             return "cancelled", "", "Cancelled from the web UI."
+        if self._consume_pause_detach(job_id):
+            self._wake_event.set()
+            return "detached", "", "Paused and detached from worker."
         if self.stop_event.is_set():
             return "detached", "", "Service stopped while the conversion was still running."
+        if resume_partial:
+            return "queued", "", "Resume join failed — re-encoding from the beginning."
         return "failed", "", "Conversion failed."
 
 
@@ -2641,6 +2805,30 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 return
             if not record:
                 self._send_json(409, {"error": "Job cannot be resumed."})
+                return
+            self._send_json(200, record)
+            return
+
+        if path.startswith("/jobs/") and path.endswith("/move-next"):
+            job_id = path[:-len("/move-next")].rsplit("/", 1)[-1]
+            record = self.server.service.store.move_to_next(job_id)
+            if not record:
+                self._send_json(404, {"error": "Job not found."})
+                return
+            self._send_json(200, record)
+            return
+
+        if path.startswith("/jobs/") and path.endswith("/priority"):
+            job_id = path[:-len("/priority")].rsplit("/", 1)[-1]
+            try:
+                payload = self._read_json()
+                priority = int(payload["priority"])
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                self._send_json(400, {"error": "JSON body with integer 'priority' required."})
+                return
+            record = self.server.service.store.set_priority(job_id, priority)
+            if not record:
+                self._send_json(404, {"error": "Job not found."})
                 return
             self._send_json(200, record)
             return

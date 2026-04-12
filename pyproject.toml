@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clutch"
-version = "1.5.3"
+version = "1.5.4"
 description = "Clutch transcodes video files through HandBrakeCLI with smart codec detection"
 readme = "README.md"
 license = "MIT"
@@ -14,10 +14,10 @@ dependencies = [
 ]
 
 [project.scripts]
-clutch = "convert_video.cli:main"
+clutch = "clutch.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"convert_video.web" = ["*.html", "*.css", "*.js", "*.png", "*.ico"]
+"clutch.web" = ["*.html", "*.css", "*.js", "*.png", "*.ico"]

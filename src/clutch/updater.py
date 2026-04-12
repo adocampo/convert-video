@@ -9,8 +9,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-from convert_video import APP_NAME, GITHUB_REPO, LEGACY_APP_NAME, build_state_dir, get_version
-from convert_video.output import info, error
+from clutch import APP_NAME, GITHUB_REPO, LEGACY_APP_NAME, build_state_dir, get_version
+from clutch.output import info, error
 
 _UPDATE_STATE_LOCK = threading.Lock()
 

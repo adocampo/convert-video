@@ -16,10 +16,10 @@ from typing import Callable, Optional
 
 from tqdm import tqdm
 
-from convert_video.output import (
+from clutch.output import (
     info, warning, error, success, skip,
 )
-from convert_video.mediainfo import check_already_converted, get_resolution, get_audio_info
+from clutch.mediainfo import check_already_converted, get_resolution, get_audio_info
 
 # Global references for cleanup on signal
 _STATE_UNSET = object()
@@ -251,8 +251,7 @@ def handle_sigint(signum, frame):
                 if state.get("temp_file")
             ]
         for temp_file in temp_files:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            _remove_temp_and_log(temp_file)
         os._exit(1)
 
     # Single Ctrl+C — skip current file
@@ -461,6 +460,45 @@ def generate_unique_filename(base_name: str, extension: str, output_path: str) -
         base_name += f" ({counter})"
         output_file = os.path.join(output_path, f"{base_name}.{extension}")
     return output_file
+
+
+def _remove_temp_and_log(temp_filepath: str):
+    """Remove a temp file and its companion .progress.log from disk."""
+    for path in (temp_filepath, f"{temp_filepath}.progress.log"):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _cleanup_sibling_temps(final_output: str, base_name: str, output_dir: str):
+    """Remove orphaned .tmp. files for the same base name after a successful conversion."""
+    if not output_dir or not os.path.isdir(output_dir):
+        return
+    prefix = f"{base_name}.tmp."
+    for entry in os.scandir(output_dir):
+        if entry.is_file() and entry.name.startswith(prefix) and entry.path != final_output:
+            try:
+                os.remove(entry.path)
+            except OSError:
+                pass
+
+
+RESUME_MIN_DURATION = 60.0
+RESUME_SAFETY_MARGIN = 5.0
+
+
+def _join_with_mkvmerge(partial_file: str, remainder_file: str, output_file: str) -> bool:
+    """Join a partial encode with its remainder using mkvmerge append mode."""
+    try:
+        result = subprocess.run(
+            ["mkvmerge", "-o", output_file, partial_file, "+", remainder_file],
+            capture_output=True, text=True,
+        )
+        # mkvmerge returns 0 on success, 1 on warnings (still OK)
+        return result.returncode in (0, 1)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
 
 
 def build_output_subdir(input_file: str, output_dir: str, base_dir: str = "") -> str:
@@ -696,10 +734,13 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                    resume_existing_process: bool = False,
                    detach_when: Optional[Callable[[], bool]] = None,
                    runtime_callback: Optional[Callable[[dict[str, object]], None]] = None,
-                   output_base_dir: str = "") -> str:
+                   output_base_dir: str = "",
+                   resume_partial_file: str = "",
+                   resume_offset_seconds: float = 0.0) -> str:
     thread_id = threading.get_ident()
 
     is_iso = title is not None
+    is_resume = bool(resume_partial_file and resume_offset_seconds > 0)
 
     if resolution_override:
         resolution = resolution_override
@@ -721,7 +762,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     elif is_iso:
         # For ISO sources mediainfo cannot inspect tracks;
         # use audio info gathered during the scan to set per-track mixdown.
-        from convert_video.iso import _channels_to_mixdown
+        from clutch.iso import _channels_to_mixdown
         if audio_tracks:
             track_list = []
             encoder_list = []
@@ -828,6 +869,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         "--all-subtitles",
         "-f", "mkv",
     ]
+    if is_resume:
+        hb_params.extend(["--start-at", f"duration:{resume_offset_seconds:.3f}"])
     if title is not None:
         hb_params += ["--title", str(title)]
     hb_params += audio_params
@@ -1019,8 +1062,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         # Check if this conversion was interrupted by Ctrl+C
         if _is_conversion_interrupted(thread_id):
             _clear_conversion_interrupt(thread_id)
-            if os.path.exists(temp_filepath):
-                os.remove(temp_filepath)
+            _remove_temp_and_log(temp_filepath)
             _update_conversion_state(
                 thread_id,
                 temp_file=None,
@@ -1036,7 +1078,39 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             return ""
 
         if conversion_succeeded:
-            shutil.move(temp_filepath, final_output)
+            if is_resume:
+                # Join the partial file with the freshly-encoded remainder
+                joined_temp = f"{temp_filepath}.joined"
+                try:
+                    join_ok = _join_with_mkvmerge(resume_partial_file, temp_filepath, joined_temp)
+                except Exception:
+                    join_ok = False
+                if join_ok:
+                    _remove_temp_and_log(resume_partial_file)
+                    _remove_temp_and_log(temp_filepath)
+                    try:
+                        shutil.move(joined_temp, final_output)
+                    except OSError:
+                        join_ok = False
+                if not join_ok:
+                    # Stitching failed — clean up and signal requeue for fresh encode
+                    _remove_temp_and_log(resume_partial_file)
+                    _remove_temp_and_log(temp_filepath)
+                    try:
+                        os.remove(joined_temp)
+                    except OSError:
+                        pass
+                    if emit_logs:
+                        warning("Could not join partial files — will re-encode from the beginning.")
+                    _update_conversion_state(
+                        thread_id, temp_file=None, process=None, pid=None,
+                        interrupted=False, paused=False, paused_at=None, paused_seconds=0.0,
+                    )
+                    report_progress(0.0, "Join failed, re-encoding from the beginning.")
+                    return ""
+            else:
+                shutil.move(temp_filepath, final_output)
+                _remove_temp_and_log(temp_filepath)  # clean up the progress log
             _update_conversion_state(
                 thread_id,
                 temp_file=None,
@@ -1048,17 +1122,21 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 paused_seconds=0.0,
             )
             if emit_logs:
-                if elapsed_text:
+                if is_resume:
+                    success(f"Resumed conversion joined successfully: {os.path.basename(final_output)}")
+                elif elapsed_text:
                     success(f"Conversion successful [{elapsed_text}]")
                 else:
                     success(f"Conversion successful: {os.path.basename(final_output)}")
             # Preserve audio track titles from original file
             preserve_audio_titles(input_file, final_output, emit_logs=emit_logs)
+            # Clean up any orphaned temp files from previous attempts
+            base_name = os.path.splitext(os.path.basename(input_file))[0]
+            _cleanup_sibling_temps(final_output, base_name, os.path.dirname(final_output))
             report_progress(100.0, "Conversion successful.")
             return final_output
         else:
-            if os.path.exists(temp_filepath):
-                os.remove(temp_filepath)
+            _remove_temp_and_log(temp_filepath)
             _update_conversion_state(
                 thread_id,
                 temp_file=None,
@@ -1083,8 +1161,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     except FileNotFoundError:
         if emit_logs:
             error("HandBrakeCLI not found.")
-        if os.path.exists(temp_filepath):
-            os.remove(temp_filepath)
+        _remove_temp_and_log(temp_filepath)
         _update_conversion_state(
             thread_id,
             temp_file=None,
@@ -1100,8 +1177,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     except subprocess.CalledProcessError as e:
         if emit_logs:
             error(f"Error during conversion: {e}")
-        if os.path.exists(temp_filepath):
-            os.remove(temp_filepath)
+        _remove_temp_and_log(temp_filepath)
         _update_conversion_state(
             thread_id,
             temp_file=None,

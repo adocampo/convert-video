@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.4] - 2026-04-13
+
+### Added in 1.5.4
+
+- **Queue reordering**: queued jobs now have a priority field; a "Convert next" button in the dashboard promotes any queued job to the front of the queue.
+- **Pause releases worker**: pausing a running conversion now detaches the worker so it can immediately pick up the next queued job, instead of blocking until the paused job is resumed.
+- **Conversion resume from partial encodes**: if a conversion is interrupted (power loss, service restart) and a partial temp file exists, the encoder resumes from where it left off using HandBrake `--start-at` and joins the segments with `mkvmerge`.
+
+### Changed in 1.5.4
+
+- **Package renamed** from `convert_video` to `clutch` to match the project name. All internal imports updated.
+- Resuming a paused-detached job no longer falsely shows it as "running" until a worker is actually free to pick it up.
+
+### Fixed in 1.5.4
+
+- Fixed accumulated `.progress.log` and `.tmp.mkv` files never being cleaned up after conversion or recovery.
+- Fixed `[Errno 2] FileNotFoundError` race condition when deleting temp files on network storage (TOCTOU replaced with try/except).
+- Fixed orphaned temp files from previous conversion attempts not being removed on success.
+- Fixed resume-join failure permanently marking the job as failed instead of requeuing for a fresh encode.
+
 ## [1.5.3] - 2026-04-12
 
 ### Added in 1.5.3

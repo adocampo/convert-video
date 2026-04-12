@@ -9,10 +9,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from convert_video import build_state_dir
-from convert_video.service import ConversionJob, ConversionService, JobStore
-from convert_video.converter import find_existing_converted_output
-from convert_video.mediainfo import check_already_converted
+from clutch import build_state_dir
+from clutch.service import ConversionJob, ConversionService, JobStore
+from clutch.converter import find_existing_converted_output
+from clutch.mediainfo import check_already_converted
 
 
 class CheckAlreadyConvertedTests(unittest.TestCase):
@@ -26,7 +26,7 @@ class CheckAlreadyConvertedTests(unittest.TestCase):
             }
         }
 
-        with patch("convert_video.mediainfo.get_mediainfo_json", return_value=data):
+        with patch("clutch.mediainfo.get_mediainfo_json", return_value=data):
             status = check_already_converted("episode.mkv", "nvenc_h265", False, quiet=True)
 
         self.assertEqual(status, "skip")
@@ -41,7 +41,7 @@ class CheckAlreadyConvertedTests(unittest.TestCase):
             }
         }
 
-        with patch("convert_video.mediainfo.get_mediainfo_json", return_value=data):
+        with patch("clutch.mediainfo.get_mediainfo_json", return_value=data):
             status = check_already_converted("episode.mkv", "nvenc_h265", False, quiet=True)
 
         self.assertEqual(status, "warn")
@@ -56,7 +56,7 @@ class CheckAlreadyConvertedTests(unittest.TestCase):
             }
         }
 
-        with patch("convert_video.mediainfo.get_mediainfo_json", return_value=data):
+        with patch("clutch.mediainfo.get_mediainfo_json", return_value=data):
             status = check_already_converted("episode.mkv", "nvenc_h265", True, quiet=True)
 
         self.assertEqual(status, "convert")
@@ -74,7 +74,7 @@ class ExistingOutputDetectionTests(unittest.TestCase):
             with open(output_path, "w", encoding="utf-8") as handle:
                 handle.write("output")
 
-            with patch("convert_video.converter.check_already_converted", return_value="skip"):
+            with patch("clutch.converter.check_already_converted", return_value="skip"):
                 existing = find_existing_converted_output(source_path, "", "nvenc_h265")
 
             self.assertEqual(existing, output_path)
@@ -93,7 +93,7 @@ class ExistingOutputDetectionTests(unittest.TestCase):
             newer_time = os.path.getmtime(output_path) + 10
             os.utime(source_path, (newer_time, newer_time))
 
-            with patch("convert_video.converter.check_already_converted", return_value="skip"):
+            with patch("clutch.converter.check_already_converted", return_value="skip"):
                 existing = find_existing_converted_output(source_path, "", "nvenc_h265")
 
             self.assertEqual(existing, "")
@@ -239,9 +239,9 @@ class ConversionServicePauseResumeTests(unittest.TestCase):
             with service._job_control_lock:
                 service._active_jobs[record["id"]] = 12345
 
-            with patch("convert_video.service.request_current_conversion_pause", return_value=True), \
-                    patch("convert_video.service.request_current_conversion_resume", return_value=True), \
-                    patch("convert_video.service.request_current_conversion_stop", return_value=True):
+            with patch("clutch.service.request_current_conversion_pause", return_value=True), \
+                    patch("clutch.service.request_current_conversion_resume", return_value=True), \
+                    patch("clutch.service.request_current_conversion_stop", return_value=True):
                 paused = service.pause_job(record["id"])
                 self.assertEqual(paused["status"], "paused")
                 self.assertEqual(paused["message"], "Paused manually.")
@@ -320,7 +320,7 @@ class ConversionServicePauseResumeTests(unittest.TestCase):
             with service._job_control_lock:
                 service._active_jobs[record["id"]] = 12345
 
-            with patch("convert_video.service.request_current_conversion_pause", return_value=True):
+            with patch("clutch.service.request_current_conversion_pause", return_value=True):
                 service.stop()
 
             stopped = service.get_job(record["id"])
@@ -396,8 +396,8 @@ class ConversionServicePauseResumeTests(unittest.TestCase):
             latest = service.store.get_latest_for_input(input_path)
             service.store.update_status(latest["id"], "paused", message="Paused manually.")
 
-            with patch("convert_video.service.check_already_converted", return_value="convert"), \
-                    patch("convert_video.service.find_existing_converted_output", return_value=""):
+            with patch("clutch.service.check_already_converted", return_value="convert"), \
+                    patch("clutch.service.find_existing_converted_output", return_value=""):
                 self.assertTrue(service.should_ignore_watch_path(input_path))
 
 
