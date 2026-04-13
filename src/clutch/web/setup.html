@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>clutch — setup</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3efe6;
+            --panel: rgba(255, 251, 245, 0.94);
+            --line: #d8cfc2;
+            --text: #1d2935;
+            --muted: #5b6875;
+            --accent: #0d6b61;
+            --accent-strong: #0a4d46;
+            --fail: #9f2d2d;
+            --ok: #22684a;
+            --shadow: 0 20px 50px rgba(29, 41, 53, 0.12);
+            --panel-border: rgba(216, 207, 194, 0.8);
+            --field-bg: rgba(255, 255, 255, 0.9);
+            --ghost-bg: rgba(29, 41, 53, 0.08);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+                --bg: #111a1e;
+                --panel: rgba(20, 31, 36, 0.88);
+                --line: #314148;
+                --text: #edf3f0;
+                --muted: #a1b1ac;
+                --accent: #49baa7;
+                --accent-strong: #7fe2d1;
+                --fail: #ff8b8b;
+                --ok: #7fd6a1;
+                --shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+                --panel-border: rgba(72, 95, 105, 0.72);
+                --field-bg: rgba(10, 18, 22, 0.92);
+                --ghost-bg: rgba(237, 243, 240, 0.08);
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            font-size: 0.875rem;
+            color: var(--text);
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .setup-card {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 2.5rem 2rem 2rem;
+            width: 100%;
+            max-width: 420px;
+            margin: 1rem;
+        }
+
+        .setup-logo {
+            display: block;
+            margin: 0 auto 0.5rem;
+            width: 56px;
+            height: 56px;
+        }
+
+        .setup-title {
+            text-align: center;
+            margin: 0 0 0.25rem;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .setup-subtitle {
+            text-align: center;
+            color: var(--muted);
+            margin: 0 0 1.75rem;
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--field-bg);
+            color: var(--text);
+            font-size: 0.82rem;
+            margin-bottom: 1rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+        }
+
+        .password-hint {
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin: -0.7rem 0 1rem;
+            line-height: 1.4;
+        }
+
+        .error-message {
+            background: rgba(159, 45, 45, 0.1);
+            color: var(--fail);
+            border: 1px solid rgba(159, 45, 45, 0.25);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error-message.visible {
+            display: block;
+        }
+
+        .btn-primary {
+            display: block;
+            width: 100%;
+            padding: 0.65rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-strong);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .setup-divider {
+            display: flex;
+            align-items: center;
+            margin: 1.25rem 0;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+
+        .setup-divider::before,
+        .setup-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--line);
+        }
+
+        .btn-ghost {
+            display: block;
+            width: 100%;
+            padding: 0.55rem;
+            background: var(--ghost-bg);
+            color: var(--muted);
+            border: none;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-ghost:hover {
+            background: var(--line);
+            color: var(--text);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="setup-card">
+        <img class="setup-logo" src="/assets/clutch.png" alt="Clutch logo">
+        <h1 class="setup-title">Welcome to Clutch</h1>
+        <p class="setup-subtitle">Create the first admin account to secure your service, or skip to run without
+            authentication.</p>
+
+        <div class="error-message" id="error-message"></div>
+
+        <form id="setup-form" autocomplete="off">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required minlength="3" maxlength="64"
+                autocomplete="username" placeholder="admin">
+
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required maxlength="254" autocomplete="email"
+                placeholder="you@example.com">
+
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password"
+                placeholder="••••••••">
+            <p class="password-hint">Minimum 8 characters with uppercase, lowercase, digit, and a special character.
+            </p>
+
+            <label for="confirm-password">Confirm password</label>
+            <input type="password" id="confirm-password" name="confirm_password" required minlength="8"
+                autocomplete="new-password" placeholder="••••••••">
+
+            <button class="btn-primary" type="submit" id="submit-btn">Create admin account</button>
+        </form>
+
+        <div class="setup-divider">or</div>
+
+        <button class="btn-ghost" type="button" id="skip-btn">Skip — run without authentication</button>
+    </div>
+
+    <script>
+        (function () {
+            var form = document.getElementById('setup-form');
+            var errorEl = document.getElementById('error-message');
+            var skipBtn = document.getElementById('skip-btn');
+            var submitBtn = document.getElementById('submit-btn');
+
+            function showError(msg) {
+                errorEl.textContent = msg;
+                errorEl.classList.add('visible');
+            }
+
+            function clearError() {
+                errorEl.textContent = '';
+                errorEl.classList.remove('visible');
+            }
+
+            function setLoading(loading) {
+                submitBtn.disabled = loading;
+                skipBtn.disabled = loading;
+                submitBtn.textContent = loading ? 'Creating…' : 'Create admin account';
+            }
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                clearError();
+
+                var password = document.getElementById('password').value;
+                var confirm = document.getElementById('confirm-password').value;
+
+                if (password !== confirm) {
+                    showError('Passwords do not match.');
+                    return;
+                }
+
+                setLoading(true);
+
+                fetch('/auth/setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('username').value.trim(),
+                        email: document.getElementById('email').value.trim(),
+                        password: password
+                    })
+                })
+                    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+                    .then(function (result) {
+                        if (!result.ok) {
+                            showError(result.data.error || 'Setup failed.');
+                            setLoading(false);
+                            return;
+                        }
+                        if (result.data.token) {
+                            try { localStorage.setItem('clutch-token', result.data.token); } catch (ignored) { }
+                        }
+                        window.location.href = '/';
+                    })
+                    .catch(function (err) {
+                        showError('Network error: ' + err.message);
+                        setLoading(false);
+                    });
+            });
+
+            skipBtn.addEventListener('click', function () {
+                clearError();
+                setLoading(true);
+
+                fetch('/auth/setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ skip: true })
+                })
+                    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+                    .then(function (result) {
+                        if (!result.ok) {
+                            showError(result.data.error || 'Skip failed.');
+                            setLoading(false);
+                            return;
+                        }
+                        window.location.href = '/';
+                    })
+                    .catch(function (err) {
+                        showError('Network error: ' + err.message);
+                        setLoading(false);
+                    });
+            });
+        })();
+    </script>
+</body>
+
+</html>

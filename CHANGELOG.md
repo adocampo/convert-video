@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-04-14
+
+### Added in 1.6.0
+
+- **User authentication system**: optional multi-user auth with role-based access control (admin, operator, viewer). Bearer token authentication for both the dashboard and the API.
+- **First-run setup wizard**: on first launch, a setup page lets you create the initial admin account or skip to run without authentication.
+- **Login page**: dedicated sign-in page with username/password, "Forgot password" flow, and password reset via email link.
+- **User management dashboard**: new Users page in the sidebar with full CRUD for user accounts (admin only), change-password form, and role assignment.
+- **API tokens**: users can create and revoke named API tokens with configurable expiry (1–3650 days) for headless/script access.
+- **SMTP settings**: admins can configure SMTP (host, port, username, password, TLS/SSL, from address) from the dashboard for password-reset emails.
+- **SMTP test button**: "Test connection" button sends a test email to the current user to verify SMTP settings before relying on them.
+- **Password reset via email**: full forgot-password flow — request reset link, receive email, set new password — with 1-hour expiry tokens.
+- **Rate limiting**: login attempts are rate-limited to 5 per IP within 15 minutes to mitigate brute-force attacks.
+
+### Changed in 1.6.0
+
+- All existing API routes now enforce role-based authorization when auth is enabled (admin for config/updates, operator for jobs/watchers, viewer for read-only).
+- SMTP sending now auto-detects port 465 (implicit SSL via `SMTP_SSL`) vs other ports (STARTTLS), so users don't need to worry about the TLS checkbox when using port 465.
+- Dashboard initialization now properly waits for auth state before loading page-specific data, preventing empty users/SMTP sections on first render.
+
+### Security in 1.6.0
+
+- Passwords hashed with scrypt (n=16384, r=8, p=1, 32-byte salt, 64-byte derived key).
+- Tokens stored as SHA-256 hashes; timing-safe comparison via `hmac.compare_digest`.
+- Session tokens hidden from the API tokens list to avoid confusion.
+- Password reset endpoints never reveal whether an email exists (anti-enumeration).
+
 ## [1.5.5] - 2026-04-13
 
 ### Added in 1.5.5

@@ -2005,3 +2005,86 @@ body.modal-open {
         transform: translateY(0) scale(1);
     }
 }
+
+/* ── Auth / Users ──────────────────────────────────────────────── */
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--panel-separator);
+}
+
+.sidebar-user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    font-weight: 600;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    font-size: 0.66rem;
+    color: var(--muted);
+    text-transform: capitalize;
+}
+
+.sidebar-user-logout {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    background: var(--ghost-bg);
+    color: var(--muted);
+    border: none;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-user-logout:hover {
+    background: var(--line);
+    color: var(--text);
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.users-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--muted);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.users-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid var(--panel-separator);
+    vertical-align: middle;
+}
+
+.users-table tr:last-child td {
+    border-bottom: none;
+}
+
+.actions-cell {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.danger-text {
+    color: var(--fail) !important;
+}

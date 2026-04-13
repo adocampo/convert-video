@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>clutch — login</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3efe6;
+            --panel: rgba(255, 251, 245, 0.94);
+            --line: #d8cfc2;
+            --text: #1d2935;
+            --muted: #5b6875;
+            --accent: #0d6b61;
+            --accent-strong: #0a4d46;
+            --fail: #9f2d2d;
+            --ok: #22684a;
+            --shadow: 0 20px 50px rgba(29, 41, 53, 0.12);
+            --panel-border: rgba(216, 207, 194, 0.8);
+            --field-bg: rgba(255, 255, 255, 0.9);
+            --ghost-bg: rgba(29, 41, 53, 0.08);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+                --bg: #111a1e;
+                --panel: rgba(20, 31, 36, 0.88);
+                --line: #314148;
+                --text: #edf3f0;
+                --muted: #a1b1ac;
+                --accent: #49baa7;
+                --accent-strong: #7fe2d1;
+                --fail: #ff8b8b;
+                --ok: #7fd6a1;
+                --shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+                --panel-border: rgba(72, 95, 105, 0.72);
+                --field-bg: rgba(10, 18, 22, 0.92);
+                --ghost-bg: rgba(237, 243, 240, 0.08);
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            font-size: 0.875rem;
+            color: var(--text);
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 2.5rem 2rem 2rem;
+            width: 100%;
+            max-width: 380px;
+            margin: 1rem;
+        }
+
+        .login-logo {
+            display: block;
+            margin: 0 auto 0.5rem;
+            width: 56px;
+            height: 56px;
+        }
+
+        .login-title {
+            text-align: center;
+            margin: 0 0 1.5rem;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--field-bg);
+            color: var(--text);
+            font-size: 0.82rem;
+            margin-bottom: 1rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+        }
+
+        .error-message {
+            background: rgba(159, 45, 45, 0.1);
+            color: var(--fail);
+            border: 1px solid rgba(159, 45, 45, 0.25);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error-message.visible {
+            display: block;
+        }
+
+        .success-message {
+            background: rgba(34, 104, 74, 0.1);
+            color: var(--ok);
+            border: 1px solid rgba(34, 104, 74, 0.25);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .success-message.visible {
+            display: block;
+        }
+
+        .btn-primary {
+            display: block;
+            width: 100%;
+            padding: 0.65rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-strong);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .forgot-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.78rem;
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .forgot-link:hover {
+            text-decoration: underline;
+        }
+
+        .password-hint {
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin: -0.7rem 0 1rem;
+            line-height: 1.4;
+        }
+
+        .view-hidden {
+            display: none;
+        }
+
+        .view-visible {
+            display: block;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 0.8rem;
+            font-size: 0.78rem;
+            color: var(--muted);
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            color: var(--text);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-card">
+        <img class="login-logo" src="/assets/clutch.png" alt="Clutch logo">
+
+        <!-- ── Login view ── -->
+        <div id="view-login">
+            <h1 class="login-title">Sign in</h1>
+            <div class="error-message" id="login-error"></div>
+            <form id="login-form" autocomplete="on">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" required autocomplete="username"
+                    placeholder="Username">
+
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" required autocomplete="current-password"
+                    placeholder="Password">
+
+                <button class="btn-primary" type="submit" id="login-btn">Sign in</button>
+            </form>
+            <a class="forgot-link" id="show-forgot">Forgot password?</a>
+        </div>
+
+        <!-- ── Forgot password view ── -->
+        <div id="view-forgot" class="view-hidden">
+            <h1 class="login-title">Reset password</h1>
+            <div class="error-message" id="forgot-error"></div>
+            <div class="success-message" id="forgot-success"></div>
+            <form id="forgot-form">
+                <label for="forgot-email">Email address</label>
+                <input type="email" id="forgot-email" name="email" required placeholder="you@example.com">
+
+                <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
+            </form>
+            <a class="back-link" id="show-login-from-forgot">Back to sign in</a>
+        </div>
+
+        <!-- ── Reset password view (arrived via link) ── -->
+        <div id="view-reset" class="view-hidden">
+            <h1 class="login-title">Set new password</h1>
+            <div class="error-message" id="reset-error"></div>
+            <div class="success-message" id="reset-success"></div>
+            <form id="reset-form">
+                <label for="reset-password">New password</label>
+                <input type="password" id="reset-password" name="new_password" required minlength="8"
+                    autocomplete="new-password" placeholder="••••••••">
+                <p class="password-hint">Min 8 chars, uppercase, lowercase, digit, special character.</p>
+
+                <label for="reset-confirm">Confirm new password</label>
+                <input type="password" id="reset-confirm" name="confirm_password" required minlength="8"
+                    autocomplete="new-password" placeholder="••••••••">
+
+                <button class="btn-primary" type="submit" id="reset-btn">Reset password</button>
+            </form>
+            <a class="back-link" id="show-login-from-reset">Back to sign in</a>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var viewLogin = document.getElementById('view-login');
+            var viewForgot = document.getElementById('view-forgot');
+            var viewReset = document.getElementById('view-reset');
+
+            function showView(view) {
+                viewLogin.className = view === 'login' ? 'view-visible' : 'view-hidden';
+                viewForgot.className = view === 'forgot' ? 'view-visible' : 'view-hidden';
+                viewReset.className = view === 'reset' ? 'view-visible' : 'view-hidden';
+            }
+
+            function showMsg(el, text) {
+                el.textContent = text;
+                el.classList.add('visible');
+            }
+
+            function hideMsg(el) {
+                el.textContent = '';
+                el.classList.remove('visible');
+            }
+
+            // Check if we arrived with a reset token in the hash
+            var hash = window.location.hash || '';
+            var resetToken = '';
+            if (hash.indexOf('reset-password?token=') !== -1) {
+                resetToken = hash.split('token=')[1] || '';
+                if (resetToken) {
+                    showView('reset');
+                }
+            }
+
+            // ── Login ──
+            var loginForm = document.getElementById('login-form');
+            var loginError = document.getElementById('login-error');
+            var loginBtn = document.getElementById('login-btn');
+
+            loginForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                hideMsg(loginError);
+                loginBtn.disabled = true;
+                loginBtn.textContent = 'Signing in…';
+
+                fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('login-username').value.trim(),
+                        password: document.getElementById('login-password').value
+                    })
+                })
+                    .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+                    .then(function (r) {
+                        if (!r.ok) {
+                            showMsg(loginError, r.data.error || 'Login failed.');
+                            loginBtn.disabled = false;
+                            loginBtn.textContent = 'Sign in';
+                            return;
+                        }
+                        if (r.data.token) {
+                            try { localStorage.setItem('clutch-token', r.data.token); } catch (ignored) { }
+                        }
+                        window.location.href = '/';
+                    })
+                    .catch(function (err) {
+                        showMsg(loginError, 'Network error: ' + err.message);
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = 'Sign in';
+                    });
+            });
+
+            // ── Forgot password ──
+            document.getElementById('show-forgot').addEventListener('click', function (e) {
+                e.preventDefault();
+                showView('forgot');
+            });
+            document.getElementById('show-login-from-forgot').addEventListener('click', function (e) {
+                e.preventDefault();
+                showView('login');
+            });
+            document.getElementById('show-login-from-reset').addEventListener('click', function (e) {
+                e.preventDefault();
+                window.location.hash = '';
+                showView('login');
+            });
+
+            var forgotForm = document.getElementById('forgot-form');
+            var forgotError = document.getElementById('forgot-error');
+            var forgotSuccess = document.getElementById('forgot-success');
+            var forgotBtn = document.getElementById('forgot-btn');
+
+            forgotForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                hideMsg(forgotError);
+                hideMsg(forgotSuccess);
+                forgotBtn.disabled = true;
+                forgotBtn.textContent = 'Sending…';
+
+                fetch('/auth/password-reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('forgot-email').value.trim()
+                    })
+                })
+                    .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+                    .then(function (r) {
+                        forgotBtn.disabled = false;
+                        forgotBtn.textContent = 'Send reset link';
+                        if (!r.ok) {
+                            showMsg(forgotError, r.data.error || 'Request failed.');
+                            return;
+                        }
+                        showMsg(forgotSuccess, r.data.message || 'Check your email for a reset link.');
+                    })
+                    .catch(function (err) {
+                        showMsg(forgotError, 'Network error: ' + err.message);
+                        forgotBtn.disabled = false;
+                        forgotBtn.textContent = 'Send reset link';
+                    });
+            });
+
+            // ── Reset password ──
+            var resetForm = document.getElementById('reset-form');
+            var resetError = document.getElementById('reset-error');
+            var resetSuccess = document.getElementById('reset-success');
+            var resetBtn = document.getElementById('reset-btn');
+
+            resetForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                hideMsg(resetError);
+                hideMsg(resetSuccess);
+
+                var pwd = document.getElementById('reset-password').value;
+                var confirm = document.getElementById('reset-confirm').value;
+                if (pwd !== confirm) {
+                    showMsg(resetError, 'Passwords do not match.');
+                    return;
+                }
+
+                resetBtn.disabled = true;
+                resetBtn.textContent = 'Resetting…';
+
+                fetch('/auth/password-reset/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: resetToken, new_password: pwd })
+                })
+                    .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+                    .then(function (r) {
+                        resetBtn.disabled = false;
+                        resetBtn.textContent = 'Reset password';
+                        if (!r.ok) {
+                            showMsg(resetError, r.data.error || 'Reset failed.');
+                            return;
+                        }
+                        showMsg(resetSuccess, r.data.message || 'Password reset. Redirecting…');
+                        setTimeout(function () {
+                            window.location.href = '/login';
+                        }, 1500);
+                    })
+                    .catch(function (err) {
+                        showMsg(resetError, 'Network error: ' + err.message);
+                        resetBtn.disabled = false;
+                        resetBtn.textContent = 'Reset password';
+                    });
+            });
+        })();
+    </script>
+</body>
+
+</html>

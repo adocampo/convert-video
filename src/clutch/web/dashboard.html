@@ -58,8 +58,24 @@
                     <span class="sidebar-label">System</span>
                     <span class="sidebar-badge" id="nav-system-badge" hidden></span>
                 </a></li>
+            <li id="nav-users-item" hidden><a class="sidebar-link" href="#users" data-page="users">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span class="sidebar-label">Users</span>
+                </a></li>
         </ul>
         <div class="sidebar-footer">
+            <div class="sidebar-user" id="sidebar-user" hidden>
+                <div class="sidebar-user-info">
+                    <span class="sidebar-user-name" id="sidebar-user-name"></span>
+                    <span class="sidebar-user-role" id="sidebar-user-role"></span>
+                </div>
+                <button class="sidebar-user-logout" type="button" id="sidebar-logout" title="Sign out">Sign out</button>
+            </div>
             <div class="sidebar-meta" id="sidebar-meta"></div>
             <div class="sidebar-version" id="sidebar-version"></div>
         </div>
@@ -684,6 +700,154 @@
                             <div class="changelog-text" id="changelog-text"></div>
                         </div>
                     </div>
+                </fieldset>
+            </div>
+        </section>
+
+        <!-- ── Users page ── -->
+        <section class="page" id="page-users" data-page="users" hidden>
+            <div class="page-inner page-narrow">
+                <h2>Users</h2>
+
+                <fieldset class="options-section">
+                    <legend>Accounts</legend>
+                    <div id="users-list"></div>
+                    <div class="actions actions-centered" style="margin-top:1rem">
+                        <button class="secondary" type="button" id="add-user-btn">Add user</button>
+                    </div>
+                </fieldset>
+
+                <fieldset class="options-section" id="user-form-section" hidden>
+                    <legend id="user-form-legend">New User</legend>
+                    <form id="user-form" autocomplete="off">
+                        <input type="hidden" id="user-form-id" value="">
+                        <div class="field-row">
+                            <label class="field-row-label" for="user-form-username">Username</label>
+                            <div class="field-row-control">
+                                <input type="text" id="user-form-username" name="username" required minlength="3"
+                                    maxlength="64">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="user-form-email">Email</label>
+                            <div class="field-row-control">
+                                <input type="email" id="user-form-email" name="email" required>
+                            </div>
+                        </div>
+                        <div class="field-row" id="user-form-password-row">
+                            <label class="field-row-label" for="user-form-password">Password</label>
+                            <div class="field-row-control">
+                                <input type="password" id="user-form-password" name="password" minlength="8"
+                                    autocomplete="new-password">
+                                <p class="field-row-help">Min 8 chars, upper + lower + digit + special.</p>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="user-form-role">Role</label>
+                            <div class="field-row-control">
+                                <select id="user-form-role" name="role">
+                                    <option value="admin">Admin</option>
+                                    <option value="operator">Operator</option>
+                                    <option value="viewer">Viewer</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="actions actions-centered">
+                            <button class="primary" type="submit" id="user-form-submit">Create</button>
+                            <button class="ghost" type="button" id="user-form-cancel">Cancel</button>
+                        </div>
+                        <div class="status-line" id="user-form-status"></div>
+                    </form>
+                </fieldset>
+
+                <fieldset class="options-section">
+                    <legend>Change My Password</legend>
+                    <form id="change-password-form" autocomplete="off">
+                        <div class="field-row">
+                            <label class="field-row-label" for="cp-old">Current password</label>
+                            <div class="field-row-control">
+                                <input type="password" id="cp-old" name="old_password" required
+                                    autocomplete="current-password">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="cp-new">New password</label>
+                            <div class="field-row-control">
+                                <input type="password" id="cp-new" name="new_password" required minlength="8"
+                                    autocomplete="new-password">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="cp-confirm">Confirm new password</label>
+                            <div class="field-row-control">
+                                <input type="password" id="cp-confirm" name="confirm_password" required minlength="8"
+                                    autocomplete="new-password">
+                            </div>
+                        </div>
+                        <div class="actions actions-centered">
+                            <button class="primary" type="submit">Change password</button>
+                        </div>
+                        <div class="status-line" id="change-password-status"></div>
+                    </form>
+                </fieldset>
+
+                <fieldset class="options-section" id="smtp-section" hidden>
+                    <legend>SMTP Settings</legend>
+                    <form id="smtp-form">
+                        <div class="field-row">
+                            <label class="field-row-label" for="smtp-host">Host</label>
+                            <div class="field-row-control">
+                                <input type="text" id="smtp-host" name="host" placeholder="smtp.example.com">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="smtp-port">Port</label>
+                            <div class="field-row-control">
+                                <input type="number" id="smtp-port" name="port" value="587" min="1" max="65535">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="smtp-username">Username</label>
+                            <div class="field-row-control">
+                                <input type="text" id="smtp-username" name="username" placeholder="user@example.com">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="smtp-password">Password</label>
+                            <div class="field-row-control">
+                                <input type="password" id="smtp-password" name="password" autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label">TLS</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"><input type="checkbox" id="smtp-tls" name="use_tls"
+                                        checked>Use STARTTLS</label>
+                                <p class="field-row-help">Port 465 uses implicit SSL automatically. STARTTLS applies to
+                                    port 587 and others.</p>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" for="smtp-from">From address</label>
+                            <div class="field-row-control">
+                                <input type="text" id="smtp-from" name="from_address" placeholder="noreply@example.com">
+                            </div>
+                        </div>
+                        <div class="actions actions-centered">
+                            <button class="primary" type="submit">Save SMTP settings</button>
+                            <button class="secondary" type="button" id="smtp-test-btn">Test connection</button>
+                        </div>
+                        <div class="status-line" id="smtp-status"></div>
+                    </form>
+                </fieldset>
+
+                <fieldset class="options-section">
+                    <legend>API Tokens</legend>
+                    <div id="tokens-list"></div>
+                    <div class="actions actions-centered" style="margin-top:1rem">
+                        <button class="secondary" type="button" id="create-token-btn">Create token</button>
+                    </div>
+                    <div class="status-line" id="tokens-status"></div>
                 </fieldset>
             </div>
         </section>

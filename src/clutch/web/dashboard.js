@@ -37,8 +37,14 @@
         scheduleStatus: {},
         scheduleRules: [],
         editingWatcherId: null,
+        auth: {
+            enabled: false,
+            user: null,
+            token: '',
+        },
     };
 
+    const tokenStorageKey = 'clutch-token';
     const themeStorageKey = 'clutch-theme';
     const legacyThemeStorageKey = 'convert-video-theme';
 
@@ -678,7 +684,22 @@
             requestOptions.cache = 'no-store';
         }
 
+        // Inject auth token
+        if (state.auth.token) {
+            requestOptions.headers = Object.assign({}, requestOptions.headers || {});
+            requestOptions.headers['Authorization'] = 'Bearer ' + state.auth.token;
+        }
+
         const response = await fetch(requestPath, requestOptions);
+
+        if (response.status === 401 && state.auth.enabled) {
+            state.auth.token = '';
+            state.auth.user = null;
+            try { localStorage.removeItem(tokenStorageKey); } catch (ignored) { /* noop */ }
+            window.location.href = '/login';
+            throw new Error('Session expired.');
+        }
+
         const payload = await response.json().catch(function () {
             return {};
         });
@@ -870,7 +891,7 @@
 
     /* ── Sidebar Navigation ── */
 
-    var validPages = ['activity', 'jobs', 'watchers', 'schedule', 'system'];
+    var validPages = ['activity', 'jobs', 'watchers', 'schedule', 'system', 'users'];
 
     function navigateTo(page) {
         if (validPages.indexOf(page) === -1) page = 'activity';
@@ -893,6 +914,13 @@
             startSysmonPolling();
         } else {
             stopSysmonPolling();
+        }
+        if (page === 'users') {
+            refreshUsers();
+            refreshTokens();
+            if (state.auth.user && state.auth.user.role === 'admin') {
+                refreshSmtp();
+            }
         }
         closeSidebar();
     }
@@ -2170,6 +2198,415 @@
         if (sysmonTimer) { clearInterval(sysmonTimer); sysmonTimer = null; }
     }
 
+    /* ── Auth / Users ── */
+
+    var sidebarUser = document.getElementById('sidebar-user');
+    var sidebarUserName = document.getElementById('sidebar-user-name');
+    var sidebarUserRole = document.getElementById('sidebar-user-role');
+    var sidebarLogout = document.getElementById('sidebar-logout');
+    var navUsersItem = document.getElementById('nav-users-item');
+    var usersList = document.getElementById('users-list');
+    var userFormSection = document.getElementById('user-form-section');
+    var userFormLegend = document.getElementById('user-form-legend');
+    var userForm = document.getElementById('user-form');
+    var userFormId = document.getElementById('user-form-id');
+    var userFormUsername = document.getElementById('user-form-username');
+    var userFormEmail = document.getElementById('user-form-email');
+    var userFormPassword = document.getElementById('user-form-password');
+    var userFormPasswordRow = document.getElementById('user-form-password-row');
+    var userFormRole = document.getElementById('user-form-role');
+    var userFormSubmit = document.getElementById('user-form-submit');
+    var userFormCancel = document.getElementById('user-form-cancel');
+    var userFormStatus = document.getElementById('user-form-status');
+    var addUserBtn = document.getElementById('add-user-btn');
+    var changePasswordForm = document.getElementById('change-password-form');
+    var changePasswordStatus = document.getElementById('change-password-status');
+    var smtpSection = document.getElementById('smtp-section');
+    var smtpForm = document.getElementById('smtp-form');
+    var smtpStatus = document.getElementById('smtp-status');
+    var tokensList = document.getElementById('tokens-list');
+    var tokensStatus = document.getElementById('tokens-status');
+    var createTokenBtn = document.getElementById('create-token-btn');
+
+    function getStoredToken() {
+        try { return localStorage.getItem(tokenStorageKey) || ''; } catch (_) { return ''; }
+    }
+
+    function initAuth() {
+        state.auth.token = getStoredToken();
+        return fetchJson('/auth/status').then(function (data) {
+            state.auth.enabled = data.auth_enabled;
+            if (!data.auth_enabled) {
+                return;
+            }
+            if (!state.auth.token) {
+                window.location.href = '/login';
+                throw new Error('Login required.');
+            }
+            return fetchJson('/auth/me').then(function (me) {
+                state.auth.user = me.user;
+                renderAuthUI();
+            }).catch(function () {
+                state.auth.token = '';
+                try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
+                window.location.href = '/login';
+                throw new Error('Session expired.');
+            });
+        });
+    }
+
+    function renderAuthUI() {
+        var user = state.auth.user;
+        if (!user || !state.auth.enabled) {
+            if (sidebarUser) sidebarUser.hidden = true;
+            if (navUsersItem) navUsersItem.hidden = true;
+            return;
+        }
+        if (sidebarUser) {
+            sidebarUser.hidden = false;
+            sidebarUserName.textContent = user.username;
+            sidebarUserRole.textContent = user.role;
+        }
+        // Show Users page only for admin/operator (admin can manage, operator can view own profile)
+        if (navUsersItem) {
+            navUsersItem.hidden = false;
+        }
+        // SMTP section only for admin
+        if (smtpSection) {
+            smtpSection.hidden = user.role !== 'admin';
+        }
+        // Add user button only for admin
+        if (addUserBtn) {
+            addUserBtn.style.display = user.role === 'admin' ? '' : 'none';
+        }
+    }
+
+    if (sidebarLogout) {
+        sidebarLogout.addEventListener('click', function () {
+            fetchJson('/auth/logout', { method: 'POST' }).catch(function () { /* ignore */ });
+            state.auth.token = '';
+            state.auth.user = null;
+            try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
+            window.location.href = '/login';
+        });
+    }
+
+    async function refreshUsers() {
+        if (!state.auth.enabled) return;
+        var user = state.auth.user;
+        if (!user) return;
+        if (user.role === 'admin') {
+            try {
+                var data = await fetchJson('/auth/users');
+                renderUsersList(data.users || []);
+            } catch (err) {
+                if (usersList) usersList.innerHTML = '<div class="empty">' + escapeHtml(err.message) + '</div>';
+            }
+        } else {
+            if (usersList) usersList.innerHTML = '<div class="empty">Only admins can manage users.</div>';
+        }
+    }
+
+    function renderUsersList(users) {
+        if (!usersList) return;
+        if (!users.length) {
+            usersList.innerHTML = '<div class="empty">No users.</div>';
+            return;
+        }
+        var currentId = state.auth.user ? state.auth.user.id : 0;
+        var isAdmin = state.auth.user && state.auth.user.role === 'admin';
+        usersList.innerHTML = '<table class="users-table">'
+            + '<thead><tr><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>'
+            + '<tbody>'
+            + users.map(function (u) {
+                var actions = '';
+                if (isAdmin) {
+                    actions = '<button class=\"ghost\" data-edit-user=\"' + u.id + '\">Edit</button>';
+                    if (u.id !== currentId) {
+                        actions += ' <button class=\"ghost danger-text\" data-delete-user=\"' + u.id + '\">Delete</button>';
+                    }
+                }
+                return '<tr>'
+                    + '<td>' + escapeHtml(u.username) + (u.id === currentId ? ' <span class="chip">you</span>' : '') + '</td>'
+                    + '<td>' + escapeHtml(u.email) + '</td>'
+                    + '<td><span class="chip">' + escapeHtml(u.role) + '</span></td>'
+                    + '<td class="actions-cell">' + actions + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table>';
+    }
+
+    if (usersList) {
+        usersList.addEventListener('click', function (e) {
+            var editId = e.target.dataset.editUser;
+            var deleteId = e.target.dataset.deleteUser;
+            if (editId) {
+                openEditUser(Number(editId));
+            }
+            if (deleteId) {
+                confirmDeleteUser(Number(deleteId));
+            }
+        });
+    }
+
+    function openNewUser() {
+        if (!userFormSection) return;
+        userFormSection.hidden = false;
+        userFormLegend.textContent = 'New User';
+        userFormId.value = '';
+        userFormUsername.value = '';
+        userFormEmail.value = '';
+        userFormPassword.value = '';
+        userFormPassword.required = true;
+        userFormPasswordRow.style.display = '';
+        userFormRole.value = 'viewer';
+        userFormSubmit.textContent = 'Create';
+        setStatus(userFormStatus, '');
+    }
+
+    function openEditUser(userId) {
+        fetchJson('/auth/users').then(function (data) {
+            var users = data.users || [];
+            var user = null;
+            for (var i = 0; i < users.length; i++) {
+                if (users[i].id === userId) { user = users[i]; break; }
+            }
+            if (!user) return;
+            if (!userFormSection) return;
+            userFormSection.hidden = false;
+            userFormLegend.textContent = 'Edit User';
+            userFormId.value = String(user.id);
+            userFormUsername.value = user.username;
+            userFormEmail.value = user.email;
+            userFormPassword.value = '';
+            userFormPassword.required = false;
+            userFormPasswordRow.style.display = 'none';
+            userFormRole.value = user.role;
+            userFormSubmit.textContent = 'Save';
+            setStatus(userFormStatus, '');
+        });
+    }
+
+    function confirmDeleteUser(userId) {
+        showConfirm({ title: 'Delete User', message: 'Are you sure you want to delete this user? This cannot be undone.', ok: 'Delete' })
+            .then(function (confirmed) {
+                if (!confirmed) return;
+                fetchJson('/auth/users/' + userId, { method: 'DELETE' })
+                    .then(function () { refreshUsers(); showToast('User deleted.'); })
+                    .catch(function (err) { showToast(err.message, 'error'); });
+            });
+    }
+
+    if (addUserBtn) {
+        addUserBtn.addEventListener('click', openNewUser);
+    }
+
+    if (userFormCancel) {
+        userFormCancel.addEventListener('click', function () {
+            if (userFormSection) userFormSection.hidden = true;
+        });
+    }
+
+    if (userForm) {
+        userForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var id = userFormId.value;
+            var payload = {
+                username: userFormUsername.value.trim(),
+                email: userFormEmail.value.trim(),
+                role: userFormRole.value,
+            };
+
+            if (id) {
+                // Edit existing user
+                try {
+                    await fetchJson('/auth/users/' + id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    userFormSection.hidden = true;
+                    showToast('User updated.');
+                    refreshUsers();
+                } catch (err) {
+                    setStatus(userFormStatus, err.message, 'error');
+                }
+            } else {
+                // Create new user
+                payload.password = userFormPassword.value;
+                try {
+                    await fetchJson('/auth/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    userFormSection.hidden = true;
+                    showToast('User created.');
+                    refreshUsers();
+                } catch (err) {
+                    setStatus(userFormStatus, err.message, 'error');
+                }
+            }
+        });
+    }
+
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var newPwd = document.getElementById('cp-new').value;
+            var confirmPwd = document.getElementById('cp-confirm').value;
+            if (newPwd !== confirmPwd) {
+                setStatus(changePasswordStatus, 'Passwords do not match.', 'error');
+                return;
+            }
+            try {
+                var result = await fetchJson('/auth/me/password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        old_password: document.getElementById('cp-old').value,
+                        new_password: newPwd,
+                    }),
+                });
+                setStatus(changePasswordStatus, result.message || 'Password changed.', 'ok');
+                changePasswordForm.reset();
+                // Token invalidated server-side; redirect to login after short delay
+                setTimeout(function () {
+                    state.auth.token = '';
+                    try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
+                    window.location.href = '/login';
+                }, 1500);
+            } catch (err) {
+                setStatus(changePasswordStatus, err.message, 'error');
+            }
+        });
+    }
+
+    // SMTP
+    async function refreshSmtp() {
+        if (!state.auth.user || state.auth.user.role !== 'admin') return;
+        try {
+            var cfg = await fetchJson('/auth/smtp');
+            if (smtpForm) {
+                smtpForm.elements.host.value = cfg.host || '';
+                smtpForm.elements.port.value = cfg.port || 587;
+                smtpForm.elements.username.value = cfg.username || '';
+                smtpForm.elements.password.value = '';
+                smtpForm.elements.password.placeholder = cfg.password ? '(unchanged)' : '';
+                smtpForm.elements.use_tls.checked = cfg.use_tls !== false;
+                smtpForm.elements.from_address.value = cfg.from_address || '';
+            }
+        } catch (_) { /* noop */ }
+    }
+
+    if (smtpForm) {
+        smtpForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            setStatus(smtpStatus, 'Saving…');
+            var fd = new FormData(smtpForm);
+            var payload = {
+                host: fd.get('host') || '',
+                port: Number(fd.get('port') || 587),
+                username: fd.get('username') || '',
+                use_tls: smtpForm.elements.use_tls.checked,
+                from_address: fd.get('from_address') || '',
+            };
+            var pwd = fd.get('password');
+            if (pwd) payload.password = pwd;
+            try {
+                await fetchJson('/auth/smtp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                setStatus(smtpStatus, 'SMTP settings saved.', 'ok');
+            } catch (err) {
+                setStatus(smtpStatus, err.message, 'error');
+            }
+        });
+    }
+
+    var smtpTestBtn = document.getElementById('smtp-test-btn');
+    if (smtpTestBtn) {
+        smtpTestBtn.addEventListener('click', async function () {
+            var recipient = (state.auth.user && state.auth.user.email) || '';
+            if (!recipient) {
+                setStatus(smtpStatus, 'No recipient email available.', 'error');
+                return;
+            }
+            setStatus(smtpStatus, 'Sending test email…');
+            try {
+                var res = await fetchJson('/auth/smtp/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recipient: recipient }),
+                });
+                setStatus(smtpStatus, res.message || 'Test email sent.', 'ok');
+            } catch (err) {
+                setStatus(smtpStatus, err.message, 'error');
+            }
+        });
+    }
+
+    // API Tokens
+    async function refreshTokens() {
+        if (!state.auth.enabled) return;
+        try {
+            var data = await fetchJson('/auth/tokens');
+            renderTokensList(data.tokens || []);
+        } catch (_) {
+            if (tokensList) tokensList.innerHTML = '<div class="empty">Could not load tokens.</div>';
+        }
+    }
+
+    function renderTokensList(tokens) {
+        if (!tokensList) return;
+        if (!tokens.length) {
+            tokensList.innerHTML = '<div class="empty">No API tokens.</div>';
+            return;
+        }
+        tokensList.innerHTML = '<table class="users-table">'
+            + '<thead><tr><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
+            + '<tbody>'
+            + tokens.map(function (t) {
+                return '<tr>'
+                    + '<td>' + escapeHtml(t.name || '(unnamed)') + '</td>'
+                    + '<td>' + escapeHtml(String(t.created_at || '').substring(0, 10)) + '</td>'
+                    + '<td>' + escapeHtml(String(t.expires_at || '').substring(0, 10)) + '</td>'
+                    + '<td class="actions-cell"><button class="ghost danger-text" data-delete-token="' + t.id + '">Revoke</button></td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table>';
+    }
+
+    if (tokensList) {
+        tokensList.addEventListener('click', function (e) {
+            var tokenId = e.target.dataset.deleteToken;
+            if (tokenId) {
+                fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
+                    .then(function () { refreshTokens(); showToast('Token revoked.'); })
+                    .catch(function (err) { showToast(err.message, 'error'); });
+            }
+        });
+    }
+
+    if (createTokenBtn) {
+        createTokenBtn.addEventListener('click', function () {
+            var name = prompt('Token name (optional):');
+            if (name === null) return; // cancelled
+            fetchJson('/auth/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name || 'API token', days: 365 }),
+            })
+                .then(function (data) {
+                    setStatus(tokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
+                    refreshTokens();
+                })
+                .catch(function (err) { setStatus(tokensStatus, err.message, 'error'); });
+        });
+    }
+
     async function refreshSummary() {
         const payload = await fetchJson('/config');
         renderMeta(payload);
@@ -2745,6 +3182,11 @@
     });
 
     navigateTo(getPageFromHash());
-    refreshAll();
-    scheduleRefresh();
+    initAuth().then(function () {
+        navigateTo(getPageFromHash());
+        refreshAll();
+        scheduleRefresh();
+    }).catch(function () {
+        // Auth redirect in progress — do not load dashboard data
+    });
 }());
