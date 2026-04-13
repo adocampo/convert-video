@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.5] - 2026-04-13
+
+### Added in 1.5.5
+
+- **Jobs table view**: the Activity page now displays jobs in a sortable table instead of cards. Click any column header (Name, Status, Progress, Codec, Size, ETA, Submitted) to sort ascending/descending.
+- **Two-column job details**: expanded job details show source and output info side-by-side, with media metadata in each column.
+- **Conversion duration**: job details now show how long the conversion took, computed from start/finish timestamps.
+- **System Monitor**: new section in Settings showing CPU (cores, load average, temperature), RAM usage, GPU stats (VRAM, utilization, temperature, fan speed), and disk mount points with usage bars. Auto-refreshes every 5 seconds while visible.
+- **Custom confirm dialog**: destructive actions (remove watcher, clear job) now use a themed modal instead of the browser's native confirm.
+- **Watcher edit highlight**: editing a watcher scrolls to it and plays a brief highlight pulse animation.
+- **Watcher button states**: Edit/Remove buttons are disabled while a watcher is being edited.
+
+### Changed in 1.5.5
+
+- **Theme selector**: replaced the toggle button with a Light/Dark dropdown select.
+- **About section**: restructured into separate Version, Updates, and Changelog rows.
+- **File browser**: redesigned from card layout to a compact table with folder/file icons, Cancel/Ok footer.
+- **Default Settings labels**: checkbox descriptions now explain what each option does.
+- **Changelog formatting**: update changelog rendered as HTML with bold headings, bullet lists, and inline code.
+- **Responsive layout**: form fields now stack at 920px instead of 640px to avoid cramped intermediate widths. Activity header buttons share a row in mobile instead of going full-width. Dropdown menus open left-aligned on small screens.
+
+### Fixed in 1.5.5
+
+- Fixed update button stretching to full width inside grid layout.
+
 ## [1.5.4] - 2026-04-13
 
 ### Added in 1.5.4

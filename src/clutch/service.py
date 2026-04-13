@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -2584,6 +2586,149 @@ class ConversionHTTPServer(ThreadingHTTPServer):
         self.service = service
 
 
+def _collect_system_stats() -> Dict[str, object]:
+    """Collect system resource statistics without external dependencies."""
+    stats: Dict[str, object] = {}
+
+    # ── CPU ──
+    try:
+        with open("/proc/stat") as f:
+            parts = f.readline().split()
+        total = sum(int(p) for p in parts[1:])
+        idle = int(parts[4])
+        stats["cpu"] = {"total": total, "idle": idle}
+    except (OSError, ValueError, IndexError):
+        stats["cpu"] = None
+
+    try:
+        load1, load5, load15 = os.getloadavg()
+        stats["load"] = [round(load1, 2), round(load5, 2), round(load15, 2)]
+    except OSError:
+        stats["load"] = None
+
+    try:
+        cpu_count = os.cpu_count() or 0
+        stats["cpu_count"] = cpu_count
+    except Exception:
+        stats["cpu_count"] = None
+
+    # CPU temperature (thermal zones)
+    cpu_temp: Optional[float] = None
+    try:
+        import glob
+        for zone in sorted(glob.glob("/sys/class/thermal/thermal_zone*/")):
+            try:
+                with open(os.path.join(zone, "type")) as f:
+                    ztype = f.read().strip().lower()
+                if "cpu" not in ztype and "x86" not in ztype and "core" not in ztype and "soc" not in ztype:
+                    continue
+                with open(os.path.join(zone, "temp")) as f:
+                    cpu_temp = int(f.read().strip()) / 1000.0
+                break
+            except (OSError, ValueError):
+                continue
+        if cpu_temp is None:
+            for zone in sorted(glob.glob("/sys/class/thermal/thermal_zone*/")):
+                try:
+                    with open(os.path.join(zone, "temp")) as f:
+                        cpu_temp = int(f.read().strip()) / 1000.0
+                    break
+                except (OSError, ValueError):
+                    continue
+    except Exception:
+        pass
+    stats["cpu_temp"] = round(cpu_temp, 1) if cpu_temp is not None else None
+
+    # ── Memory ──
+    try:
+        mem: Dict[str, int] = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    key = parts[0].rstrip(":")
+                    mem[key] = int(parts[1]) * 1024  # kB → bytes
+        total_mem = mem.get("MemTotal", 0)
+        avail_mem = mem.get("MemAvailable", 0)
+        stats["memory"] = {
+            "total": total_mem,
+            "available": avail_mem,
+            "used": total_mem - avail_mem,
+        }
+    except (OSError, ValueError):
+        stats["memory"] = None
+
+    # ── Disks (mount points) ──
+    disks: List[Dict[str, object]] = []
+    seen_devs: set = set()
+    try:
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                device, mount = parts[0], parts[1]
+                if not device.startswith("/") or device in seen_devs:
+                    continue
+                seen_devs.add(device)
+                try:
+                    usage = shutil.disk_usage(mount)
+                    disks.append({
+                        "mount": mount,
+                        "device": device,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    })
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    stats["disks"] = disks
+
+    # ── GPUs (nvidia-smi) ──
+    gpus: List[Dict[str, object]] = []
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,memory.total,memory.used,utilization.gpu,temperature.gpu,fan.speed",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            cols = [c.strip() for c in line.split(",")]
+            if len(cols) < 4:
+                continue
+            try:
+                idx = int(cols[0])
+            except ValueError:
+                continue
+            name = cols[1].removeprefix("NVIDIA ") if len(cols) > 1 else "Unknown"
+
+            def safe_int(v: str) -> Optional[int]:
+                try:
+                    return int(v)
+                except (ValueError, TypeError):
+                    return None
+
+            gpus.append({
+                "index": idx,
+                "name": name,
+                "mem_total_mib": safe_int(cols[2]),
+                "mem_used_mib": safe_int(cols[3]),
+                "utilization_pct": safe_int(cols[4]) if len(cols) > 4 else None,
+                "temp_c": safe_int(cols[5]) if len(cols) > 5 else None,
+                "fan_pct": safe_int(cols[6]) if len(cols) > 6 else None,
+            })
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        pass
+    stats["gpus"] = gpus
+
+    return stats
+
+
 class ServiceRequestHandler(BaseHTTPRequestHandler):
     server: ConversionHTTPServer
 
@@ -2700,6 +2845,10 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/health":
             self._send_json(200, {"status": "ok"})
+            return
+
+        if path == "/system/stats":
+            self._send_json(200, _collect_system_stats())
             return
 
         if path == "/browse":

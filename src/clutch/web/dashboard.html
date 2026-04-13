@@ -10,202 +10,106 @@
 </head>
 
 <body>
-    <div class="shell">
-        <section class="hero">
-            <div class="hero-top">
-                <div class="hero-brand">
-                    <img class="hero-logo" src="/assets/clutch.png" alt="Clutch logo">
-                    <div class="hero-copy-block">
-                        <h1>Clutch</h1>
-                        <p class="hero-kicker">Ready to drift!</p>
-                    </div>
-                </div>
-                <div class="hero-actions">
-                    <button class="release-toggle" type="button" id="release-check"
-                        aria-label="Check whether new versions are available"
-                        title="Check whether new versions are available">
-                        <span class="release-icon-wrap" aria-hidden="true">
-                            <svg class="release-icon" viewBox="0 0 24 24" focusable="false">
-                                <path d="M12 3v9"></path>
-                                <path d="M8.5 8.5 12 12l3.5-3.5"></path>
-                                <path d="M5 15.5V17a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5"></path>
-                            </svg>
-                            <span class="release-badge" id="release-badge" hidden></span>
-                        </span>
-                        <span class="theme-copy">
-                            <span class="theme-copy-label">Releases</span>
-                            <span class="theme-copy-value" id="release-label">Check releases</span>
-                        </span>
-                    </button>
+    <!-- ── Sidebar ── -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <img class="sidebar-logo" src="/assets/clutch.png" alt="Clutch logo">
+            <span class="sidebar-title">Clutch</span>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a class="sidebar-link" href="#activity" data-page="activity">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <span class="sidebar-label">Activity</span>
+                    <span class="sidebar-badge" id="nav-activity-badge" hidden></span>
+                </a></li>
+            <li><a class="sidebar-link" href="#jobs" data-page="jobs">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <line x1="10" y1="9" x2="8" y2="9"></line>
+                    </svg>
+                    <span class="sidebar-label">Jobs</span>
+                </a></li>
+            <li><a class="sidebar-link" href="#watchers" data-page="watchers">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span class="sidebar-label">Watchers</span>
+                </a></li>
+            <li><a class="sidebar-link" href="#schedule" data-page="schedule">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span class="sidebar-label">Schedule</span>
+                </a></li>
+            <li><a class="sidebar-link" href="#system" data-page="system">
+                    <svg class="sidebar-icon" viewBox="0 0 24 24">
+                        <path
+                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z">
+                        </path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span class="sidebar-label">System</span>
+                    <span class="sidebar-badge" id="nav-system-badge" hidden></span>
+                </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="sidebar-meta" id="sidebar-meta"></div>
+            <div class="sidebar-version" id="sidebar-version"></div>
+        </div>
+    </nav>
 
-                    <button class="theme-toggle" type="button" id="toggle-theme" aria-label="Toggle dashboard theme"
-                        title="Toggle dashboard theme">
-                        <span class="theme-icons" aria-hidden="true">
-                            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" focusable="false">
-                                <circle cx="12" cy="12" r="4"></circle>
-                                <path
-                                    d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77">
-                                </path>
-                            </svg>
-                            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" focusable="false">
-                                <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8a9.5 9.5 0 1 0 11.3 11.3z"></path>
-                            </svg>
-                        </span>
-                        <span class="theme-copy">
-                            <span class="theme-copy-label">Theme</span>
-                            <span class="theme-copy-value" id="theme-label">Light theme</span>
-                        </span>
-                    </button>
+    <!-- ── Mobile top bar ── -->
+    <header class="topbar" id="topbar">
+        <button class="topbar-hamburger" type="button" id="sidebar-toggle" aria-label="Toggle navigation">
+            <svg viewBox="0 0 24 24">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+        <span class="topbar-title">Clutch</span>
+    </header>
 
-                    <button class="theme-toggle" type="button" id="open-settings" aria-label="Open service settings"
-                        title="Configure service settings, schedule, and watchers">
-                        <span class="theme-icons" aria-hidden="true">
-                            <svg class="theme-icon" viewBox="0 0 24 24" focusable="false">
-                                <path
-                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z">
-                                </path>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                        </span>
-                        <span class="theme-copy">
-                            <span class="theme-copy-label">Settings</span>
-                            <span class="theme-copy-value" id="settings-label">Service settings</span>
-                        </span>
-                    </button>
-                </div>
-            </div>
-            <div class="meta" id="service-meta"></div>
-        </section>
+    <!-- ── Main content area ── -->
+    <main class="content" id="content">
 
-        <div class="grid">
-            <section class="stack">
-                <section class="panel">
-                    <h2>New Job</h2>
-                    <form id="job-form" method="post" action="/jobs">
-                        <label>
-                            <span>Source path</span>
-                            <div class="path-picker">
-                                <input id="input-file" name="input_file"
-                                    placeholder="Choose a file or folder on the source"
-                                    title="Source file or folder to convert. Use the chooser buttons to browse the source."
-                                    readonly required>
-                                <input id="input-kind" name="input_kind" type="hidden" value="file">
-                                <div class="actions">
-                                    <button class="secondary" type="button" id="browse-input-file"
-                                        title="Browse the source and pick a single file to convert.">Choose
-                                        file</button>
-                                    <button class="secondary" type="button" id="browse-input-directory"
-                                        title="Browse the source and pick a folder to queue.">Choose folder</button>
-                                    <button class="ghost" type="button" id="clear-input-file"
-                                        title="Clear the current source selection.">Clear</button>
-                                </div>
-                                <p class="small picker-help" id="input-selection-hint">Choose a single file or a folder
-                                    on the source.</p>
-                            </div>
-                        </label>
-
-                        <div class="checks checks-single">
-                            <label class="check"
-                                title="When the source is a folder, include files from its subdirectories too."><input
-                                    id="input-recursive" type="checkbox" name="recursive" disabled>Include
-                                subdirectories when the source is a folder</label>
-                        </div>
-
-                        <label>
-                            <span>Destination directory</span>
-                            <div class="path-picker">
-                                <input id="output-dir" name="output_dir"
-                                    placeholder="Leave empty to write next to source"
-                                    title="Destination directory for converted files. Leave empty to write next to each source file."
-                                    readonly>
-                                <div class="actions">
-                                    <button class="secondary" type="button" id="browse-output-dir"
-                                        title="Browse the source and choose a destination directory.">Choose
-                                        folder</button>
-                                    <button class="ghost" type="button" id="clear-output-dir"
-                                        title="Clear the destination directory.">Clear</button>
-                                </div>
-                            </div>
-                        </label>
-
-                        <div class="row">
-                            <label>
-                                <span>Codec</span>
-                                <select name="codec" title="Encoder profile used for the conversion.">
-                                    <option value="nvenc_h265">nvenc_h265</option>
-                                    <option value="nvenc_h264">nvenc_h264</option>
-                                    <option value="av1">av1</option>
-                                    <option value="x265">x265</option>
-                                </select>
-                            </label>
-
-                            <label>
-                                <span>Speed</span>
-                                <select name="encode_speed"
-                                    title="Encoding preset. Slower presets usually compress better, but they take longer.">
-                                    <option value="normal">normal</option>
-                                    <option value="slow">slow</option>
-                                    <option value="fast">fast</option>
-                                </select>
-                            </label>
-                        </div>
-
-                        <div class="checks">
-                            <label class="check"
-                                title="Keep the original audio tracks instead of re-encoding them."><input
-                                    type="checkbox" name="audio_passthrough">Audio passthrough</label>
-                            <label class="check"
-                                title="Delete the source file after a successful conversion. Use with care."><input
-                                    type="checkbox" name="delete_source">Delete source on success</label>
-                            <label class="check" title="Queue the job even if the file already looks converted."><input
-                                    type="checkbox" name="force">Force conversion</label>
-                            <label class="check"
-                                title="Capture and display more detailed HandBrake output for troubleshooting."><input
-                                    type="checkbox" name="verbose">Verbose HandBrake output</label>
-                        </div>
-
-                        <div class="actions">
-                            <button class="primary" type="submit" id="submit-button"
-                                title="Add the current source to the queue with these settings.">Queue job</button>
-                            <button class="secondary" type="button" id="refresh-button"
-                                title="Refresh the service summary and queue right now.">Refresh jobs</button>
-                        </div>
-                        <div class="status-line" id="form-status"></div>
-                    </form>
-                </section>
-            </section>
-
-            <section class="panel panel-queue">
+        <!-- ── Activity page (Queue) ── -->
+        <section class="page" id="page-activity" data-page="activity">
+            <div class="page-inner">
                 <div class="jobs-header">
-                    <h2>Queue</h2>
+                    <h2>Activity</h2>
                     <div class="jobs-header-actions">
                         <button class="ghost" type="button" id="toggle-expand-jobs"
                             title="Expand or collapse all job details.">Collapse all</button>
                         <div class="dropdown" id="clear-jobs-dropdown">
                             <button class="ghost" type="button" id="clear-jobs"
-                                title="Remove jobs from the queue list.">Clear
-                                queue &#x25BE;</button>
+                                title="Remove jobs from the queue list.">Clear queue &#x25BE;</button>
                             <div class="dropdown-menu" hidden>
                                 <button type="button" data-clear-mode="finished"
-                                    title="Remove succeeded, failed, cancelled and skipped jobs. Keep running and queued.">Clear
+                                    title="Remove succeeded, failed, cancelled and skipped jobs.">Clear
                                     finished</button>
-                                <button type="button" data-clear-mode="queued"
-                                    title="Remove queued jobs only. Keep running and finished.">Clear queued</button>
+                                <button type="button" data-clear-mode="queued" title="Remove queued jobs only.">Clear
+                                    queued</button>
                                 <button type="button" data-clear-mode="all"
                                     title="Remove everything except running, paused and cancelling jobs.">Clear
                                     all</button>
                             </div>
                         </div>
                         <button class="ghost" type="button" id="toggle-autorefresh"
-                            title="Automatically refresh the queue every 2 seconds. Click to pause or resume.">Auto
-                            refresh: on</button>
+                            title="Automatically refresh the queue every 2 seconds.">Auto refresh: on</button>
                     </div>
                 </div>
                 <div class="jobs-filters">
                     <input id="jobs-filter-text" type="search" placeholder="Filter by filename"
                         title="Type to filter the queue by filename.">
                     <select id="jobs-filter-status" title="Filter the queue by job status.">
-
                         <option value="">All statuses</option>
                         <option value="running">Running</option>
                         <option value="paused">Paused</option>
@@ -218,366 +122,638 @@
                     <span class="jobs-count" id="jobs-count"></span>
                 </div>
                 <div id="jobs-container"></div>
-            </section>
-        </div>
-    </div>
-
-    <div class="settings-modal" id="settings-modal" hidden>
-        <div class="settings-backdrop" data-close-settings></div>
-        <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-            <div class="settings-header">
-                <h3 id="settings-modal-title">Service Settings</h3>
-                <button class="ghost" type="button" id="close-settings" title="Close settings.">Close</button>
             </div>
+        </section>
 
-            <div class="settings-tabs" role="tablist">
-                <button class="settings-tab settings-tab-active" role="tab" data-tab="general"
-                    aria-selected="true">General</button>
-                <button class="settings-tab" role="tab" data-tab="schedule" aria-selected="false">Schedule</button>
-                <button class="settings-tab" role="tab" data-tab="watchers" aria-selected="false">Watchers</button>
-            </div>
+        <!-- ── Jobs page (New Job form) ── -->
+        <section class="page" id="page-jobs" data-page="jobs" hidden>
+            <div class="page-inner page-narrow">
+                <h2>New Job</h2>
+                <form id="job-form" method="post" action="/jobs">
 
-            <div class="settings-tab-panels">
-                <!-- ── General Tab ── -->
-                <div class="settings-tab-panel" id="tab-general" data-tab-panel="general">
-                    <form id="settings-form" method="post" action="/config">
-                        <div class="picker-block">
-                            <div class="picker-block-header">
-                                <div>
-                                    <span>Allowed source roots</span>
-                                    <p class="small picker-help">Choose which directories on the source the service
-                                        can access.</p>
+                    <div class="field-row">
+                        <label class="field-row-label">Source path</label>
+                        <div class="field-row-control">
+                            <div class="path-row">
+                                <div class="path-picker">
+                                    <input id="input-file" name="input_file"
+                                        placeholder="Choose a file or folder on the source"
+                                        title="Source file or folder to convert." readonly required>
+                                    <input id="input-kind" name="input_kind" type="hidden" value="file">
+                                    <div class="actions">
+                                        <button class="secondary" type="button" id="browse-input-file"
+                                            title="Browse the source and pick a single file.">Choose file</button>
+                                        <button class="secondary" type="button" id="browse-input-directory"
+                                            title="Browse the source and pick a folder.">Choose folder</button>
+                                        <button class="ghost" type="button" id="clear-input-file"
+                                            title="Clear the current source selection.">Clear</button>
+                                    </div>
+                                    <p class="small picker-help" id="input-selection-hint">Choose a single file or a
+                                        folder on the source.</p>
                                 </div>
-                                <button class="secondary" type="button" id="add-allowed-root"
-                                    title="Add a source directory that the service is allowed to browse and use.">Add
-                                    allowed root</button>
+                                <label class="check check-inline" title="Include files from subdirectories."><input
+                                        id="input-recursive" type="checkbox" name="recursive" disabled>Include
+                                    subdirectories</label>
                             </div>
-                            <textarea name="allowed_roots" hidden></textarea>
-                            <div id="allowed-roots-list" class="list-block"></div>
                         </div>
+                    </div>
 
-                        <label>
-                            <span>Parallel workers</span>
-                            <input name="worker_count" type="number" min="1" step="1" value="1"
-                                title="Number of conversion workers that can run at the same time.">
-                        </label>
-
-                        <label>
-                            <span>NVENC GPU devices</span>
-                            <input name="gpu_devices" placeholder="Leave empty for automatic selection"
-                                title="Comma-separated NVIDIA GPU indices for NVENC jobs.">
-                        </label>
-
-                        <label>
-                            <span>Default destination directory</span>
-                            <div class="path-picker">
-                                <input id="default-output-dir" name="default_output_dir"
-                                    placeholder="Leave empty to write next to source"
-                                    title="Default destination directory for new jobs and watchers." readonly>
-                                <div class="actions">
-                                    <button class="secondary" type="button" id="browse-default-output-dir"
-                                        title="Browse the source and choose a default destination directory.">Choose
-                                        folder</button>
-                                    <button class="ghost" type="button" id="clear-default-output-dir"
-                                        title="Clear the default destination directory.">Clear</button>
+                    <div class="field-row">
+                        <label class="field-row-label">Destination directory</label>
+                        <div class="field-row-control">
+                            <div class="path-row">
+                                <div class="path-picker">
+                                    <input id="output-dir" name="output_dir"
+                                        placeholder="Leave empty to write next to source"
+                                        title="Destination directory for converted files." readonly>
+                                    <div class="actions">
+                                        <button class="secondary" type="button" id="browse-output-dir"
+                                            title="Browse and choose a destination directory.">Choose folder</button>
+                                        <button class="ghost" type="button" id="clear-output-dir"
+                                            title="Clear the destination directory.">Clear</button>
+                                    </div>
                                 </div>
+                                <label class="check check-inline"
+                                    title="Create the destination directory if it does not exist."><input
+                                        type="checkbox" name="create_directory">Create directory if missing</label>
                             </div>
-                        </label>
+                        </div>
+                    </div>
 
-                        <div class="row">
-                            <label>
-                                <span>Default codec</span>
-                                <select name="default_codec"
-                                    title="Default encoder profile for new jobs and watcher-created jobs.">
+                    <fieldset class="options-section">
+                        <legend>Options</legend>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Codec</label>
+                            <div class="field-row-control">
+                                <select name="codec" title="Encoder profile.">
                                     <option value="nvenc_h265">nvenc_h265</option>
                                     <option value="nvenc_h264">nvenc_h264</option>
                                     <option value="av1">av1</option>
                                     <option value="x265">x265</option>
                                 </select>
-                            </label>
+                            </div>
+                        </div>
 
-                            <label>
-                                <span>Default speed</span>
-                                <select name="default_encode_speed"
-                                    title="Default encoding preset for new jobs and watcher-created jobs.">
+                        <div class="field-row">
+                            <label class="field-row-label">Speed</label>
+                            <div class="field-row-control">
+                                <select name="encode_speed" title="Encoding preset.">
                                     <option value="normal">normal</option>
                                     <option value="slow">slow</option>
                                     <option value="fast">fast</option>
                                 </select>
-                            </label>
+                            </div>
                         </div>
 
-                        <div class="checks">
-                            <label class="check"
-                                title="Use audio passthrough by default on new jobs and watcher-created jobs."><input
-                                    type="checkbox" name="default_audio_passthrough">Default audio
-                                passthrough</label>
-                            <label class="check"
-                                title="Delete source files by default after successful conversions."><input
-                                    type="checkbox" name="default_delete_source">Default delete source</label>
-                            <label class="check"
-                                title="Force conversion by default, even when a file already looks converted."><input
-                                    type="checkbox" name="default_force">Default force conversion</label>
-                            <label class="check" title="Enable verbose HandBrake output by default."><input
-                                    type="checkbox" name="default_verbose">Default verbose mode</label>
+                        <div class="field-row">
+                            <label class="field-row-label">Audio passthrough</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Keep original audio tracks."><input
+                                        type="checkbox" name="audio_passthrough">Keep original audio tracks</label>
+                            </div>
                         </div>
 
-                        <div class="actions">
-                            <button class="primary" type="submit" id="settings-button"
-                                title="Save all service settings.">Save settings</button>
-                        </div>
-                        <div class="status-line" id="settings-status"></div>
-                    </form>
-                </div>
-
-                <!-- ── Schedule Tab ── -->
-                <div class="settings-tab-panel" id="tab-schedule" data-tab-panel="schedule" hidden>
-                    <div class="schedule-status-bar" id="schedule-status-bar"></div>
-
-                    <div class="subpanel">
-                        <div class="checks checks-single">
-                            <label class="check" title="Enable the conversion schedule."><input id="schedule-enabled"
-                                    type="checkbox">Enable schedule</label>
+                        <div class="field-row">
+                            <label class="field-row-label">Delete source</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"
+                                    title="Delete source after successful conversion."><input type="checkbox"
+                                        name="delete_source">Delete source file on success</label>
+                            </div>
                         </div>
 
-                        <label>
-                            <span>Schedule mode</span>
+                        <div class="field-row">
+                            <label class="field-row-label">Force conversion</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Queue even if already converted."><input
+                                        type="checkbox" name="force">Convert even if already encoded</label>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Verbose output</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Verbose HandBrake output."><input
+                                        type="checkbox" name="verbose">Show detailed HandBrake output</label>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <div class="actions actions-centered">
+                        <button class="primary" type="submit" id="submit-button"
+                            title="Add the current source to the queue.">Queue job</button>
+                        <button class="secondary" type="button" id="refresh-button" title="Refresh the queue.">Refresh
+                            jobs</button>
+                    </div>
+                    <div class="status-line" id="form-status"></div>
+                </form>
+            </div>
+        </section>
+
+        <!-- ── Watchers page ── -->
+        <section class="page" id="page-watchers" data-page="watchers" hidden>
+            <div class="page-inner page-narrow">
+                <h2>Watchers</h2>
+                <form id="watcher-form" method="post" action="/watchers">
+
+                    <div class="field-row">
+                        <label class="field-row-label">Source directory</label>
+                        <div class="field-row-control">
+                            <div class="path-picker">
+                                <input id="watcher-directory" name="directory"
+                                    placeholder="Choose a directory on the source" title="Source directory to monitor."
+                                    readonly required>
+                                <div class="actions">
+                                    <button class="secondary" type="button" id="browse-watcher-directory"
+                                        title="Browse and choose a directory to watch.">Choose folder</button>
+                                    <button class="ghost" type="button" id="clear-watcher-directory"
+                                        title="Clear the current watcher directory.">Clear</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Poll interval</label>
+                        <div class="field-row-control">
+                            <input name="poll_interval" type="number" min="1" step="1" value="5"
+                                title="Seconds between scans for new files.">
+                            <p class="field-row-help">Seconds between scans for new files.</p>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Settle time</label>
+                        <div class="field-row-control">
+                            <input name="settle_time" type="number" min="1" step="1" value="30"
+                                title="Seconds a file must stay unchanged before queuing.">
+                            <p class="field-row-help">Seconds a file must stay unchanged before queuing.</p>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Recursive watch</label>
+                        <div class="field-row-control">
+                            <label class="check check-inline" title="Monitor subdirectories too."><input type="checkbox"
+                                    name="recursive">Monitor subdirectories</label>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Delete source</label>
+                        <div class="field-row-control">
+                            <label class="check check-inline" title="Delete source after successful conversion."><input
+                                    type="checkbox" name="delete_source">Delete source on success</label>
+                        </div>
+                    </div>
+
+                    <fieldset class="options-section" id="watcher-overrides">
+                        <legend>Conversion overrides</legend>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Output directory</label>
+                            <div class="field-row-control">
+                                <div class="path-picker">
+                                    <input id="watcher-output-dir" name="output_dir"
+                                        placeholder="Leave empty to use default"
+                                        title="Override the output directory for this watcher." readonly>
+                                    <div class="actions">
+                                        <button class="secondary" type="button" id="browse-watcher-output-dir"
+                                            title="Browse and choose an output directory.">Choose folder</button>
+                                        <button class="ghost" type="button" id="clear-watcher-output-dir"
+                                            title="Clear the override.">Clear</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Codec</label>
+                            <div class="field-row-control">
+                                <select name="codec" title="Override the encoder for this watcher.">
+                                    <option value="">Use default</option>
+                                    <option value="nvenc_h265">nvenc_h265</option>
+                                    <option value="nvenc_h264">nvenc_h264</option>
+                                    <option value="av1">av1</option>
+                                    <option value="x265">x265</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Encode speed</label>
+                            <div class="field-row-control">
+                                <select name="encode_speed" title="Override the encoding preset.">
+                                    <option value="">Use default</option>
+                                    <option value="normal">normal</option>
+                                    <option value="slow">slow</option>
+                                    <option value="fast">fast</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Audio passthrough</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Override audio passthrough."><input
+                                        type="checkbox" name="audio_passthrough" id="watcher-audio-passthrough">Audio
+                                    passthrough</label>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Force re-encode</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Override force re-encode."><input
+                                        type="checkbox" name="force" id="watcher-force">Force re-encode</label>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <div class="actions actions-centered">
+                        <button class="secondary" type="submit" id="watcher-button"
+                            title="Start monitoring this directory.">Add watcher</button>
+                        <button class="ghost" type="button" id="cancel-edit-watcher"
+                            title="Cancel editing and reset the form." hidden>Cancel</button>
+                    </div>
+                    <div class="status-line" id="watcher-status"></div>
+                </form>
+                <div id="watchers-container" class="list-block"></div>
+            </div>
+        </section>
+
+        <!-- ── Schedule page ── -->
+        <section class="page" id="page-schedule" data-page="schedule" hidden>
+            <div class="page-inner page-narrow">
+                <h2>Schedule</h2>
+                <div class="schedule-status-bar" id="schedule-status-bar"></div>
+
+                <fieldset class="options-section">
+                    <legend>General</legend>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Enable schedule</label>
+                        <div class="field-row-control">
+                            <label class="check check-inline" title="Enable the conversion schedule."><input
+                                    id="schedule-enabled" type="checkbox">Enable schedule</label>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Schedule mode</label>
+                        <div class="field-row-control">
                             <select id="schedule-mode" title="Use manual time windows, electricity prices, or both.">
                                 <option value="manual">Manual only</option>
                                 <option value="price">Price only</option>
                                 <option value="both">Manual + Price</option>
                             </select>
-                        </label>
-
-                        <div class="row">
-                            <label>
-                                <span>Priority</span>
-                                <select id="schedule-priority" title="How manual schedule and price schedule interact.">
-                                    <option value="both_must_allow">Both must allow</option>
-                                    <option value="manual_first">Manual overrides price</option>
-                                    <option value="price_first">Price overrides manual</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>When blocked</span>
-                                <select id="schedule-pause-behavior"
-                                    title="What happens when the schedule blocks conversions.">
-                                    <option value="block_new">Block new jobs only</option>
-                                    <option value="pause_running">Pause running jobs</option>
-                                </select>
-                            </label>
                         </div>
                     </div>
 
-                    <div class="subpanel" id="schedule-manual-section">
-                        <h3>Manual Time Windows</h3>
-                        <div id="schedule-rules-list" class="schedule-rules-list"></div>
-                        <div class="actions">
-                            <button class="secondary" type="button" id="add-schedule-rule"
-                                title="Add a time window rule.">Add rule</button>
+                    <div class="field-row">
+                        <label class="field-row-label">Priority</label>
+                        <div class="field-row-control">
+                            <select id="schedule-priority" title="How manual and price schedules interact.">
+                                <option value="both_must_allow">Both must allow</option>
+                                <option value="manual_first">Manual overrides price</option>
+                                <option value="price_first">Price overrides manual</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="subpanel" id="schedule-price-section">
-                        <h3>Electricity Price</h3>
-                        <div class="row">
-                            <label>
-                                <span>Provider</span>
-                                <select id="price-provider" title="Source for electricity spot prices.">
-                                    <option value="">Disabled</option>
-                                    <option value="ree_pvpc">REE PVPC Spain (free, no key)</option>
-                                    <option value="energy_charts">Energy-Charts (free, no key)</option>
-                                    <option value="entsoe">ENTSO-E (requires API key)</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Bidding zone</span>
-                                <select id="price-bidding-zone" title="European electricity bidding zone.">
-                                    <option value="">Select zone</option>
-                                </select>
-                            </label>
+                    <div class="field-row">
+                        <label class="field-row-label">When blocked</label>
+                        <div class="field-row-control">
+                            <select id="schedule-pause-behavior"
+                                title="What happens when the schedule blocks conversions.">
+                                <option value="block_new">Block new jobs only</option>
+                                <option value="pause_running">Pause running jobs</option>
+                            </select>
                         </div>
+                    </div>
+                </fieldset>
 
-                        <label id="entsoe-key-label" hidden>
-                            <span>ENTSO-E API key</span>
+                <fieldset class="options-section" id="schedule-manual-section">
+                    <legend>Manual Time Windows</legend>
+                    <div id="schedule-rules-list" class="schedule-rules-list"></div>
+                    <div class="actions actions-centered">
+                        <button class="secondary" type="button" id="add-schedule-rule"
+                            title="Add a time window rule.">Add rule</button>
+                    </div>
+                </fieldset>
+
+                <fieldset class="options-section" id="schedule-price-section">
+                    <legend>Electricity Price</legend>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Provider</label>
+                        <div class="field-row-control">
+                            <select id="price-provider" title="Source for electricity spot prices.">
+                                <option value="">Disabled</option>
+                                <option value="ree_pvpc">REE PVPC Spain (free, no key)</option>
+                                <option value="energy_charts">Energy-Charts (free, no key)</option>
+                                <option value="entsoe">ENTSO-E (requires API key)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label class="field-row-label">Bidding zone</label>
+                        <div class="field-row-control">
+                            <select id="price-bidding-zone" title="European electricity bidding zone.">
+                                <option value="">Select zone</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-row" id="entsoe-key-label" hidden>
+                        <label class="field-row-label">ENTSO-E API key</label>
+                        <div class="field-row-control">
                             <input id="price-entsoe-key" type="password"
                                 placeholder="Security token from transparency.entsoe.eu"
-                                title="Your personal ENTSO-E Transparency Platform API security token.">
-                        </label>
+                                title="Your personal ENTSO-E API security token.">
+                        </div>
+                    </div>
 
-                        <label>
-                            <span>Price strategy</span>
+                    <div class="field-row">
+                        <label class="field-row-label">Price strategy</label>
+                        <div class="field-row-control">
                             <select id="price-strategy" title="How to decide when prices are acceptable.">
                                 <option value="threshold">Maximum price threshold</option>
                                 <option value="cheapest_n">Cheapest N hours of the day</option>
                             </select>
-                        </label>
-
-                        <div class="row">
-                            <label id="price-threshold-label">
-                                <span>Max price (EUR/kWh)</span>
-                                <input id="price-threshold" type="number" min="0" step="0.0001" value="0.0000"
-                                    title="Conversions pause when price exceeds this value.">
-                            </label>
-                            <label id="price-cheapest-label" hidden>
-                                <span>Cheapest hours</span>
-                                <input id="price-cheapest-hours" type="number" min="1" max="24" step="1" value="8"
-                                    title="Only convert during the N cheapest hours of the day.">
-                            </label>
-                        </div>
-
-                        <div class="price-chart-wrap" id="price-chart-wrap">
-                            <div class="price-chart" id="price-chart"></div>
-                            <div class="small" id="price-chart-label"></div>
                         </div>
                     </div>
 
-                    <div class="actions">
-                        <button class="primary" type="button" id="save-schedule-button"
-                            title="Save schedule settings.">Save schedule</button>
+                    <div class="field-row" id="price-threshold-label">
+                        <label class="field-row-label">Max price (EUR/kWh)</label>
+                        <div class="field-row-control">
+                            <input id="price-threshold" type="number" min="0" step="0.0001" value="0.0000"
+                                title="Conversions pause when price exceeds this value.">
+                        </div>
                     </div>
-                    <div class="status-line" id="schedule-status"></div>
+
+                    <div class="field-row" id="price-cheapest-label" hidden>
+                        <label class="field-row-label">Cheapest hours</label>
+                        <div class="field-row-control">
+                            <input id="price-cheapest-hours" type="number" min="1" max="24" step="1" value="8"
+                                title="Only convert during the N cheapest hours of the day.">
+                        </div>
+                    </div>
+
+                    <div class="price-chart-wrap" id="price-chart-wrap">
+                        <div class="price-chart" id="price-chart"></div>
+                        <div class="small" id="price-chart-label"></div>
+                    </div>
+                </fieldset>
+
+                <div class="actions actions-centered">
+                    <button class="primary" type="button" id="save-schedule-button" title="Save schedule settings.">Save
+                        schedule</button>
                 </div>
+                <div class="status-line" id="schedule-status"></div>
+            </div>
+        </section>
 
-                <!-- ── Watchers Tab ── -->
-                <div class="settings-tab-panel" id="tab-watchers" data-tab-panel="watchers" hidden>
-                    <form id="watcher-form" method="post" action="/watchers">
-                        <label>
-                            <span>Source directory</span>
-                            <div class="path-picker">
-                                <input id="watcher-directory" name="directory"
-                                    placeholder="Choose a directory on the source"
-                                    title="Source directory to monitor for new files." readonly required>
-                                <div class="actions">
-                                    <button class="secondary" type="button" id="browse-watcher-directory"
-                                        title="Browse the source and choose a directory to watch.">Choose
-                                        folder</button>
-                                    <button class="ghost" type="button" id="clear-watcher-directory"
-                                        title="Clear the current watcher directory.">Clear</button>
+        <!-- ── System page ── -->
+        <section class="page" id="page-system" data-page="system" hidden>
+            <div class="page-inner page-narrow">
+                <h2>System</h2>
+
+                <fieldset class="options-section">
+                    <legend>Theme</legend>
+                    <div class="field-row">
+                        <label class="field-row-label">Appearance</label>
+                        <div class="field-row-control">
+                            <select id="theme-select" title="Choose the dashboard colour theme.">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="options-section">
+                    <legend>Default Settings</legend>
+                    <form id="settings-form" method="post" action="/config">
+
+                        <div class="field-row">
+                            <label class="field-row-label">Allowed roots</label>
+                            <div class="field-row-control">
+                                <div class="picker-block">
+                                    <div class="picker-block-header">
+                                        <p class="field-row-help">Directories the service can access.</p>
+                                        <button class="secondary" type="button" id="add-allowed-root"
+                                            title="Add a source directory.">Add allowed root</button>
+                                    </div>
+                                    <textarea name="allowed_roots" hidden></textarea>
+                                    <div id="allowed-roots-list" class="list-block"></div>
                                 </div>
                             </div>
-                        </label>
-
-                        <div class="row">
-                            <label>
-                                <span>Poll interval</span>
-                                <input name="poll_interval" type="number" min="1" step="1" value="5"
-                                    title="Seconds between scans for new files in this source directory.">
-                            </label>
-                            <label>
-                                <span>Settle time</span>
-                                <input name="settle_time" type="number" min="1" step="1" value="30"
-                                    title="Seconds a file must stay unchanged before the watcher queues it.">
-                            </label>
                         </div>
 
-                        <div class="checks">
-                            <label class="check"
-                                title="Also monitor subdirectories inside this source directory."><input type="checkbox"
-                                    name="recursive">Recursive watch</label>
-                            <label class="check"
-                                title="Delete each source file after this watcher finishes a successful conversion."><input
-                                    type="checkbox" name="delete_source">Delete source on success</label>
+                        <div class="field-row">
+                            <label class="field-row-label">Parallel workers</label>
+                            <div class="field-row-control">
+                                <input name="worker_count" type="number" min="1" step="1" value="1"
+                                    title="Number of conversion workers.">
+                            </div>
                         </div>
 
-                        <details class="overrides-section" id="watcher-overrides">
-                            <summary>Conversion overrides</summary>
-                            <label>
-                                <span>Output directory</span>
+                        <div class="field-row">
+                            <label class="field-row-label">NVENC GPU devices</label>
+                            <div class="field-row-control">
+                                <input name="gpu_devices" placeholder="Leave empty for automatic selection"
+                                    title="Comma-separated NVIDIA GPU indices.">
+                                <p class="field-row-help">Comma-separated NVIDIA GPU indices for NVENC jobs.</p>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Default destination</label>
+                            <div class="field-row-control">
                                 <div class="path-picker">
-                                    <input id="watcher-output-dir" name="output_dir"
-                                        placeholder="Leave empty to use default"
-                                        title="Override the output directory for files converted by this watcher."
-                                        readonly>
+                                    <input id="default-output-dir" name="default_output_dir"
+                                        placeholder="Leave empty to write next to source"
+                                        title="Default destination directory." readonly>
                                     <div class="actions">
-                                        <button class="secondary" type="button" id="browse-watcher-output-dir"
-                                            title="Browse and choose an output directory for this watcher.">Choose
-                                            folder</button>
-                                        <button class="ghost" type="button" id="clear-watcher-output-dir"
-                                            title="Clear the override and use the default output directory.">Clear</button>
+                                        <button class="secondary" type="button" id="browse-default-output-dir"
+                                            title="Browse and choose a default destination.">Choose folder</button>
+                                        <button class="ghost" type="button" id="clear-default-output-dir"
+                                            title="Clear the default destination.">Clear</button>
                                     </div>
                                 </div>
-                            </label>
-                            <div class="row">
-                                <label>
-                                    <span>Codec</span>
-                                    <select name="codec"
-                                        title="Override the encoder for this watcher. Leave on default to use the global setting.">
-                                        <option value="">Use default</option>
-                                        <option value="nvenc_h265">nvenc_h265</option>
-                                        <option value="nvenc_h264">nvenc_h264</option>
-                                        <option value="av1">av1</option>
-                                        <option value="x265">x265</option>
-                                    </select>
-                                </label>
-                                <label>
-                                    <span>Encode speed</span>
-                                    <select name="encode_speed"
-                                        title="Override the encoding preset for this watcher. Leave on default to use the global setting.">
-                                        <option value="">Use default</option>
-                                        <option value="normal">normal</option>
-                                        <option value="slow">slow</option>
-                                        <option value="fast">fast</option>
-                                    </select>
-                                </label>
                             </div>
-                            <div class="checks">
-                                <label class="check" title="Override audio passthrough for this watcher."><input
-                                        type="checkbox" name="audio_passthrough" id="watcher-audio-passthrough">Audio
-                                    passthrough</label>
-                                <label class="check" title="Override force re-encode for this watcher."><input
-                                        type="checkbox" name="force" id="watcher-force">Force re-encode</label>
-                            </div>
-                        </details>
-
-                        <div class="actions">
-                            <button class="secondary" type="submit" id="watcher-button"
-                                title="Start monitoring this source directory with the current watcher settings.">Add
-                                watcher</button>
-                            <button class="ghost" type="button" id="cancel-edit-watcher"
-                                title="Cancel editing and reset the form." hidden>Cancel</button>
                         </div>
-                        <div class="status-line" id="watcher-status"></div>
-                    </form>
-                    <div id="watchers-container" class="list-block"></div>
-                </div>
-            </div>
-        </div>
-    </div>
 
+                        <div class="field-row">
+                            <label class="field-row-label">Default codec</label>
+                            <div class="field-row-control">
+                                <select name="default_codec" title="Default encoder for new jobs.">
+                                    <option value="nvenc_h265">nvenc_h265</option>
+                                    <option value="nvenc_h264">nvenc_h264</option>
+                                    <option value="av1">av1</option>
+                                    <option value="x265">x265</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Default speed</label>
+                            <div class="field-row-control">
+                                <select name="default_encode_speed" title="Default encoding preset.">
+                                    <option value="normal">normal</option>
+                                    <option value="slow">slow</option>
+                                    <option value="fast">fast</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Audio passthrough</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Copy audio tracks without re-encoding."><input
+                                        type="checkbox" name="default_audio_passthrough">Don't re-encode audio
+                                    tracks</label>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Delete source</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"
+                                    title="Remove the original file after a successful conversion."><input
+                                        type="checkbox" name="default_delete_source">Delete source file on
+                                    success</label>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Force conversion</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"
+                                    title="Convert even if the file already matches the target codec."><input
+                                        type="checkbox" name="default_force">Convert even if already encoded</label>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <label class="field-row-label">Verbose mode</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline" title="Show detailed FFmpeg output in logs."><input
+                                        type="checkbox" name="default_verbose">Show detailed encoder output</label>
+                            </div>
+                        </div>
+
+                        <div class="actions actions-centered">
+                            <button class="primary" type="submit" id="settings-button" title="Save settings.">Save
+                                settings</button>
+                        </div>
+                        <div class="status-line" id="settings-status"></div>
+                    </form>
+                </fieldset>
+
+                <fieldset class="options-section">
+                    <legend>System Monitor</legend>
+                    <div id="sysmon-container" class="sysmon-container">
+                        <div class="empty">Loading…</div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="options-section">
+                    <legend>About</legend>
+                    <div class="field-row">
+                        <label class="field-row-label">Version</label>
+                        <div class="field-row-control">
+                            <span id="about-version" class="about-version">—</span>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <label class="field-row-label">Updates</label>
+                        <div class="field-row-control">
+                            <button class="secondary" type="button" id="release-check"
+                                aria-label="Check for new versions" title="Check for new versions">
+                                <span id="release-label">Check for updates</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="field-row" id="changelog-row" hidden>
+                        <label class="field-row-label">Changelog</label>
+                        <div class="field-row-control">
+                            <div class="changelog-text" id="changelog-text"></div>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+        </section>
+    </main>
+
+    <!-- ── Sidebar overlay for mobile ── -->
+    <div class="sidebar-overlay" id="sidebar-overlay" hidden></div>
+
+    <!-- ── File browser modal (global) ── -->
     <div class="browser-modal" id="path-browser" hidden>
         <div class="browser-backdrop" data-close-browser></div>
         <div class="browser-dialog" role="dialog" aria-modal="true" aria-labelledby="path-browser-title">
             <div class="browser-header">
-                <div class="browser-copy">
-                    <div class="theme-copy-label" id="path-browser-eyebrow">Browse</div>
-                    <h3 id="path-browser-title">Source filesystem</h3>
+                <h3 id="path-browser-title">File Browser</h3>
+                <button class="browser-close" type="button" id="close-browser" title="Close the file browser."
+                    aria-label="Close">&times;</button>
+            </div>
+            <div class="browser-body">
+                <div class="browser-toolbar">
+                    <input id="browser-current-path" placeholder="Start typing or select a path below"
+                        title="Current folder.">
+                    <div class="browser-toolbar-actions">
+                        <button class="ghost" type="button" id="browser-up" title="Go to parent folder.">Up</button>
+                        <label class="check browser-check" title="Show hidden files."><input id="browser-show-hidden"
+                                type="checkbox">Hidden</label>
+                    </div>
                 </div>
-                <button class="ghost" type="button" id="close-browser" title="Close the source browser.">Close</button>
+                <input id="browser-filter" type="search" placeholder="Filter current directory" title="Filter by name.">
+                <div class="status-line" id="browser-status"></div>
+                <div class="browser-table-wrap">
+                    <table class="browser-table">
+                        <thead>
+                            <tr>
+                                <th class="browser-th-icon"></th>
+                                <th>Name</th>
+                            </tr>
+                        </thead>
+                        <tbody id="browser-list"></tbody>
+                    </table>
+                </div>
             </div>
-            <div class="browser-root-chips" id="browser-roots"></div>
-            <div class="row browser-toolbar">
-                <button class="ghost" type="button" id="browser-up"
-                    title="Go to the parent folder in the source browser.">Up</button>
-                <input id="browser-current-path" title="Current folder in the source browser." readonly>
-            </div>
-            <div class="browser-options">
-                <input id="browser-filter" type="search" placeholder="Filter current source directory"
-                    title="Filter the current source folder by name or path.">
-                <label class="check browser-check"
-                    title="Show dotfiles and hidden folders in the source browser."><input id="browser-show-hidden"
-                        type="checkbox">Show hidden files and folders</label>
-            </div>
-            <div class="status-line" id="browser-status"></div>
-            <div class="browser-list" id="browser-list"></div>
-            <div class="actions browser-footer">
-                <button class="primary" type="button" id="browser-select-current"
-                    title="Use the current source folder as the selected path." hidden>Use this folder</button>
+            <div class="browser-footer">
+                <span id="path-browser-eyebrow" class="browser-eyebrow"></span>
+                <div class="browser-footer-actions">
+                    <button class="ghost" type="button" data-close-browser>Cancel</button>
+                    <button class="primary" type="button" id="browser-select-current" title="Use this path."
+                        hidden>Ok</button>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- ── Custom confirm dialog ── -->
+    <div class="confirm-modal" id="confirm-modal" hidden>
+        <div class="confirm-backdrop"></div>
+        <div class="confirm-dialog">
+            <div class="confirm-header">
+                <h3 id="confirm-title">Confirm</h3>
+            </div>
+            <div class="confirm-body">
+                <p id="confirm-message"></p>
+            </div>
+            <div class="confirm-footer">
+                <button class="ghost" type="button" id="confirm-cancel">Cancel</button>
+                <button class="primary confirm-danger" type="button" id="confirm-ok">Remove</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/assets/dashboard.js"></script>
 </body>

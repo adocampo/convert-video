@@ -17,6 +17,8 @@
         activeQueueJobId: '',
         queueJobIds: [],
         lastJobs: [],
+        jobSortColumn: 'default',
+        jobSortAsc: true,
         browser: {
             open: false,
             target: '',
@@ -29,10 +31,6 @@
             roots: [],
             parent: '',
             activeEntryIndex: -1,
-        },
-        settings: {
-            open: false,
-            activeTab: 'general',
         },
         biddingZones: [],
         scheduleConfig: {},
@@ -55,7 +53,12 @@
         succeeded: 7,
     };
 
-    const meta = document.getElementById('service-meta');
+    const meta = document.getElementById('sidebar-meta');
+    const sidebarVersion = document.getElementById('sidebar-version');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const navActivityBadge = document.getElementById('nav-activity-badge');
     const jobsContainer = document.getElementById('jobs-container');
     const jobsFilterText = document.getElementById('jobs-filter-text');
     const jobsFilterStatus = document.getElementById('jobs-filter-status');
@@ -98,11 +101,13 @@
     const clearJobsButton = document.getElementById('clear-jobs');
     const clearJobsDropdown = document.getElementById('clear-jobs-dropdown');
     const toggleAutoRefreshButton = document.getElementById('toggle-autorefresh');
-    const toggleThemeButton = document.getElementById('toggle-theme');
-    const themeLabel = document.getElementById('theme-label');
+    const themeSelect = document.getElementById('theme-select');
     const releaseButton = document.getElementById('release-check');
     const releaseLabel = document.getElementById('release-label');
-    const releaseBadge = document.getElementById('release-badge');
+    const aboutVersion = document.getElementById('about-version');
+    const changelogRow = document.getElementById('changelog-row');
+    const changelogText = document.getElementById('changelog-text');
+    const navSystemBadge = document.getElementById('nav-system-badge');
     const toastContainer = document.getElementById('toast-container');
     const browserModal = document.getElementById('path-browser');
     const browserEyebrow = document.getElementById('path-browser-eyebrow');
@@ -116,10 +121,6 @@
     const browserList = document.getElementById('browser-list');
     const browserSelectCurrentButton = document.getElementById('browser-select-current');
     const closeBrowserButton = document.getElementById('close-browser');
-    const settingsModal = document.getElementById('settings-modal');
-    const closeSettingsButton = document.getElementById('close-settings');
-    const openSettingsButton = document.getElementById('open-settings');
-    const settingsTabs = document.querySelectorAll('.settings-tab');
     const scheduleEnabled = document.getElementById('schedule-enabled');
     const scheduleMode = document.getElementById('schedule-mode');
     const schedulePriority = document.getElementById('schedule-priority');
@@ -143,6 +144,12 @@
     const schedulePriceSection = document.getElementById('schedule-price-section');
     const saveScheduleButton = document.getElementById('save-schedule-button');
     const scheduleStatusEl = document.getElementById('schedule-status');
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmTitle = document.getElementById('confirm-title');
+    const confirmMessage = document.getElementById('confirm-message');
+    const confirmOkButton = document.getElementById('confirm-ok');
+    const confirmCancelButton = document.getElementById('confirm-cancel');
+    const sysmonContainer = document.getElementById('sysmon-container');
     const startupParams = new URLSearchParams(window.location.search);
     const systemThemeQuery = window.matchMedia
         ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -210,6 +217,20 @@
         return match ? match[1] : '';
     }
 
+    function formatElapsed(startedAt, finishedAt) {
+        if (!startedAt || !finishedAt) return null;
+        var t0 = new Date(startedAt).getTime();
+        var t1 = new Date(finishedAt).getTime();
+        if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) return null;
+        var secs = Math.round((t1 - t0) / 1000);
+        var h = Math.floor(secs / 3600);
+        var m = Math.floor((secs % 3600) / 60);
+        var s = secs % 60;
+        if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+        if (m > 0) return m + 'm ' + s + 's';
+        return s + 's';
+    }
+
     function summarizeMessage(job) {
         if (job.status === 'running') {
             return job.message || 'Conversion in progress.';
@@ -268,7 +289,7 @@
             });
         }
         if (!lines.length) return '';
-        return `<div class="job-detail job-detail-wide"><div class="job-detail-label">${escapeHtml(label)}</div><div class="job-detail-value media-info">${lines.join('')}</div></div>`;
+        return `<div class="job-detail"><div class="job-detail-label">${escapeHtml(label)}</div><div class="job-detail-value media-info">${lines.join('')}</div></div>`;
     }
 
     var arrowSvg = '<svg class="custom-select-arrow" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -397,6 +418,31 @@
         if (ms > 0) timer = setTimeout(dismiss, ms);
     }
 
+    function showConfirm(options) {
+        return new Promise(function (resolve) {
+            confirmTitle.textContent = options.title || 'Confirm';
+            confirmMessage.textContent = options.message || 'Are you sure?';
+            confirmOkButton.textContent = options.ok || 'Ok';
+            confirmModal.hidden = false;
+
+            function cleanup() {
+                confirmModal.hidden = true;
+                confirmOkButton.removeEventListener('click', onOk);
+                confirmCancelButton.removeEventListener('click', onCancel);
+                backdrop.removeEventListener('click', onCancel);
+            }
+
+            var backdrop = confirmModal.querySelector('.confirm-backdrop');
+
+            function onOk() { cleanup(); resolve(true); }
+            function onCancel() { cleanup(); resolve(false); }
+
+            confirmOkButton.addEventListener('click', onOk);
+            confirmCancelButton.addEventListener('click', onCancel);
+            backdrop.addEventListener('click', onCancel);
+        });
+    }
+
     function isInteractiveTarget(target) {
         return Boolean(
             target
@@ -428,17 +474,6 @@
             return 'dark';
         }
         return 'light';
-    }
-
-    function getThemeLabel(theme) {
-        return theme === 'dark' ? 'Dark theme' : 'Light theme';
-    }
-
-    function getThemeToggleTitle(theme) {
-        if (theme === 'dark') {
-            return 'Current theme: dark. Click to switch the dashboard to the light theme.';
-        }
-        return 'Current theme: light. Click to switch the dashboard to the dark theme.';
     }
 
     function getAutoRefreshTitle() {
@@ -488,6 +523,33 @@
             .trim();
     }
 
+    function changelogToHtml(markdown) {
+        var raw = String(markdown || '').replace(/\r/g, '').trim();
+        if (!raw) return '';
+        var lines = raw.split('\n');
+        var parts = [];
+        var inList = false;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var headingMatch = line.match(/^#{1,3}\s+(.+)/);
+            var bulletMatch = line.match(/^\s*-\s+(.+)/);
+            if (headingMatch) {
+                if (inList) { parts.push('</ul>'); inList = false; }
+                parts.push('<strong>' + escapeHtml(headingMatch[1]) + '</strong>');
+            } else if (bulletMatch) {
+                if (!inList) { parts.push('<ul>'); inList = true; }
+                var text = escapeHtml(bulletMatch[1])
+                    .replace(/`([^`]+)`/g, '<code>$1</code>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                parts.push('<li>' + text + '</li>');
+            } else if (line.trim() === '') {
+                if (inList) { parts.push('</ul>'); inList = false; }
+            }
+        }
+        if (inList) parts.push('</ul>');
+        return parts.join('\n');
+    }
+
     function buildReleaseTooltip(updateInfo) {
         if (updateInfo.update_in_progress) {
             return 'Installing the latest clutch release and restarting the service.';
@@ -518,28 +580,42 @@
 
         state.release = nextInfo;
 
-        if (!releaseButton || !releaseLabel || !releaseBadge) {
-            return;
+        // Version display
+        if (aboutVersion) {
+            aboutVersion.textContent = nextInfo.local_version ? 'v' + nextInfo.local_version : '\u2014';
         }
 
-        let label = 'Check releases';
-        if (nextInfo.update_in_progress) {
-            label = 'Updating...';
-        } else if (nextInfo.update_available && nextInfo.remote_version) {
-            label = `Update v${nextInfo.remote_version}`;
-        } else if (nextInfo.local_version) {
-            label = `v${nextInfo.local_version}`;
+        // Update button
+        if (releaseButton && releaseLabel) {
+            let label = 'Check for updates';
+            if (nextInfo.update_in_progress) {
+                label = 'Updating\u2026';
+            } else if (nextInfo.update_available && nextInfo.remote_version) {
+                label = 'Update to v' + nextInfo.remote_version;
+            }
+
+            releaseLabel.textContent = label;
+            releaseButton.disabled = nextInfo.update_in_progress;
+            releaseButton.dataset.busy = nextInfo.update_in_progress ? 'true' : 'false';
+            releaseButton.classList.toggle('has-badge', nextInfo.update_available);
         }
 
-        const tooltip = buildReleaseTooltip(nextInfo);
+        // Changelog text
+        if (changelogRow && changelogText) {
+            var cl = changelogToHtml(nextInfo.changelog);
+            if (cl && nextInfo.update_available) {
+                changelogText.innerHTML = cl;
+                changelogRow.hidden = false;
+            } else {
+                changelogRow.hidden = true;
+            }
+        }
 
-        releaseLabel.textContent = label;
-        releaseBadge.hidden = !nextInfo.update_available;
-        releaseButton.disabled = nextInfo.update_in_progress;
-        releaseButton.dataset.busy = nextInfo.update_in_progress ? 'true' : 'false';
-        releaseButton.classList.toggle('has-badge', nextInfo.update_available);
-        releaseButton.setAttribute('title', tooltip);
-        releaseButton.setAttribute('aria-label', tooltip);
+        // System nav badge
+        if (navSystemBadge) {
+            navSystemBadge.hidden = !nextInfo.update_available;
+            navSystemBadge.textContent = '!';
+        }
     }
 
     async function waitForReleaseRestart(targetVersion) {
@@ -574,17 +650,11 @@
 
     function applyTheme(theme) {
         const nextTheme = theme === 'dark' ? 'dark' : 'light';
-        const switchLabel = getThemeLabel(nextTheme);
-        const switchTitle = getThemeToggleTitle(nextTheme);
 
         state.theme = nextTheme;
         document.documentElement.setAttribute('data-theme', nextTheme);
-        if (themeLabel) {
-            themeLabel.textContent = switchLabel;
-        }
-        if (toggleThemeButton) {
-            toggleThemeButton.setAttribute('aria-label', switchTitle);
-            toggleThemeButton.setAttribute('title', switchTitle);
+        if (themeSelect) {
+            themeSelect.value = nextTheme;
         }
     }
 
@@ -699,10 +769,14 @@
         watcherForm.elements.encode_speed.value = '';
         watcherForm.elements.audio_passthrough.checked = false;
         watcherForm.elements.force.checked = false;
-        watcherOverridesDetails.removeAttribute('open');
         syncAllCustomSelects();
         watcherButton.textContent = 'Add watcher';
         cancelEditWatcherButton.hidden = true;
+        // Re-enable Edit/Remove buttons
+        Array.prototype.forEach.call(
+            watchersContainer.querySelectorAll('[data-edit-watcher], [data-remove-watcher]'),
+            function (btn) { btn.disabled = false; }
+        );
     }
 
     function syncAllowedRootsField() {
@@ -768,22 +842,8 @@
     }
 
     function renderBrowserRoots(roots) {
-        browserRoots.innerHTML = (roots || []).map(function (root, index) {
-            return `<button class="ghost" type="button" data-browser-root="${index}" title="Jump to allowed source root: ${escapeHtml(root)}">${escapeHtml(root)}</button>`;
-        }).join('');
-
-        Array.prototype.forEach.call(
-            browserRoots.querySelectorAll('[data-browser-root]'),
-            function (button) {
-                button.addEventListener('click', function () {
-                    const index = Number(button.dataset.browserRoot);
-                    if (!Number.isFinite(index) || !state.browser.roots[index]) {
-                        return;
-                    }
-                    loadBrowserPath(state.browser.roots[index], { resetFilter: true, focusFilter: true });
-                });
-            }
-        );
+        if (!browserRoots) return;
+        browserRoots.innerHTML = '';
     }
 
     function focusBrowserFilter() {
@@ -798,7 +858,7 @@
         state.browser.open = false;
         browserModal.hidden = true;
         document.body.classList.remove('modal-open');
-        browserRoots.innerHTML = '';
+        if (browserRoots) browserRoots.innerHTML = '';
         browserList.innerHTML = '';
         browserCurrentPath.value = '';
         browserShowHidden.checked = false;
@@ -808,38 +868,43 @@
         setBrowserStatus('', '');
     }
 
-    /* ── Settings Modal ── */
+    /* ── Sidebar Navigation ── */
 
-    function openSettings() {
-        state.settings = true;
-        settingsModal.hidden = false;
-        document.body.classList.add('modal-open');
-    }
+    var validPages = ['activity', 'jobs', 'watchers', 'schedule', 'system'];
 
-    function closeSettings() {
-        state.settings = false;
-        settingsModal.hidden = true;
-        document.body.classList.remove('modal-open');
-        if (state.editingWatcherId !== null) {
-            resetWatcherForm();
-        }
-    }
-
-    function switchSettingsTab(tabName) {
-        settingsTabs.forEach(function (tab) {
-            var active = tab.dataset.tab === tabName;
-            tab.classList.toggle('settings-tab-active', active);
-            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    function navigateTo(page) {
+        if (validPages.indexOf(page) === -1) page = 'activity';
+        validPages.forEach(function (p) {
+            var section = document.getElementById('page-' + p);
+            if (section) section.hidden = (p !== page);
         });
-        Array.prototype.forEach.call(
-            settingsModal.querySelectorAll('[data-tab-panel]'),
-            function (panel) {
-                panel.hidden = panel.dataset.tabPanel !== tabName;
-            }
-        );
-        if (tabName === 'schedule' && priceProvider.value) {
+        var links = sidebar.querySelectorAll('.sidebar-link');
+        links.forEach(function (link) {
+            link.classList.toggle('active', link.dataset.page === page);
+        });
+        if (page === 'schedule' && priceProvider.value) {
             loadPriceChart();
         }
+        if (page === 'watchers' || page === 'system') {
+            initCustomSelects();
+            syncAllCustomSelects();
+        }
+        if (page === 'system') {
+            startSysmonPolling();
+        } else {
+            stopSysmonPolling();
+        }
+        closeSidebar();
+    }
+
+    function getPageFromHash() {
+        var hash = window.location.hash.replace('#', '');
+        return validPages.indexOf(hash) !== -1 ? hash : 'activity';
+    }
+
+    function closeSidebar() {
+        sidebar.classList.remove('open');
+        sidebarOverlay.hidden = true;
     }
 
     /* ── Schedule UI ── */
@@ -932,9 +997,9 @@
 
         scheduleManualSection.hidden = !showManual;
         schedulePriceSection.hidden = !showPrice;
-        schedulePriority.closest('label').hidden = !showPriority;
-        schedulePauseBehavior.closest('label').parentElement.hidden = !enabled;
-        scheduleMode.closest('label').hidden = !enabled;
+        schedulePriority.closest('.field-row').hidden = !showPriority;
+        schedulePauseBehavior.closest('.field-row').hidden = !enabled;
+        scheduleMode.closest('.field-row').hidden = !enabled;
 
         updatePriceSections();
     }
@@ -945,7 +1010,7 @@
         var isRee = pv === 'ree_pvpc';
         entsoeKeyLabel.hidden = !isEntsoe;
         // REE PVPC is Spain-only; hide bidding zone selector
-        priceBiddingZone.closest('label').hidden = isRee;
+        priceBiddingZone.closest('.field-row').hidden = isRee;
 
         var strategy = priceStrategy.value;
         priceThresholdLabel.hidden = strategy !== 'threshold';
@@ -1217,7 +1282,7 @@
     }
 
     function scrollActiveBrowserEntryIntoView() {
-        const activeEntry = browserList.querySelector('.browser-entry-active');
+        const activeEntry = browserList.querySelector('.browser-row-active');
         if (!activeEntry) {
             return;
         }
@@ -1266,86 +1331,43 @@
 
         if (!state.browser.entries.length) {
             state.browser.activeEntryIndex = -1;
-            browserList.innerHTML = '<div class="empty">No matching items in this source directory.</div>';
+            browserList.innerHTML = '<tr><td colspan="2" class="empty">No items in this directory.</td></tr>';
             return;
         }
 
         if (!entries.length) {
             state.browser.activeEntryIndex = -1;
-            browserList.innerHTML = '<div class="empty">No entries match the current filter.</div>';
+            browserList.innerHTML = '<tr><td colspan="2" class="empty">No entries match the current filter.</td></tr>';
             return;
         }
 
+        var folderIcon = '<svg class="browser-icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+        var fileIcon = '<svg class="browser-icon" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+
         browserList.innerHTML = entries.map(function (item) {
-            const entry = item.entry;
-            const originalIndex = item.originalIndex;
-            const isActive = activeItem && originalIndex === activeItem.originalIndex;
-            const activeClass = isActive ? ' browser-entry-active' : '';
-            const openableClass = entry.kind === 'directory' ? ' browser-entry-openable' : '';
-            const rowTitle = entry.kind === 'directory'
-                ? 'Click to open this source folder.'
-                : 'Click to select this source file.';
-            const openButton = entry.kind === 'directory'
-                ? `<button class="ghost" type="button" data-open-entry="${originalIndex}" title="Open this source folder.">Open</button>`
-                : '';
-            const selectButton = entry.selectable
-                ? `<button class="${entry.kind === 'directory' ? 'secondary' : 'primary'}" type="button" data-select-entry="${originalIndex}" title="${entry.kind === 'directory' ? 'Use this source folder as the selected path.' : 'Select this source file.'}">${entry.kind === 'directory' ? 'Use' : 'Select'}</button>`
-                : '';
+            var entry = item.entry;
+            var originalIndex = item.originalIndex;
+            var isActive = activeItem && originalIndex === activeItem.originalIndex;
+            var activeClass = isActive ? ' browser-row-active' : '';
+            var icon = entry.kind === 'directory' ? folderIcon : fileIcon;
 
-            return `
-                <div class="browser-entry${openableClass}${activeClass}" data-entry-index="${originalIndex}" aria-selected="${isActive ? 'true' : 'false'}" title="${rowTitle}">
-                    <div class="browser-entry-main">
-                        <div class="browser-entry-kind">${escapeHtml(entry.kind)}</div>
-                        <div class="browser-entry-name">${escapeHtml(entry.name)}</div>
-                        <div class="browser-entry-path">${escapeHtml(entry.path)}</div>
-                    </div>
-                    <div class="actions">
-                        ${openButton}
-                        ${selectButton}
-                    </div>
-                </div>`;
+            return '<tr class="' + activeClass.trim() + '" data-entry-index="' + originalIndex + '">' +
+                '<td>' + icon + '</td>' +
+                '<td>' + escapeHtml(entry.name) + '</td>' +
+                '</tr>';
         }).join('');
-
-        Array.prototype.forEach.call(
-            browserList.querySelectorAll('[data-open-entry]'),
-            function (button) {
-                button.addEventListener('click', function () {
-                    const index = Number(button.dataset.openEntry);
-                    if (!Number.isFinite(index) || !state.browser.entries[index]) {
-                        return;
-                    }
-                    loadBrowserPath(state.browser.entries[index].path, { resetFilter: true, focusFilter: true });
-                });
-            }
-        );
-
-        Array.prototype.forEach.call(
-            browserList.querySelectorAll('[data-select-entry]'),
-            function (button) {
-                button.addEventListener('click', function () {
-                    const index = Number(button.dataset.selectEntry);
-                    if (!Number.isFinite(index) || !state.browser.entries[index]) {
-                        return;
-                    }
-                    selectBrowserPath(state.browser.entries[index].path);
-                });
-            }
-        );
 
         Array.prototype.forEach.call(
             browserList.querySelectorAll('[data-entry-index]'),
             function (row) {
-                row.addEventListener('click', function (event) {
-                    if (event.target && event.target.closest('button')) {
-                        return;
-                    }
-                    const index = Number(row.dataset.entryIndex);
+                row.addEventListener('click', function () {
+                    var index = Number(row.dataset.entryIndex);
                     if (!Number.isFinite(index) || !state.browser.entries[index]) {
                         return;
                     }
                     state.browser.activeEntryIndex = index;
                     if (state.browser.entries[index].kind === 'directory') {
-                        loadBrowserPath(state.browser.entries[index].path, { resetFilter: true, focusFilter: true });
+                        loadBrowserPath(state.browser.entries[index].path, { resetFilter: true, focusFilter: false });
                         return;
                     }
                     if (state.browser.entries[index].selectable) {
@@ -1375,7 +1397,7 @@
         browserSelectCurrentButton.hidden = state.browser.selection !== 'directory';
         renderBrowserRoots(payload.roots || []);
         renderBrowserEntries();
-        setBrowserStatus(payload.restricted ? 'Browsing within allowed source roots.' : 'Browsing the source filesystem.', '');
+        setBrowserStatus('', '');
     }
 
     async function loadBrowserPath(path, options) {
@@ -1431,40 +1453,25 @@
 
     function renderMeta(summary) {
         const chips = [];
-        const allowedRootsLabel = (summary.allowed_roots || []).join(', ') || 'unrestricted';
         const workerCount = Number(summary.worker_count || 1);
-        const configuredGpuDevices = Array.isArray(summary.gpu_devices) ? summary.gpu_devices : [];
-        const visibleGpuDevices = Array.isArray(summary.visible_nvidia_gpus) ? summary.visible_nvidia_gpus : [];
-        const configuredGpuLabel = configuredGpuDevices.length ? configuredGpuDevices.join(', ') : 'auto';
-        const visibleGpuLabel = visibleGpuDevices.length
-            ? visibleGpuDevices.map(function (gpu) {
-                var label = gpu.name || String(gpu.index);
-                if (gpu.memory) label += ' (' + gpu.memory + ')';
-                return label;
-            }).join(', ')
-            : 'none detected';
-        const visibleGpuTitle = visibleGpuDevices.length
-            ? visibleGpuDevices.map(function (gpu) {
-                return `${gpu.index}: ${gpu.name}`;
-            }).join(' | ')
-            : 'No NVIDIA GPUs detected by the service process.';
-        chips.push(`<span class="chip">Allowed source roots: ${escapeHtml(allowedRootsLabel)}</span>`);
-        chips.push(`<span class="chip">Watchers: ${escapeHtml(String((summary.watchers || []).length))}</span>`);
-        chips.push(`<span class="chip">Workers: ${escapeHtml(String(workerCount))} on shared queue</span>`);
-        chips.push(`<span class="chip" title="Configured NVENC GPU indices for queued jobs.">NVENC GPUs: ${escapeHtml(configuredGpuLabel)}</span>`);
-        chips.push(`<span class="chip" title="${escapeHtml(visibleGpuTitle)}">Visible NVIDIA GPUs: ${escapeHtml(visibleGpuLabel)}</span>`);
+
+        chips.push(`<span class="chip">Workers: ${escapeHtml(String(workerCount))}</span>`);
 
         const schedStatus = summary.schedule_status || {};
         if (schedStatus.enabled) {
             const schedAllowed = schedStatus.allowed !== false;
             const schedClass = schedAllowed ? 'allowed' : 'blocked';
-            const schedLabel = schedAllowed ? 'Schedule: allowed' : 'Schedule: blocked';
+            const schedLabel = schedAllowed ? 'Allowed' : 'Blocked';
             const schedTip = schedStatus.reason || '';
             chips.push(`<span class="chip schedule-chip-${schedClass}" title="${escapeHtml(schedTip)}">${escapeHtml(schedLabel)}</span>`);
         }
 
         meta.innerHTML = chips.join('');
         renderReleaseControl(summary.update_info || {});
+
+        if (sidebarVersion && state.release.local_version) {
+            sidebarVersion.textContent = 'v' + state.release.local_version;
+        }
     }
 
     function applySummaryToForms(summary) {
@@ -1492,26 +1499,33 @@
             return;
         }
 
-        watchersContainer.innerHTML = watchers.map(function (watcher) {
+        var rows = watchers.map(function (watcher) {
             var overrides = [];
             if (watcher.output_dir) overrides.push('output: ' + escapeHtml(watcher.output_dir));
             if (watcher.codec) overrides.push('codec: ' + escapeHtml(watcher.codec));
             if (watcher.encode_speed) overrides.push('speed: ' + escapeHtml(watcher.encode_speed));
             if (watcher.audio_passthrough === true) overrides.push('audio passthrough');
             if (watcher.force === true) overrides.push('force');
-            var overridesLine = overrides.length
-                ? `\n                    <div class="small" style="color:var(--accent)">overrides: ${overrides.join(' | ')}</div>`
-                : '';
-            return `
-                <div class="list-item">
-                    <div class="job-name" title="${escapeHtml(watcher.directory)}">${escapeHtml(watcher.directory)}</div>
-                    <div class="small">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete source: ${escapeHtml(String(Boolean(watcher.delete_source)))}</div>${overridesLine}
-                    <div class="actions">
-                        <button class="inline-button-warn" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings.">Edit</button>
-                        <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="Stop monitoring this source directory.">Remove</button>
-                    </div>
-                </div>`;
+            var overridesCell = overrides.length
+                ? `<span class="watcher-overrides">${overrides.join(' | ')}</span>`
+                : '<span class="watcher-details">—</span>';
+            var isEditing = Boolean(state.editingWatcherId);
+            var disabledAttr = isEditing ? ' disabled' : '';
+            return `<tr>
+                        <td><span class="watcher-dir" title="${escapeHtml(watcher.directory)}">${escapeHtml(watcher.directory)}</span></td>
+                        <td class="watcher-details">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete src: ${escapeHtml(String(Boolean(watcher.delete_source)))}</td>
+                        <td>${overridesCell}</td>
+                        <td class="watcher-actions">
+                            <button class="inline-button-warn" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings."${disabledAttr}>Edit</button>
+                            <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="Stop monitoring this source directory."${disabledAttr}>Remove</button>
+                        </td>
+                    </tr>`;
         }).join('');
+
+        watchersContainer.innerHTML =
+            '<div class="watcher-section-header">Current watched directories</div>' +
+            '<table class="watcher-table"><thead><tr><th>Directory</th><th>Settings</th><th>Overrides</th><th></th></tr></thead><tbody>' +
+            rows + '</tbody></table>';
 
         Array.prototype.forEach.call(
             watchersContainer.querySelectorAll('[data-edit-watcher]'),
@@ -1531,12 +1545,20 @@
                     watcherForm.elements.audio_passthrough.checked = Boolean(watcher.audio_passthrough);
                     watcherForm.elements.force.checked = Boolean(watcher.force);
                     syncAllCustomSelects();
-                    if (watcher.output_dir || watcher.codec || watcher.encode_speed || watcher.audio_passthrough != null || watcher.force != null) {
-                        watcherOverridesDetails.setAttribute('open', '');
-                    }
                     watcherButton.textContent = 'Update watcher';
                     cancelEditWatcherButton.hidden = false;
                     watcherForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    watcherForm.classList.remove('highlight-pulse');
+                    void watcherForm.offsetWidth;
+                    watcherForm.classList.add('highlight-pulse');
+                    watcherForm.addEventListener('animationend', function () {
+                        watcherForm.classList.remove('highlight-pulse');
+                    }, { once: true });
+                    // Disable all Edit/Remove buttons while editing
+                    Array.prototype.forEach.call(
+                        watchersContainer.querySelectorAll('[data-edit-watcher], [data-remove-watcher]'),
+                        function (btn) { btn.disabled = true; }
+                    );
                 });
             }
         );
@@ -1545,6 +1567,14 @@
             watchersContainer.querySelectorAll('[data-remove-watcher]'),
             function (button) {
                 button.addEventListener('click', async function () {
+                    var watcher = watchers.find(function (w) { return w.id === button.dataset.removeWatcher; });
+                    var dirName = watcher ? watcher.directory : 'this watcher';
+                    var confirmed = await showConfirm({
+                        title: 'Remove watcher',
+                        message: 'Stop monitoring "' + dirName + '"? This will permanently remove this watcher configuration.',
+                        ok: 'Remove',
+                    });
+                    if (!confirmed) return;
                     button.disabled = true;
                     try {
                         await fetchJson(`/watchers/${button.dataset.removeWatcher}`, { method: 'DELETE' });
@@ -1560,6 +1590,47 @@
     }
 
     function sortJobs(jobs) {
+        var col = state.jobSortColumn || 'default';
+        var asc = state.jobSortAsc;
+
+        if (col === 'default') {
+            return defaultSortJobs(jobs);
+        }
+
+        return jobs.slice().sort(function (a, b) {
+            var va, vb;
+            if (col === 'name') {
+                va = basename(a.input_file).toLowerCase();
+                vb = basename(b.input_file).toLowerCase();
+            } else if (col === 'status') {
+                va = a.status;
+                vb = b.status;
+            } else if (col === 'progress') {
+                va = Number(a.progress_percent || 0);
+                vb = Number(b.progress_percent || 0);
+                return asc ? va - vb : vb - va;
+            } else if (col === 'codec') {
+                va = (a.codec || '') + '/' + (a.encode_speed || '');
+                vb = (b.codec || '') + '/' + (b.encode_speed || '');
+            } else if (col === 'size') {
+                va = Number(a.input_size_bytes || 0);
+                vb = Number(b.input_size_bytes || 0);
+                return asc ? va - vb : vb - va;
+            } else if (col === 'eta') {
+                va = extractEtaLabel(a.message) || '\uffff';
+                vb = extractEtaLabel(b.message) || '\uffff';
+            } else if (col === 'submitted') {
+                va = a.submitted_at || '';
+                vb = b.submitted_at || '';
+            } else {
+                return 0;
+            }
+            var cmp = String(va).localeCompare(String(vb));
+            return asc ? cmp : -cmp;
+        });
+    }
+
+    function defaultSortJobs(jobs) {
         return jobs.slice().sort(function (left, right) {
             const leftRank = Object.prototype.hasOwnProperty.call(statusPriority, left.status)
                 ? statusPriority[left.status]
@@ -1572,20 +1643,18 @@
                 return leftRank - rightRank;
             }
 
-            // Active/queued jobs: oldest first (queue order), queued respect priority
             var activeStatuses = { running: 1, paused: 1, cancelling: 1, queued: 1 };
             if (Object.prototype.hasOwnProperty.call(activeStatuses, left.status)) {
                 var leftPri = left.priority || 0;
                 var rightPri = right.priority || 0;
                 if (left.status === 'queued' && right.status === 'queued' && leftPri !== rightPri) {
-                    return rightPri - leftPri;  // higher priority first
+                    return rightPri - leftPri;
                 }
                 const leftTime = String(left.submitted_at || '');
                 const rightTime = String(right.submitted_at || '');
                 return leftTime.localeCompare(rightTime);
             }
 
-            // Finished jobs: newest first
             const leftTime = String(left.finished_at || left.submitted_at || '');
             const rightTime = String(right.finished_at || right.submitted_at || '');
             return rightTime.localeCompare(leftTime);
@@ -1638,21 +1707,21 @@
 
     function updateActiveQueueSelection() {
         Array.prototype.forEach.call(
-            jobsContainer.querySelectorAll('.job-card'),
-            function (card) {
-                const isActive = card.dataset.jobId === state.activeQueueJobId;
-                card.classList.toggle('job-card-active', isActive);
-                card.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            jobsContainer.querySelectorAll('.jt-row'),
+            function (row) {
+                const isActive = row.dataset.jobId === state.activeQueueJobId;
+                row.classList.toggle('jt-row-active', isActive);
+                row.setAttribute('aria-selected', isActive ? 'true' : 'false');
             }
         );
     }
 
     function scrollActiveQueueJobIntoView() {
-        const activeCard = jobsContainer.querySelector('.job-card-active');
-        if (!activeCard) {
+        const activeRow = jobsContainer.querySelector('.jt-row-active');
+        if (!activeRow) {
             return;
         }
-        activeCard.scrollIntoView({ block: 'nearest' });
+        activeRow.scrollIntoView({ block: 'nearest' });
     }
 
     function moveQueueSelection(offset) {
@@ -1676,25 +1745,14 @@
         if (!state.activeQueueJobId) {
             return;
         }
-
-        let activeCard = null;
-        Array.prototype.some.call(
-            jobsContainer.querySelectorAll('.job-card'),
-            function (card) {
-                if (card.dataset.jobId !== state.activeQueueJobId) {
-                    return false;
-                }
-                activeCard = card;
-                return true;
-            }
-        );
-
-        if (!activeCard) {
+        var detailRow = jobsContainer.querySelector('[data-detail-for="' + state.activeQueueJobId + '"]');
+        if (!detailRow) {
             return;
         }
-
-        activeCard.open = !activeCard.open;
-        state.expandedJobs[state.activeQueueJobId] = activeCard.open;
+        var isOpen = !detailRow.classList.contains('jt-detail-hidden');
+        detailRow.classList.toggle('jt-detail-hidden', isOpen);
+        state.expandedJobs[state.activeQueueJobId] = !isOpen;
+        updateToggleExpandButton();
     }
 
     function updateJobsCount(filtered, total) {
@@ -1708,12 +1766,17 @@
     }
 
     function updateToggleExpandButton() {
-        var cards = jobsContainer.querySelectorAll('.job-card');
+        var details = jobsContainer.querySelectorAll('.jt-detail-row');
         var anyOpen = false;
-        Array.prototype.forEach.call(cards, function (card) {
-            if (card.open) anyOpen = true;
+        Array.prototype.forEach.call(details, function (row) {
+            if (!row.classList.contains('jt-detail-hidden')) anyOpen = true;
         });
         toggleExpandJobsButton.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+    }
+
+    function buildSortIndicator(col) {
+        if (state.jobSortColumn !== col) return '';
+        return state.jobSortAsc ? ' ▲' : ' ▼';
     }
 
     function renderJobs(jobs) {
@@ -1736,137 +1799,147 @@
         const sortedJobs = sortJobs(filtered);
         ensureActiveQueueJob(sortedJobs);
 
-        const cards = sortedJobs.map(function (job) {
+        var headerCols = [
+            { key: 'name', label: 'Name' },
+            { key: 'status', label: 'Status' },
+            { key: 'progress', label: 'Progress' },
+            { key: 'codec', label: 'Codec' },
+            { key: 'size', label: 'Size' },
+            { key: 'eta', label: 'ETA' },
+            { key: 'submitted', label: 'Submitted' },
+        ];
+
+        var thead = '<thead><tr>' + headerCols.map(function (c) {
+            var cls = state.jobSortColumn === c.key ? ' class="jt-sorted"' : '';
+            return '<th' + cls + ' data-sort-col="' + c.key + '">' + c.label + buildSortIndicator(c.key) + '</th>';
+        }).join('') + '<th></th></tr></thead>';
+
+        var rows = sortedJobs.map(function (job) {
             const rawProgress = Number(job.progress_percent == null ? 0 : job.progress_percent);
-            const progress = Number.isFinite(rawProgress)
-                ? Math.max(0, Math.min(rawProgress, 100))
-                : 0;
+            const progress = Number.isFinite(rawProgress) ? Math.max(0, Math.min(rawProgress, 100)) : 0;
             const etaLabel = extractEtaLabel(job.message);
-            const progressFillClass = job.status === 'paused' ? ' progress-fill-paused' : '';
             let progressLabel = 'Done';
 
-            if (job.status === 'queued') {
-                progressLabel = 'Waiting';
-            } else if (job.status === 'running') {
-                progressLabel = etaLabel
-                    ? `${progress.toFixed(1)}% - ETA ${etaLabel}`
-                    : `${progress.toFixed(1)}%`;
-            } else if (job.status === 'paused') {
-                progressLabel = `${progress.toFixed(1)}% - Paused`;
-            } else if (job.status === 'cancelling') {
-                progressLabel = 'Cancelling...';
-            } else if (job.status === 'failed') {
-                progressLabel = 'Failed';
-            } else if (job.status === 'cancelled') {
-                progressLabel = 'Cancelled';
-            } else if (job.status === 'skipped') {
-                progressLabel = 'Skipped';
-            } else if (progress > 0) {
-                progressLabel = `${progress.toFixed(1)}%`;
-            }
+            if (job.status === 'queued') progressLabel = 'Waiting';
+            else if (job.status === 'running') progressLabel = etaLabel ? progress.toFixed(1) + '% \u2013 ETA ' + etaLabel : progress.toFixed(1) + '%';
+            else if (job.status === 'paused') progressLabel = progress.toFixed(1) + '% \u2013 Paused';
+            else if (job.status === 'cancelling') progressLabel = 'Cancelling\u2026';
+            else if (job.status === 'failed') progressLabel = 'Failed';
+            else if (job.status === 'cancelled') progressLabel = 'Cancelled';
+            else if (job.status === 'skipped') progressLabel = 'Skipped';
+            else if (progress > 0) progressLabel = progress.toFixed(1) + '%';
 
             const submitted = job.submitted_display || job.submitted_at || '';
-            const detailsOpen = shouldShowJobOpen(job) ? ' open' : '';
+            const isOpen = shouldShowJobOpen(job);
+            const isActive = job.id === state.activeQueueJobId;
+            const activeClass = isActive ? ' jt-row-active' : '';
+
+            // Action buttons
             const pauseButton = job.status === 'running'
-                ? `<button class="secondary" type="button" data-pause-id="${job.id}" title="Pause this conversion without removing it from the worker.">Pause job</button>`
+                ? '<button class="inline-button-warn" type="button" data-pause-id="' + job.id + '" title="Pause">Pause</button>'
                 : job.status === 'paused'
-                    ? `<button class="secondary" type="button" data-resume-id="${job.id}" title="Resume this paused conversion.">Resume job</button>`
+                    ? '<button class="inline-button-warn" type="button" data-resume-id="' + job.id + '" title="Resume">Resume</button>'
                     : '';
             const cancelButton = (job.status === 'queued' || job.status === 'running' || job.status === 'paused')
-                ? `<button class="inline-button" type="button" data-cancel-id="${job.id}" title="Request cancellation for this job.">Cancel job</button>`
+                ? '<button class="inline-button" type="button" data-cancel-id="' + job.id + '" title="Cancel">Cancel</button>'
                 : '';
             const moveNextButton = job.status === 'queued'
-                ? `<button class="secondary" type="button" data-move-next-id="${job.id}" title="Promote this job so it converts next.">Convert next</button>`
+                ? '<button class="inline-button-warn" type="button" data-move-next-id="' + job.id + '" title="Convert next">Next</button>'
                 : '';
             const retryButton = (job.status === 'failed' || job.status === 'cancelled')
-                ? `<button class="secondary" type="button" data-retry-id="${job.id}" title="Queue this job again with the same settings.">Retry job</button>`
+                ? '<button class="inline-button-warn" type="button" data-retry-id="' + job.id + '" title="Retry">Retry</button>'
                 : '';
             const clearButton = (job.status !== 'running' && job.status !== 'paused' && job.status !== 'cancelling')
-                ? `<button class="ghost" type="button" data-clear-id="${job.id}" title="Remove this job from the queue list.">Clear</button>`
+                ? '<button class="inline-button" type="button" data-clear-id="' + job.id + '" title="Remove from queue">Clear</button>'
                 : '';
 
-            return `
-                <details class="job-card" data-job-id="${job.id}"${detailsOpen}>
-                    <summary class="job-summary" title="Open or collapse job details. Use Arrow Up and Arrow Down to move between jobs, and Enter to toggle the active job.">
-                        <div class="job-summary-main">
-                            <div class="job-summary-meta">
-                                <span class="badge ${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>
-                                <span class="job-id">${escapeHtml(job.id.slice(0, 8))}</span>
-                            </div>
-                            <div class="job-title">${escapeHtml(basename(job.input_file))}</div>
-                        </div>
-                        <div class="job-summary-side progress-cell">
-                            <div class="job-summary-caption">Progress</div>
-                            <div class="progress-track"><div class="progress-fill${progressFillClass}" style="width: ${progress.toFixed(1)}%"></div></div>
-                            <div class="progress-text">${escapeHtml(progressLabel)}</div>
-                        </div>
-                        <div class="job-summary-expand"><span>Details</span><span class="job-chevron">▾</span></div>
-                    </summary>
-                    <div class="job-details">
-                        <div class="job-detail-grid">
-                            <div class="job-detail">
-                                <div class="job-detail-label">Profile</div>
-                                <div class="job-detail-value">${escapeHtml(job.codec)} / ${escapeHtml(job.encode_speed)}</div>
-                            </div>
-                            <div class="job-detail">
-                                <div class="job-detail-label">Submitted</div>
-                                <div class="job-detail-value">${escapeHtml(submitted)}</div>
-                            </div>
-                            <div class="job-detail job-detail-highlight">
-                                <div class="job-detail-label">Original size</div>
-                                <div class="job-detail-value">${escapeHtml(formatBytes(job.input_size_bytes))}</div>
-                            </div>
-                            <div class="job-detail job-detail-highlight">
-                                <div class="job-detail-label">Converted size</div>
-                                <div class="job-detail-value">${escapeHtml(formatBytes(job.output_size_bytes))}</div>
-                            </div>
-                            <div class="job-detail">
-                                <div class="job-detail-label">Compression</div>
-                                <div class="job-detail-value">${escapeHtml(formatCompression(job.compression_percent))}</div>
-                            </div>
-                            ${renderMediaSection('Source media', job.input_media)}
-                            ${renderMediaSection('Output media', job.output_media)}
-                            <div class="job-detail job-detail-wide">
-                                <div class="job-detail-label">Source path</div>
-                                <div class="job-detail-value job-detail-code">${escapeHtml(job.input_file)}</div>
-                            </div>
-                            ${job.output_file ? `
-                            <div class="job-detail job-detail-wide">
-                                <div class="job-detail-label">Destination path</div>
-                                <div class="job-detail-value job-detail-code">${escapeHtml(job.output_file)}</div>
-                            </div>` : ''}
-                            <div class="job-detail job-detail-wide">
-                                <div class="job-detail-label">Message</div>
-                                <div class="job-detail-value job-detail-code">${escapeHtml(job.message || 'No extra message.')}</div>
-                            </div>
-                        </div>
-                        ${(pauseButton || cancelButton || retryButton || clearButton || moveNextButton) ? `<div class="actions">${moveNextButton}${pauseButton}${cancelButton}${retryButton}${clearButton}</div>` : ''}
-                    </div>
-                </details>`;
+            var actionBtns = [moveNextButton, pauseButton, cancelButton, retryButton, clearButton].filter(Boolean).join(' ');
+
+            var mainRow = '<tr class="jt-row' + activeClass + '" data-job-id="' + job.id + '">'
+                + '<td class="jt-name" title="' + escapeHtml(basename(job.input_file)) + '">' + escapeHtml(basename(job.input_file)) + '</td>'
+                + '<td><span class="badge badge-sm ' + escapeHtml(job.status) + '">' + escapeHtml(job.status) + '</span></td>'
+                + '<td class="jt-progress"><div class="progress-track"><div class="progress-fill progress-fill-' + escapeHtml(job.status) + '" style="width:' + progress.toFixed(1) + '%"></div></div><span class="jt-progress-label">' + escapeHtml(progressLabel) + '</span></td>'
+                + '<td class="jt-codec">' + escapeHtml(job.codec || '') + ' / ' + escapeHtml(job.encode_speed || '') + '</td>'
+                + '<td class="jt-size">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</td>'
+                + '<td class="jt-eta">' + escapeHtml(etaLabel || '\u2014') + '</td>'
+                + '<td class="jt-submitted">' + escapeHtml(submitted) + '</td>'
+                + '<td class="jt-actions">' + actionBtns + '</td>'
+                + '</tr>';
+
+            // Detail row — two-column layout: source (left) / output (right)
+            var elapsed = formatElapsed(job.started_at, job.finished_at);
+
+            var srcCol = '<div class="jt-detail-col">'
+                + '<div class="jt-detail-col-title">Source</div>'
+                + '<div class="job-detail"><div class="job-detail-label">Size</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">Path</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.input_file) + '</div></div>'
+                + renderMediaSection('Media', job.input_media)
+                + '</div>';
+
+            var outCol = '<div class="jt-detail-col">'
+                + '<div class="jt-detail-col-title">Output</div>'
+                + '<div class="job-detail"><div class="job-detail-label">Size</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.output_size_bytes)) + '</div></div>'
+                + (job.output_file ? '<div class="job-detail"><div class="job-detail-label">Path</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.output_file) + '</div></div>' : '')
+                + renderMediaSection('Media', job.output_media)
+                + '</div>';
+
+            var footerDetails = '<div class="jt-detail-footer">'
+                + '<div class="job-detail"><div class="job-detail-label">Profile</div><div class="job-detail-value">' + escapeHtml(job.codec) + ' / ' + escapeHtml(job.encode_speed) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">Submitted</div><div class="job-detail-value">' + escapeHtml(submitted) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">Compression</div><div class="job-detail-value">' + escapeHtml(formatCompression(job.compression_percent)) + '</div></div>'
+                + (elapsed ? '<div class="job-detail"><div class="job-detail-label">Duration</div><div class="job-detail-value">' + escapeHtml(elapsed) + '</div></div>' : '')
+                + '<div class="job-detail jt-detail-message"><div class="job-detail-label">Message</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.message || 'No extra message.') + '</div></div>'
+                + '</div>';
+
+            var detailRow = '<tr class="jt-detail-row' + (isOpen ? '' : ' jt-detail-hidden') + '" data-detail-for="' + job.id + '">'
+                + '<td colspan="8"><div class="jt-detail-inner">'
+                + '<div class="jt-detail-columns">' + srcCol + outCol + '</div>'
+                + footerDetails
+                + '</div></td></tr>';
+
+            return mainRow + detailRow;
         }).join('');
 
-        jobsContainer.innerHTML = `
-            <div class="jobs-wrap">
-                <div class="job-list">${cards}</div>
-            </div>`;
+        jobsContainer.innerHTML = '<table class="jobs-table"><colgroup>'
+            + '<col class="jt-col-name"><col class="jt-col-status"><col class="jt-col-progress">'
+            + '<col class="jt-col-codec"><col class="jt-col-size"><col class="jt-col-eta">'
+            + '<col class="jt-col-submitted"><col class="jt-col-actions">'
+            + '</colgroup>' + thead + '<tbody>' + rows + '</tbody></table>';
 
+        // Sort header clicks
         Array.prototype.forEach.call(
-            jobsContainer.querySelectorAll('.job-card'),
-            function (details) {
-                details.addEventListener('click', function () {
-                    const jobId = details.dataset.jobId;
-                    if (!jobId) {
-                        return;
+            jobsContainer.querySelectorAll('[data-sort-col]'),
+            function (th) {
+                th.style.cursor = 'pointer';
+                th.addEventListener('click', function () {
+                    var col = th.dataset.sortCol;
+                    if (state.jobSortColumn === col) {
+                        state.jobSortAsc = !state.jobSortAsc;
+                    } else {
+                        state.jobSortColumn = col;
+                        state.jobSortAsc = true;
                     }
-                    state.activeQueueJobId = jobId;
-                    updateActiveQueueSelection();
+                    renderJobs(state.lastJobs);
                 });
-                details.addEventListener('toggle', function () {
-                    const jobId = details.dataset.jobId;
-                    if (!jobId) {
-                        return;
+            }
+        );
+
+        // Row click to toggle detail
+        Array.prototype.forEach.call(
+            jobsContainer.querySelectorAll('.jt-row'),
+            function (row) {
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', function (event) {
+                    if (event.target && event.target.closest('button')) return;
+                    var jobId = row.dataset.jobId;
+                    state.activeQueueJobId = jobId;
+                    var detailRow = jobsContainer.querySelector('[data-detail-for="' + jobId + '"]');
+                    if (detailRow) {
+                        var isOpen = !detailRow.classList.contains('jt-detail-hidden');
+                        detailRow.classList.toggle('jt-detail-hidden', isOpen);
+                        state.expandedJobs[jobId] = !isOpen;
                     }
-                    state.expandedJobs[jobId] = details.open;
+                    updateActiveQueueSelection();
                     updateToggleExpandButton();
                 });
             }
@@ -1885,7 +1958,7 @@
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Pause job';
+                        button.textContent = 'Pause';
                     }
                 });
             }
@@ -1904,7 +1977,7 @@
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Resume job';
+                        button.textContent = 'Resume';
                     }
                 });
             }
@@ -1923,7 +1996,7 @@
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Cancel job';
+                        button.textContent = 'Cancel';
                     }
                 });
             }
@@ -1933,9 +2006,8 @@
             jobsContainer.querySelectorAll('[data-clear-id]'),
             function (button) {
                 button.addEventListener('click', async function () {
-                    if (!window.confirm('Remove this job from the queue list?')) {
-                        return;
-                    }
+                    var confirmed = await showConfirm({ title: 'Remove job', message: 'Remove this job from the queue list?', ok: 'Remove' });
+                    if (!confirmed) return;
                     button.disabled = true;
                     try {
                         await fetchJson(`/jobs/${button.dataset.clearId}?purge=1`, { method: 'DELETE' });
@@ -1962,7 +2034,7 @@
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Retry job';
+                        button.textContent = 'Retry';
                     }
                 });
             }
@@ -1989,6 +2061,113 @@
 
         updateActiveQueueSelection();
         updateToggleExpandButton();
+        updateActivityBadge(sortedJobs);
+    }
+
+    function updateActivityBadge(jobs) {
+        var active = jobs.filter(function (j) { return j.status === 'running' || j.status === 'paused'; }).length;
+        if (navActivityBadge) {
+            navActivityBadge.hidden = !active;
+            navActivityBadge.textContent = String(active);
+        }
+    }
+
+    // ── System Monitor ──
+
+    var sysmonTimer = null;
+
+    function formatBytesShort(bytes) {
+        if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return '—';
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        var v = bytes;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return v.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+    }
+
+    function pctBar(used, total, label) {
+        var pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+        var cls = pct > 90 ? ' sysmon-bar-crit' : pct > 75 ? ' sysmon-bar-warn' : '';
+        return '<div class="sysmon-metric">'
+            + '<div class="sysmon-metric-head"><span>' + escapeHtml(label) + '</span><span>' + pct.toFixed(1) + '%</span></div>'
+            + '<div class="sysmon-bar"><div class="sysmon-bar-fill' + cls + '" style="width:' + pct.toFixed(1) + '%"></div></div>'
+            + '<div class="sysmon-metric-detail">' + formatBytesShort(used) + ' / ' + formatBytesShort(total) + '</div>'
+            + '</div>';
+    }
+
+    function renderSysmon(data) {
+        var sections = [];
+
+        // CPU
+        if (data.load != null || data.cpu_count) {
+            var cpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">CPU</div>';
+            if (data.cpu_count) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Cores</span><span>' + data.cpu_count + '</span></div>';
+            if (data.load) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Load average</span><span>' + data.load.join(' / ') + '</span></div>';
+            if (data.cpu_temp != null) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Temperature</span><span>' + data.cpu_temp + ' °C</span></div>';
+            cpuHtml += '</div>';
+            sections.push(cpuHtml);
+        }
+
+        // Memory
+        if (data.memory) {
+            sections.push('<div class="sysmon-section"><div class="sysmon-section-title">Memory</div>'
+                + pctBar(data.memory.used, data.memory.total, 'RAM')
+                + '</div>');
+        }
+
+        // GPUs
+        if (data.gpus && data.gpus.length) {
+            var gpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">GPU</div>';
+            data.gpus.forEach(function (gpu) {
+                gpuHtml += '<div class="sysmon-gpu">';
+                gpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">' + escapeHtml(gpu.name) + '</span></div>';
+                if (gpu.mem_total_mib != null && gpu.mem_used_mib != null) {
+                    gpuHtml += pctBar(gpu.mem_used_mib * 1048576, gpu.mem_total_mib * 1048576, 'VRAM');
+                }
+                var meta = [];
+                if (gpu.utilization_pct != null) meta.push('Load ' + gpu.utilization_pct + '%');
+                if (gpu.temp_c != null) meta.push(gpu.temp_c + ' °C');
+                if (gpu.fan_pct != null) meta.push('Fan ' + gpu.fan_pct + '%');
+                if (meta.length) gpuHtml += '<div class="sysmon-metric-detail">' + escapeHtml(meta.join(' · ')) + '</div>';
+                gpuHtml += '</div>';
+            });
+            gpuHtml += '</div>';
+            sections.push(gpuHtml);
+        }
+
+        // Disks
+        if (data.disks && data.disks.length) {
+            var diskHtml = '<div class="sysmon-section"><div class="sysmon-section-title">Disks</div>';
+            data.disks.forEach(function (d) {
+                diskHtml += pctBar(d.used, d.total, d.mount)
+                    + '<div class="sysmon-metric-detail">' + escapeHtml(d.device) + '</div>';
+            });
+            diskHtml += '</div>';
+            sections.push(diskHtml);
+        }
+
+        sysmonContainer.innerHTML = sections.length
+            ? '<div class="sysmon-grid">' + sections.join('') + '</div>'
+            : '<div class="empty">No system data available.</div>';
+    }
+
+    async function refreshSysmon() {
+        try {
+            var data = await fetchJson('/system/stats');
+            renderSysmon(data);
+        } catch (_) {
+            sysmonContainer.innerHTML = '<div class="empty">Failed to load system stats.</div>';
+        }
+    }
+
+    function startSysmonPolling() {
+        if (sysmonTimer) return;
+        refreshSysmon();
+        sysmonTimer = setInterval(refreshSysmon, 5000);
+    }
+
+    function stopSysmonPolling() {
+        if (sysmonTimer) { clearInterval(sysmonTimer); sysmonTimer = null; }
     }
 
     async function refreshSummary() {
@@ -2150,16 +2329,17 @@
     });
 
     toggleExpandJobsButton.addEventListener('click', function () {
-        var cards = jobsContainer.querySelectorAll('.job-card');
+        var details = jobsContainer.querySelectorAll('.jt-detail-row');
         var anyOpen = false;
-        Array.prototype.forEach.call(cards, function (card) {
-            if (card.open) anyOpen = true;
+        Array.prototype.forEach.call(details, function (row) {
+            if (!row.classList.contains('jt-detail-hidden')) anyOpen = true;
         });
-        var expand = !anyOpen;
+        var collapse = anyOpen;
         state.expandedJobs = {};
-        Array.prototype.forEach.call(cards, function (card) {
-            card.open = expand;
-            state.expandedJobs[card.dataset.jobId] = expand;
+        Array.prototype.forEach.call(details, function (row) {
+            row.classList.toggle('jt-detail-hidden', collapse);
+            var jobId = row.dataset.detailFor;
+            if (jobId) state.expandedJobs[jobId] = !collapse;
         });
         updateToggleExpandButton();
     });
@@ -2170,8 +2350,8 @@
             selection: 'file',
             scope: 'allowed',
             path: inputFileField.value || '',
-            eyebrow: 'Source file',
-            title: 'Choose a file on the source',
+            eyebrow: '',
+            title: 'Select source file',
         });
     });
 
@@ -2181,8 +2361,8 @@
             selection: 'directory',
             scope: 'allowed',
             path: inputKindField.value === 'directory' ? inputFileField.value || '' : '',
-            eyebrow: 'Source folder',
-            title: 'Choose a folder on the source',
+            eyebrow: '',
+            title: 'Choose source folder',
         });
     });
 
@@ -2196,8 +2376,8 @@
             selection: 'directory',
             scope: 'all',
             path: '',
-            eyebrow: 'Allowed source root',
-            title: 'Choose a directory on the source',
+            eyebrow: '',
+            title: 'Add allowed root directory',
         });
     });
 
@@ -2207,8 +2387,8 @@
             selection: 'directory',
             scope: 'allowed',
             path: watcherDirectoryField.value || '',
-            eyebrow: 'Source watch directory',
-            title: 'Choose a watch directory on the source',
+            eyebrow: '',
+            title: 'Choose watcher source directory',
         });
     });
 
@@ -2222,8 +2402,8 @@
             selection: 'directory',
             scope: 'all',
             path: watcherOutputDirField.value || '',
-            eyebrow: 'Watcher output directory',
-            title: 'Choose an output directory for this watcher',
+            eyebrow: '',
+            title: 'Select watcher output directory',
         });
     });
 
@@ -2237,8 +2417,8 @@
             selection: 'directory',
             scope: 'all',
             path: outputDirField.value || '',
-            eyebrow: 'Destination folder',
-            title: 'Choose a destination directory',
+            eyebrow: '',
+            title: 'Select destination folder',
         });
     });
 
@@ -2252,8 +2432,8 @@
             selection: 'directory',
             scope: 'all',
             path: defaultOutputDirField.value || '',
-            eyebrow: 'Default destination folder',
-            title: 'Choose a default destination directory',
+            eyebrow: '',
+            title: 'Select default destination folder',
         });
     });
 
@@ -2297,24 +2477,19 @@
         }
     );
 
-    /* ── Settings Modal Events ── */
+    /* ── Sidebar Events ── */
 
-    openSettingsButton.addEventListener('click', function () {
-        openSettings();
+    sidebarToggle.addEventListener('click', function () {
+        var isOpen = sidebar.classList.toggle('open');
+        sidebarOverlay.hidden = !isOpen;
     });
 
-    closeSettingsButton.addEventListener('click', function () {
-        closeSettings();
+    sidebarOverlay.addEventListener('click', function () {
+        closeSidebar();
     });
 
-    settingsModal.querySelector('.settings-backdrop').addEventListener('click', function () {
-        closeSettings();
-    });
-
-    settingsTabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            switchSettingsTab(tab.dataset.tab);
-        });
+    window.addEventListener('hashchange', function () {
+        navigateTo(getPageFromHash());
     });
 
     scheduleEnabled.addEventListener('change', function () {
@@ -2343,16 +2518,6 @@
 
     saveScheduleButton.addEventListener('click', function () {
         saveSchedule();
-    });
-
-    document.addEventListener('keydown', function (event) {
-        if (settingsModal.hidden || !browserModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
-            return;
-        }
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            closeSettings();
-        }
     });
 
     document.addEventListener('keydown', function (event) {
@@ -2460,10 +2625,9 @@
         }
     );
 
-    toggleThemeButton.addEventListener('click', function () {
-        const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
-        applyTheme(nextTheme);
-        persistTheme(nextTheme);
+    themeSelect.addEventListener('change', function () {
+        applyTheme(themeSelect.value);
+        persistTheme(themeSelect.value);
     });
 
     releaseButton.addEventListener('click', async function () {
@@ -2566,10 +2730,10 @@
 
     if (startupParams.get('notice')) {
         setFormStatus(startupParams.get('notice'), 'ok');
-        history.replaceState(null, '', window.location.pathname);
+        history.replaceState(null, '', window.location.pathname + window.location.hash);
     } else if (startupParams.get('error')) {
         setFormStatus(startupParams.get('error'), 'error');
-        history.replaceState(null, '', window.location.pathname);
+        history.replaceState(null, '', window.location.pathname + window.location.hash);
     }
 
     initCustomSelects();
@@ -2580,6 +2744,7 @@
         }
     });
 
+    navigateTo(getPageFromHash());
     refreshAll();
     scheduleRefresh();
 }());
