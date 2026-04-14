@@ -725,6 +725,64 @@ class JobStore:
             ).fetchall()
         return [self._hydrate_record(row) for row in rows]
 
+    def list_tasks(
+        self,
+        *,
+        page: int = 1,
+        limit: int = 50,
+        status: str = "",
+        codec: str = "",
+        search: str = "",
+    ) -> Dict[str, object]:
+        """Return historical task records with filtering and pagination."""
+        conditions: List[str] = []
+        params: list = []
+
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if codec:
+            conditions.append("codec = ?")
+            params.append(codec)
+        if search:
+            conditions.append("(input_file LIKE ? OR output_file LIKE ? OR message LIKE ?)")
+            pattern = f"%{search}%"
+            params.extend([pattern, pattern, pattern])
+
+        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        with self._lock:
+            total = self._conn.execute(
+                "SELECT COUNT(*) FROM jobs" + where, params
+            ).fetchone()[0]
+
+            offset = (page - 1) * limit
+            rows = self._conn.execute(
+                "SELECT * FROM jobs" + where + " ORDER BY submitted_at DESC LIMIT ? OFFSET ?",
+                params + [limit, offset],
+            ).fetchall()
+
+        entries = []
+        for row in rows:
+            r = self._hydrate_record(row)
+            entries.append({
+                "id": r["id"],
+                "status": r.get("status"),
+                "input_file": r.get("input_file"),
+                "output_file": r.get("output_file"),
+                "codec": r.get("codec"),
+                "input_size_bytes": r.get("input_size_bytes"),
+                "output_size_bytes": r.get("output_size_bytes"),
+                "compression_percent": r.get("compression_percent"),
+                "submitted_at": r.get("submitted_at"),
+                "submitted_display": r.get("submitted_display"),
+                "started_at": r.get("started_at"),
+                "finished_at": r.get("finished_at"),
+                "message": r.get("message"),
+            })
+
+        return {"tasks": entries, "total": total, "page": page, "limit": limit}
+
     def list_active_jobs(self) -> List[Dict[str, object]]:
         with self._lock:
             rows = self._conn.execute(
@@ -2655,6 +2713,61 @@ def _list_log_files() -> List[Dict[str, object]]:
     return result
 
 
+def _download_log_file(filename: str) -> Optional[bytes]:
+    """Return the raw bytes of a log file, or None if not found."""
+    from clutch.output import get_log_dir
+    log_dir = get_log_dir()
+    if not log_dir:
+        return None
+    safe = os.path.basename(filename)
+    if not safe.startswith("clutch.log"):
+        return None
+    target = os.path.join(log_dir, safe)
+    if not os.path.isfile(target):
+        return None
+    try:
+        with open(target, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _delete_log_file(filename: str) -> bool:
+    """Delete a single rotated log file. Refuses to delete the active log."""
+    from clutch.output import get_log_dir
+    log_dir = get_log_dir()
+    if not log_dir:
+        return False
+    safe = os.path.basename(filename)
+    if not safe.startswith("clutch.log") or safe == "clutch.log":
+        return False
+    target = os.path.join(log_dir, safe)
+    if not os.path.isfile(target):
+        return False
+    try:
+        os.remove(target)
+        return True
+    except OSError:
+        return False
+
+
+def _clear_old_log_files() -> int:
+    """Delete all rotated log files (keeps the active clutch.log)."""
+    from clutch.output import get_log_dir
+    log_dir = get_log_dir()
+    if not log_dir or not os.path.isdir(log_dir):
+        return 0
+    count = 0
+    for name in os.listdir(log_dir):
+        if name.startswith("clutch.log."):
+            try:
+                os.remove(os.path.join(log_dir, name))
+                count += 1
+            except OSError:
+                pass
+    return count
+
+
 def _read_log_entries(
     *,
     filename: str = "",
@@ -3464,6 +3577,26 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"files": _list_log_files()})
             return
 
+        if path == "/system/logs/download":
+            user = self._require_role("admin")
+            if not user:
+                return
+            filename = str(query.get("file") or "").strip()
+            if not filename:
+                self._send_json(400, {"error": "Missing file parameter."})
+                return
+            content = _download_log_file(filename)
+            if content is None:
+                self._send_json(404, {"error": "File not found."})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{os.path.basename(filename)}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+
         if path == "/system/logs":
             user = self._require_role("admin")
             if not user:
@@ -3482,6 +3615,28 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             result = _read_log_entries(
                 filename=filename, level=level_filter, search=search,
                 page=page, limit=limit,
+            )
+            self._send_json(200, result)
+            return
+
+        if path == "/system/tasks":
+            user = self._require_role("admin")
+            if not user:
+                return
+            status_filter = str(query.get("status") or "").strip()
+            codec_filter = str(query.get("codec") or "").strip()
+            search = str(query.get("search") or "").strip()
+            try:
+                page = max(1, int(query.get("page") or 1))
+            except (ValueError, TypeError):
+                page = 1
+            try:
+                limit = max(1, min(500, int(query.get("limit") or 50)))
+            except (ValueError, TypeError):
+                limit = 50
+            result = self.server.service.store.list_tasks(
+                page=page, limit=limit,
+                status=status_filter, codec=codec_filter, search=search,
             )
             self._send_json(200, result)
             return
@@ -3759,6 +3914,22 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
         # Setup redirect
         if self._check_setup_redirect(path):
+            return
+
+        if path == "/system/logs/files":
+            user = self._require_role("admin")
+            if not user:
+                return
+            filename = str(query.get("file") or "").strip()
+            if filename:
+                deleted = _delete_log_file(filename)
+                if not deleted:
+                    self._send_json(404, {"error": "File not found."})
+                    return
+                self._send_json(200, {"deleted": filename})
+            else:
+                count = _clear_old_log_files()
+                self._send_json(200, {"cleared": count})
             return
 
         if path == "/jobs":

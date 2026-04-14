@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-04-14
+
+### Added in 1.6.3
+
+- **Task history** (System > Tasks): admin-only page with sortable task table showing status badges, file name, codec, size (with compression %), duration, and submitted date. Supports filtering by status/codec, text search, and pagination.
+- **Log file management** (System > Logs > Log Files): Sonarr-style log files tab with download and delete actions per file, plus a "Clear old logs" bulk action for rotated files.
+- **Log file management API**: `GET /system/logs/download` (download individual log file), `DELETE /system/logs/files` (delete single file or clear all rotated files). Admin role required.
+- **User avatars**: users list now displays Gravatar-based avatars with initials fallback.
+
+### Fixed in 1.6.3
+
+- Log Viewer tab was visible even when hidden due to CSS `display: flex` overriding the HTML `hidden` attribute. Log Files is now correctly shown as the default tab.
+
+### Changed in 1.6.3
+
+- Tasks table fully styled with sticky headers, hover effects, status badge pills (colour-coded per status), and text ellipsis for long file names.
+- Log tabs use explicit `style.display` toggling for reliable show/hide behaviour.
+
 ## [1.6.2] - 2026-04-14
 
 ### Added in 1.6.2

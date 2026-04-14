@@ -953,9 +953,7 @@
             stopSysmonPolling();
         }
         if (page === 'system/logs') {
-            loadLogFiles();
-            loadLogs();
-            startLogPolling();
+            loadLogFilesTable();
         } else {
             stopLogPolling();
         }
@@ -965,6 +963,9 @@
             if (state.auth.user && state.auth.user.role === 'admin') {
                 refreshSmtp();
             }
+        }
+        if (page === 'system/tasks') {
+            loadTasks();
         }
         if (page === 'settings/smtp') {
             refreshSmtp();
@@ -2260,6 +2261,96 @@
 
     /* ── Log viewer ── */
 
+    var logTabViewer = document.getElementById('log-tab-viewer');
+    var logTabFiles = document.getElementById('log-tab-files');
+    var logTabs = document.querySelectorAll('[data-log-tab]');
+    var logFilesTableWrap = document.getElementById('log-files-table-wrap');
+    var logFilesRefreshBtn = document.getElementById('log-files-refresh');
+    var logFilesClearBtn = document.getElementById('log-files-clear');
+
+    logTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            logTabs.forEach(function (t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            var target = tab.dataset.logTab;
+            if (target === 'viewer') {
+                logTabViewer.removeAttribute('hidden');
+                logTabViewer.style.display = '';
+                logTabFiles.setAttribute('hidden', '');
+                logTabFiles.style.display = 'none';
+                loadLogFiles();
+                loadLogs();
+                startLogPolling();
+            } else {
+                stopLogPolling();
+                logTabViewer.setAttribute('hidden', '');
+                logTabViewer.style.display = 'none';
+                logTabFiles.removeAttribute('hidden');
+                logTabFiles.style.display = '';
+                loadLogFilesTable();
+            }
+        });
+    });
+
+    function loadLogFilesTable() {
+        fetchJson('/system/logs/files').then(function (data) {
+            if (!data || !data.files) return;
+            renderLogFilesTable(data.files);
+        });
+    }
+
+    function renderLogFilesTable(files) {
+        if (!files.length) {
+            logFilesTableWrap.innerHTML = '<div class="empty">No log files found.</div>';
+            return;
+        }
+        var html = '<table class="log-files-table">'
+            + '<thead><tr><th>Filename</th><th>Size</th><th>Last Modified</th><th></th></tr></thead>'
+            + '<tbody>';
+        files.forEach(function (f) {
+            var mod = f.modified ? f.modified.replace('T', ' ').substring(0, 16) : '–';
+            var size = formatBytes(f.size || 0);
+            var isActive = f.name === 'clutch.log';
+            var actions = '<a href="/system/logs/download?file=' + encodeURIComponent(f.name) + '" class="ghost" download>Download</a>';
+            if (!isActive) {
+                actions += ' <button class="ghost danger-text" data-delete-logfile="' + escapeHtml(f.name) + '">Delete</button>';
+            }
+            html += '<tr>'
+                + '<td>' + escapeHtml(f.name) + (isActive ? ' <span class="chip">active</span>' : '') + '</td>'
+                + '<td>' + size + '</td>'
+                + '<td>' + mod + '</td>'
+                + '<td class="actions-cell">' + actions + '</td>'
+                + '</tr>';
+        });
+        html += '</tbody></table>';
+        logFilesTableWrap.innerHTML = html;
+    }
+
+    if (logFilesTableWrap) {
+        logFilesTableWrap.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-delete-logfile]');
+            if (!btn) return;
+            var name = btn.dataset.deleteLogfile;
+            if (!confirm('Delete log file "' + name + '"?')) return;
+            fetchJson('/system/logs/files?file=' + encodeURIComponent(name), { method: 'DELETE' }).then(function () {
+                loadLogFilesTable();
+            });
+        });
+    }
+
+    if (logFilesRefreshBtn) {
+        logFilesRefreshBtn.addEventListener('click', function () { loadLogFilesTable(); });
+    }
+
+    if (logFilesClearBtn) {
+        logFilesClearBtn.addEventListener('click', function () {
+            if (!confirm('Delete all rotated log files? The active log will be kept.')) return;
+            fetchJson('/system/logs/files', { method: 'DELETE' }).then(function () {
+                loadLogFilesTable();
+            });
+        });
+    }
+
     var logLevelFilter = document.getElementById('log-level-filter');
     var logSearch = document.getElementById('log-search');
     var logFileSelect = document.getElementById('log-file-select');
@@ -2356,6 +2447,156 @@
         if (logAutoRefresh.checked) startLogPolling();
         else stopLogPolling();
     });
+
+    /* ── Tasks history ── */
+
+    var tasksTableWrap = document.getElementById('tasks-table-wrap');
+    var tasksPagination = document.getElementById('tasks-pagination');
+    var tasksStatusFilter = document.getElementById('tasks-status-filter');
+    var tasksSearch = document.getElementById('tasks-search');
+    var tasksRefreshBtn = document.getElementById('tasks-refresh');
+    var tasksCurrentPage = 1;
+    var tasksPageSize = 50;
+    var tasksSortCol = 'submitted';
+    var tasksSortDir = 'desc';
+
+    function loadTasks(page) {
+        if (page !== undefined) tasksCurrentPage = page;
+        var params = '?page=' + tasksCurrentPage + '&limit=' + tasksPageSize;
+        if (tasksStatusFilter.value) params += '&status=' + encodeURIComponent(tasksStatusFilter.value);
+        if (tasksSearch.value.trim()) params += '&search=' + encodeURIComponent(tasksSearch.value.trim());
+        fetchJson('/system/tasks' + params).then(function (data) {
+            if (!data) return;
+            renderTasks(data.tasks || []);
+            renderTasksPagination(data.total || 0, data.page || 1, data.limit || tasksPageSize);
+        });
+    }
+
+    function renderTasks(tasks) {
+        if (!tasks.length) {
+            tasksTableWrap.innerHTML = '<div class="empty">No tasks found.</div>';
+            return;
+        }
+
+        var cols = [
+            { key: 'name', label: 'Name' },
+            { key: 'status', label: 'Status' },
+            { key: 'codec', label: 'Codec' },
+            { key: 'size', label: 'Size' },
+            { key: 'duration', label: 'Duration' },
+            { key: 'submitted', label: 'Submitted' },
+        ];
+
+        var thead = '<thead><tr>' + cols.map(function (c) {
+            var cls = tasksSortCol === c.key ? ' class="jt-sorted"' : '';
+            return '<th' + cls + ' data-tasks-sort="' + c.key + '">' + c.label + buildTaskSortIndicator(c.key) + '</th>';
+        }).join('') + '</tr></thead>';
+
+        // Sort locally
+        var sorted = tasks.slice().sort(function (a, b) {
+            var va, vb;
+            switch (tasksSortCol) {
+                case 'name': va = baseName(a.input_file); vb = baseName(b.input_file); break;
+                case 'status': va = a.status || ''; vb = b.status || ''; break;
+                case 'codec': va = a.codec || ''; vb = b.codec || ''; break;
+                case 'size': va = Number(a.input_size_bytes || 0); vb = Number(b.input_size_bytes || 0); break;
+                case 'duration':
+                    va = taskDuration(a); vb = taskDuration(b); break;
+                case 'submitted':
+                default:
+                    va = a.submitted_at || ''; vb = b.submitted_at || ''; break;
+            }
+            var cmp = va < vb ? -1 : va > vb ? 1 : 0;
+            return tasksSortDir === 'asc' ? cmp : -cmp;
+        });
+
+        var tbody = '<tbody>' + sorted.map(function (t) {
+            var name = baseName(t.input_file);
+            var statusCls = 'status-badge status-' + (t.status || 'queued');
+            var sizeIn = formatBytes(Number(t.input_size_bytes || 0));
+            var sizeOut = t.output_size_bytes ? formatBytes(Number(t.output_size_bytes)) : '–';
+            var comp = t.compression_percent != null ? ' (' + Number(t.compression_percent).toFixed(1) + '%)' : '';
+            var dur = taskDurationLabel(t);
+            var sub = t.submitted_display || t.submitted_at || '';
+            var rowCls = t.status === 'failed' ? ' class="task-row-failed"' : '';
+            return '<tr' + rowCls + '>'
+                + '<td title="' + escapeHtml(t.input_file || '') + '">' + escapeHtml(name) + '</td>'
+                + '<td><span class="' + statusCls + '">' + escapeHtml(t.status || '') + '</span></td>'
+                + '<td>' + escapeHtml(t.codec || '–') + '</td>'
+                + '<td>' + sizeIn + ' → ' + sizeOut + comp + '</td>'
+                + '<td>' + dur + '</td>'
+                + '<td>' + escapeHtml(sub) + '</td>'
+                + '</tr>';
+        }).join('') + '</tbody>';
+
+        tasksTableWrap.innerHTML = '<table class="tasks-table jt-table">' + thead + tbody + '</table>';
+    }
+
+    function baseName(path) {
+        if (!path) return '–';
+        return path.replace(/\\/g, '/').split('/').pop() || path;
+    }
+
+    function taskDuration(t) {
+        if (!t.started_at || !t.finished_at) return 0;
+        return new Date(t.finished_at) - new Date(t.started_at);
+    }
+
+    function taskDurationLabel(t) {
+        var ms = taskDuration(t);
+        if (!ms) return '–';
+        var secs = Math.floor(ms / 1000);
+        if (secs < 60) return secs + 's';
+        var mins = Math.floor(secs / 60);
+        secs = secs % 60;
+        if (mins < 60) return mins + 'm ' + secs + 's';
+        var hrs = Math.floor(mins / 60);
+        mins = mins % 60;
+        return hrs + 'h ' + mins + 'm';
+    }
+
+    function buildTaskSortIndicator(key) {
+        if (tasksSortCol !== key) return '';
+        return tasksSortDir === 'asc' ? ' &#x25B2;' : ' &#x25BC;';
+    }
+
+    function renderTasksPagination(total, page, limit) {
+        var totalPages = Math.max(1, Math.ceil(total / limit));
+        if (totalPages <= 1) { tasksPagination.innerHTML = ''; return; }
+        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-taskpage="' + (page - 1) + '">&laquo; Prev</button>';
+        html += '<span>Page ' + page + ' / ' + totalPages + ' (' + total + ' tasks)</span>';
+        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-taskpage="' + (page + 1) + '">Next &raquo;</button>';
+        tasksPagination.innerHTML = html;
+    }
+
+    tasksStatusFilter.addEventListener('change', function () { loadTasks(1); });
+    tasksRefreshBtn.addEventListener('click', function () { loadTasks(); });
+
+    var tasksSearchTimeout;
+    tasksSearch.addEventListener('input', function () {
+        clearTimeout(tasksSearchTimeout);
+        tasksSearchTimeout = setTimeout(function () { loadTasks(1); }, 400);
+    });
+
+    tasksPagination.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-taskpage]');
+        if (btn) loadTasks(parseInt(btn.dataset.taskpage, 10));
+    });
+
+    if (tasksTableWrap) {
+        tasksTableWrap.addEventListener('click', function (e) {
+            var th = e.target.closest('[data-tasks-sort]');
+            if (!th) return;
+            var col = th.dataset.tasksSort;
+            if (tasksSortCol === col) {
+                tasksSortDir = tasksSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                tasksSortCol = col;
+                tasksSortDir = col === 'submitted' ? 'desc' : 'asc';
+            }
+            loadTasks();
+        });
+    }
 
     /* ── Auth / Users ── */
 
@@ -2720,7 +2961,7 @@
         var currentId = state.auth.user ? state.auth.user.id : 0;
         var isAdmin = state.auth.user && state.auth.user.role === 'admin';
         usersList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>'
+            + '<thead><tr><th></th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>'
             + '<tbody>'
             + users.map(function (u) {
                 var actions = '';
@@ -2730,7 +2971,11 @@
                         actions += ' <button class=\"ghost danger-text\" data-delete-user=\"' + u.id + '\">Delete</button>';
                     }
                 }
+                var bg = avatarColor(u.username);
+                var initials = userInitials(u.username);
+                var avatarHtml = '<span class="user-avatar user-avatar-sm" data-avatar-user="' + escapeHtml(u.username) + '" data-avatar-email="' + escapeHtml(u.email || '') + '" style="background:' + bg + '">' + escapeHtml(initials) + '</span>';
                 return '<tr>'
+                    + '<td class="avatar-cell">' + avatarHtml + '</td>'
                     + '<td>' + escapeHtml(u.username) + (u.id === currentId ? ' <span class="chip">you</span>' : '') + '</td>'
                     + '<td>' + escapeHtml(u.email) + '</td>'
                     + '<td><span class="chip">' + escapeHtml(u.role) + '</span></td>'
@@ -2738,6 +2983,15 @@
                     + '</tr>';
             }).join('')
             + '</tbody></table>';
+        // Attempt Gravatar for each avatar
+        usersList.querySelectorAll('[data-avatar-user]').forEach(function (el) {
+            var email = el.dataset.avatarEmail;
+            if (!email) return;
+            var img = new Image();
+            var emailHash = simpleHash(email.trim().toLowerCase());
+            img.src = 'https://www.gravatar.com/avatar/' + emailHash + '?s=56&d=404';
+            img.onload = function () { el.textContent = ''; el.appendChild(img); };
+        });
     }
 
     if (usersList) {

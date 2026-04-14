@@ -1774,6 +1774,9 @@ body.modal-open {
     flex-direction: column;
     gap: 0.5rem;
 }
+.log-viewer[hidden] {
+    display: none !important;
+}
 
 .log-toolbar {
     display: flex;
@@ -1885,6 +1888,161 @@ body.modal-open {
 .log-pagination button {
     padding: 0.25rem 0.6rem;
     font-size: 0.78rem;
+}
+
+/* ── Tasks table ── */
+
+.tasks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.tasks-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--panel-separator);
+    background: var(--panel);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.tasks-table thead th.jt-sorted {
+    color: var(--accent);
+}
+
+.tasks-table tbody tr {
+    border-bottom: 1px solid var(--panel-separator);
+    transition: background 120ms ease;
+}
+
+.tasks-table tbody tr:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.tasks-table td {
+    padding: 7px 10px;
+    vertical-align: middle;
+    white-space: nowrap;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.task-row-failed td {
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-succeeded { background: color-mix(in srgb, #22c55e 18%, transparent); color: #22c55e; }
+.status-failed    { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.status-cancelled { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+.status-skipped   { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #3b82f6; }
+.status-running   { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.status-queued    { background: color-mix(in srgb, #e6a817 18%, transparent); color: #e6a817; }
+.status-paused    { background: color-mix(in srgb, #e6a817 18%, transparent); color: #e6a817; }
+
+/* ── Log files table ── */
+
+.log-files-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.log-files-table thead th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--panel-separator);
+}
+
+.log-files-table tbody tr {
+    border-bottom: 1px solid var(--panel-separator);
+    transition: background 120ms ease;
+}
+
+.log-files-table tbody tr:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.log-files-table td {
+    padding: 7px 10px;
+    vertical-align: middle;
+}
+
+.log-files-table .actions-cell {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.log-files-table .actions-cell button,
+.log-files-table .actions-cell a {
+    font-size: 0.78rem;
+}
+
+.log-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 0.75rem;
+}
+
+.log-tab {
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: color 150ms, border-color 150ms;
+}
+
+.log-tab:hover {
+    color: var(--fg);
+}
+
+.log-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.log-info-banner {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--fg);
+    margin-bottom: 0.75rem;
+}
+
+.avatar-cell {
+    width: 36px;
+    padding-right: 0 !important;
 }
 
 @media (max-width: 920px) {

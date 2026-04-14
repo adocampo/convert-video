@@ -1067,7 +1067,11 @@
         <section class="page" id="page-system-logs" data-page="system/logs" hidden>
             <div class="page-inner">
                 <h2>Logs</h2>
-                <div class="log-viewer">
+                <div class="log-tabs">
+                    <button type="button" class="log-tab" data-log-tab="viewer">Log Viewer</button>
+                    <button type="button" class="log-tab active" data-log-tab="files">Log Files</button>
+                </div>
+                <div class="log-viewer" id="log-tab-viewer" hidden style="display:none">
                     <div class="log-toolbar">
                         <select id="log-level-filter" title="Filter by log level">
                             <option value="">All levels</option>
@@ -1091,17 +1095,40 @@
                     </div>
                     <div class="log-pagination" id="log-pagination"></div>
                 </div>
+                <div id="log-tab-files">
+                    <div class="log-info-banner">
+                        Log files are stored in <strong>~/.local/state/clutch/logs/</strong>.<br>
+                        The log level and retention can be changed in <a href="#settings/logs">Settings &gt; Logs</a>.
+                    </div>
+                    <div class="log-toolbar">
+                        <button type="button" id="log-files-refresh" class="secondary" title="Refresh">&#x21bb; Refresh</button>
+                        <button type="button" id="log-files-clear" class="danger" title="Delete all rotated log files">Clear old logs</button>
+                    </div>
+                    <div id="log-files-table-wrap"></div>
+                </div>
             </div>
         </section>
 
-        <!-- System > Tasks (placeholder for Phase 3) -->
+        <!-- System > Tasks -->
         <section class="page" id="page-system-tasks" data-page="system/tasks" hidden>
             <div class="page-inner">
                 <h2>Tasks</h2>
-                <fieldset class="options-section">
-                    <legend>Conversion History</legend>
-                    <div class="empty">Historical task log will be available in a future update.</div>
-                </fieldset>
+                <div class="log-toolbar" id="tasks-toolbar">
+                    <select id="tasks-status-filter" title="Filter by status">
+                        <option value="">All statuses</option>
+                        <option value="succeeded">Succeeded</option>
+                        <option value="failed">Failed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="skipped">Skipped</option>
+                        <option value="running">Running</option>
+                        <option value="queued">Queued</option>
+                    </select>
+                    <input type="text" id="tasks-search" placeholder="Search tasks…"
+                        title="Filter by filename or message">
+                    <button type="button" id="tasks-refresh" class="secondary" title="Refresh">&#x21bb;</button>
+                </div>
+                <div id="tasks-table-wrap"></div>
+                <div class="log-pagination" id="tasks-pagination"></div>
             </div>
         </section>
 
