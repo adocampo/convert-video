@@ -970,6 +970,10 @@
         if (page === 'settings/smtp') {
             refreshSmtp();
         }
+        if (page === 'settings/notifications') {
+            loadNotifChannels();
+            closeNotifEditor();
+        }
         if (page === 'settings/user') {
             populateUserSettings();
         }
@@ -2258,6 +2262,183 @@
     function stopSysmonPolling() {
         if (sysmonTimer) { clearInterval(sysmonTimer); sysmonTimer = null; }
     }
+
+    /* ── Notifications ── */
+
+    var notifList = document.getElementById('notif-channels-list');
+    var notifEditor = document.getElementById('notif-editor');
+    var notifEditorLegend = document.getElementById('notif-editor-legend');
+    var notifForm = document.getElementById('notif-form');
+    var notifStatus = document.getElementById('notif-status');
+    var notifIdInput = document.getElementById('notif-id');
+    var notifTypeInput = document.getElementById('notif-type');
+    var notifNameInput = document.getElementById('notif-name');
+    var notifEnabledInput = document.getElementById('notif-enabled');
+    var notifTestBtn = document.getElementById('notif-test-btn');
+    var notifCancelBtn = document.getElementById('notif-cancel-btn');
+    var notifAddTelegram = document.getElementById('notif-add-telegram');
+    var notifAddWebhook = document.getElementById('notif-add-webhook');
+
+    function loadNotifChannels() {
+        fetchJson('/config/notifications').then(function (data) {
+            if (!data || !data.channels) return;
+            renderNotifChannels(data.channels);
+        });
+    }
+
+    function renderNotifChannels(channels) {
+        if (!channels.length) {
+            notifList.innerHTML = '<div class="empty">No notification channels configured yet.</div>';
+            return;
+        }
+        var html = '';
+        channels.forEach(function (ch) {
+            var icon = ch.type === 'telegram' ? '&#x2708;' : '&#x1F517;';
+            var statusLabel = ch.enabled ? '' : ' <span class="status-badge status-paused">Disabled</span>';
+            var evts = (ch.events || []).join(', ') || 'none';
+            var disabledClass = ch.enabled ? '' : ' disabled';
+            html += '<div class="notif-channel-card' + disabledClass + '" data-channel-id="' + ch.id + '">'
+                + '<div class="notif-channel-icon">' + icon + '</div>'
+                + '<div class="notif-channel-info">'
+                + '<div class="notif-channel-name">' + escapeHtml(ch.name || ch.type) + statusLabel + '</div>'
+                + '<div class="notif-channel-meta">' + ch.type + ' &middot; Events: ' + escapeHtml(evts) + '</div>'
+                + '</div>'
+                + '<div class="notif-channel-actions">'
+                + '<button type="button" class="ghost notif-edit-btn" data-id="' + ch.id + '" title="Edit">&#x270E;</button>'
+                + '<button type="button" class="ghost danger-text notif-delete-btn" data-id="' + ch.id + '" title="Delete">&#x2715;</button>'
+                + '</div>'
+                + '</div>';
+        });
+        notifList.innerHTML = html;
+
+        notifList.querySelectorAll('.notif-edit-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { editNotifChannel(btn.dataset.id); });
+        });
+        notifList.querySelectorAll('.notif-delete-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { deleteNotifChannel(btn.dataset.id); });
+        });
+    }
+
+    function openNotifEditor(type, channel) {
+        notifEditor.hidden = false;
+        notifForm.className = 'notif-form-' + type;
+        notifTypeInput.value = type;
+        notifIdInput.value = (channel && channel.id) || '';
+        notifNameInput.value = (channel && channel.name) || '';
+        notifEnabledInput.checked = channel ? channel.enabled : true;
+        notifEditorLegend.textContent = channel ? 'Edit Channel' : 'New ' + type.charAt(0).toUpperCase() + type.slice(1);
+
+        // Telegram fields
+        var botTokenInput = document.getElementById('notif-bot-token');
+        var chatIdInput = document.getElementById('notif-chat-id');
+        botTokenInput.value = (channel && channel.config && channel.config.bot_token) || '';
+        chatIdInput.value = (channel && channel.config && channel.config.chat_id) || '';
+
+        // Webhook fields
+        var urlInput = document.getElementById('notif-webhook-url');
+        var headersInput = document.getElementById('notif-webhook-headers');
+        urlInput.value = (channel && channel.config && channel.config.url) || '';
+        var hdrs = (channel && channel.config && channel.config.headers) || {};
+        headersInput.value = Object.keys(hdrs).length ? JSON.stringify(hdrs, null, 2) : '';
+
+        // Events checkboxes
+        var events = (channel && channel.events) || ['job_succeeded', 'job_failed'];
+        notifForm.querySelectorAll('input[name="events"]').forEach(function (cb) {
+            cb.checked = events.indexOf(cb.value) !== -1;
+        });
+
+        setStatus(notifStatus, '');
+        notifTestBtn.style.display = channel ? '' : 'none';
+    }
+
+    function closeNotifEditor() {
+        notifEditor.hidden = true;
+        notifForm.reset();
+    }
+
+    function editNotifChannel(id) {
+        fetchJson('/config/notifications').then(function (data) {
+            if (!data || !data.channels) return;
+            var ch = null;
+            for (var i = 0; i < data.channels.length; i++) {
+                if (data.channels[i].id === id) { ch = data.channels[i]; break; }
+            }
+            if (ch) openNotifEditor(ch.type, ch);
+        });
+    }
+
+    function deleteNotifChannel(id) {
+        if (!confirm('Delete this notification channel?')) return;
+        fetchJson('/config/notifications/' + id, { method: 'DELETE' }).then(function () {
+            closeNotifEditor();
+            loadNotifChannels();
+        }).catch(function (err) {
+            alert('Error: ' + err.message);
+        });
+    }
+
+    notifAddTelegram.addEventListener('click', function () { openNotifEditor('telegram', null); });
+    notifAddWebhook.addEventListener('click', function () { openNotifEditor('webhook', null); });
+    notifCancelBtn.addEventListener('click', closeNotifEditor);
+
+    notifForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        setStatus(notifStatus, 'Saving…');
+        var type = notifTypeInput.value;
+        var config = {};
+        if (type === 'telegram') {
+            config.bot_token = document.getElementById('notif-bot-token').value.trim();
+            config.chat_id = document.getElementById('notif-chat-id').value.trim();
+        } else {
+            config.url = document.getElementById('notif-webhook-url').value.trim();
+            var headersRaw = document.getElementById('notif-webhook-headers').value.trim();
+            if (headersRaw) {
+                try { config.headers = JSON.parse(headersRaw); } catch (_e) {
+                    setStatus(notifStatus, 'Invalid JSON in Headers field.', 'error');
+                    return;
+                }
+            }
+        }
+        var events = [];
+        notifForm.querySelectorAll('input[name="events"]:checked').forEach(function (cb) {
+            events.push(cb.value);
+        });
+        var payload = {
+            id: notifIdInput.value || undefined,
+            type: type,
+            name: notifNameInput.value.trim(),
+            enabled: notifEnabledInput.checked,
+            config: config,
+            events: events,
+        };
+        fetchJson('/config/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }).then(function (result) {
+            setStatus(notifStatus, 'Channel saved.', 'ok');
+            notifIdInput.value = result.id || notifIdInput.value;
+            notifTestBtn.style.display = '';
+            loadNotifChannels();
+        }).catch(function (err) {
+            setStatus(notifStatus, err.message, 'error');
+        });
+    });
+
+    notifTestBtn.addEventListener('click', function () {
+        var id = notifIdInput.value;
+        if (!id) { setStatus(notifStatus, 'Save the channel first.', 'error'); return; }
+        setStatus(notifStatus, 'Sending test…');
+        fetchJson('/config/notifications/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id }),
+        }).then(function (result) {
+            setStatus(notifStatus, result.message || 'Test sent.', result.ok ? 'ok' : 'error');
+        }).catch(function (err) {
+            setStatus(notifStatus, err.message, 'error');
+        });
+    });
 
     /* ── Log viewer ── */
 

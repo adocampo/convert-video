@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-04-14
+
+### Added in 1.7.0
+
+- **Notification system** (Settings > Notifications): configure Telegram bots and generic webhook endpoints to receive notifications on job events.
+- **Telegram integration**: send messages via Telegram Bot API with Markdown-formatted job summaries (file name, codec, status, message).
+- **Webhook integration**: send JSON POST payloads to any HTTP/HTTPS endpoint with optional custom headers.
+- **Per-channel event selection**: choose which events trigger each channel (job succeeded, job failed, job cancelled).
+- **Test notifications**: verify channel configuration with a one-click test button that sends a sample message.
+- **Notification API**: `GET /config/notifications`, `POST /config/notifications`, `POST /config/notifications/test`, `DELETE /config/notifications/:id`. Admin role required.
+
+### Changed in 1.7.0
+
+- Notifications fire asynchronously in background threads to avoid blocking worker processing.
+
 ## [1.6.3] - 2026-04-14
 
 ### Added in 1.6.3

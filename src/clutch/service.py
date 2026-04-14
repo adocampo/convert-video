@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Callable, Dict, List, Optional
 from urllib import error, request
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from clutch import APP_NAME, build_state_dir, get_version
 from clutch.auth import AuthStore, has_role
@@ -346,6 +346,20 @@ class JobStore:
             ]:
                 if col not in watcher_columns:
                     self._conn.execute(f"ALTER TABLE watchers ADD COLUMN {col} {definition}")
+
+            # Notification channels (Phase 4)
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notification_channels (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    config_json TEXT NOT NULL DEFAULT '{}',
+                    events_json TEXT NOT NULL DEFAULT '[]'
+                )
+                """
+            )
 
     def _remove_temp_artifacts(self, record: Dict[str, object]):
         """Physically delete temp file and its companion progress log from disk."""
@@ -1254,6 +1268,213 @@ class WorkerHandle:
     stop_event: threading.Event
 
 
+# ── Notification Manager ──
+
+
+class NotificationManager:
+    """Sends notifications via Telegram Bot API or generic webhooks."""
+
+    VALID_EVENTS = {"job_succeeded", "job_failed", "job_cancelled", "queue_empty"}
+
+    def __init__(self, store: "JobStore"):
+        self._store = store
+        self._lock = threading.Lock()
+        self._channels: List[Dict[str, object]] = []
+        self._reload()
+
+    # ── Channel CRUD ──
+
+    def _reload(self):
+        with self._lock:
+            with self._store._lock, self._store._conn:
+                rows = self._store._conn.execute(
+                    "SELECT id, type, name, enabled, config_json, events_json "
+                    "FROM notification_channels ORDER BY rowid"
+                ).fetchall()
+            self._channels = [
+                {
+                    "id": r["id"],
+                    "type": r["type"],
+                    "name": r["name"],
+                    "enabled": bool(r["enabled"]),
+                    "config": json.loads(r["config_json"]),
+                    "events": json.loads(r["events_json"]),
+                }
+                for r in rows
+            ]
+
+    def list_channels(self) -> List[Dict[str, object]]:
+        self._reload()
+        safe = []
+        for ch in self._channels:
+            c = dict(ch)
+            cfg = dict(c.get("config") or {})
+            # Mask sensitive fields
+            if cfg.get("bot_token"):
+                cfg["bot_token"] = "••••" + str(cfg["bot_token"])[-4:]
+            if cfg.get("headers"):
+                cfg["headers"] = {k: "••••" for k in cfg["headers"]}
+            c["config"] = cfg
+            safe.append(c)
+        return safe
+
+    def get_channel(self, channel_id: str) -> Optional[Dict[str, object]]:
+        self._reload()
+        for ch in self._channels:
+            if ch["id"] == channel_id:
+                return ch
+        return None
+
+    def save_channel(self, payload: Dict[str, object]) -> Dict[str, object]:
+        ch_type = str(payload.get("type") or "").strip().lower()
+        if ch_type not in ("telegram", "webhook"):
+            raise ValueError("Type must be 'telegram' or 'webhook'.")
+
+        name = str(payload.get("name") or "").strip() or ch_type.title()
+        enabled = bool(payload.get("enabled", True))
+        events = payload.get("events") or []
+        if not isinstance(events, list):
+            events = []
+        events = [e for e in events if e in self.VALID_EVENTS]
+
+        config = payload.get("config") or {}
+        if not isinstance(config, dict):
+            raise ValueError("Config must be an object.")
+
+        if ch_type == "telegram":
+            if not config.get("bot_token"):
+                raise ValueError("Telegram bot_token is required.")
+            if not config.get("chat_id"):
+                raise ValueError("Telegram chat_id is required.")
+        elif ch_type == "webhook":
+            url = str(config.get("url") or "").strip()
+            if not url:
+                raise ValueError("Webhook URL is required.")
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                raise ValueError("Webhook URL must use http or https.")
+            config["url"] = url
+
+        channel_id = str(payload.get("id") or "").strip()
+        is_new = not channel_id
+
+        if is_new:
+            channel_id = uuid.uuid4().hex[:12]
+
+        # Merge bot_token: keep old value when masked
+        if ch_type == "telegram" and not is_new:
+            existing = self.get_channel(channel_id)
+            if existing and str(config.get("bot_token", "")).startswith("••••"):
+                config["bot_token"] = existing["config"].get("bot_token", "")
+
+        with self._store._lock, self._store._conn:
+            self._store._conn.execute(
+                "INSERT INTO notification_channels (id, type, name, enabled, config_json, events_json) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET type=excluded.type, name=excluded.name, "
+                "enabled=excluded.enabled, config_json=excluded.config_json, events_json=excluded.events_json",
+                (channel_id, ch_type, name, int(enabled), json.dumps(config), json.dumps(events)),
+            )
+        self._reload()
+        return {"id": channel_id, "saved": True}
+
+    def delete_channel(self, channel_id: str) -> bool:
+        with self._store._lock, self._store._conn:
+            cur = self._store._conn.execute(
+                "DELETE FROM notification_channels WHERE id = ?", (channel_id,)
+            )
+        self._reload()
+        return cur.rowcount > 0
+
+    # ── Sending ──
+
+    def notify(self, event: str, job_record: Dict[str, object]):
+        """Fire-and-forget notification for a job event."""
+        if event not in self.VALID_EVENTS:
+            return
+        threading.Thread(
+            target=self._send_all, args=(event, job_record), daemon=True
+        ).start()
+
+    def _send_all(self, event: str, job_record: Dict[str, object]):
+        self._reload()
+        for ch in self._channels:
+            if not ch["enabled"]:
+                continue
+            if event not in ch.get("events", []):
+                continue
+            try:
+                if ch["type"] == "telegram":
+                    self._send_telegram(ch["config"], event, job_record)
+                elif ch["type"] == "webhook":
+                    self._send_webhook(ch["config"], event, job_record)
+            except Exception as exc:
+                warning(f"Notification error ({ch['type']} {ch['id'][:8]}): {exc}")
+
+    def _build_message(self, event: str, job_record: Dict[str, object]) -> str:
+        fname = os.path.basename(str(job_record.get("input_file") or "unknown"))
+        status = event.replace("job_", "").upper()
+        msg = job_record.get("message") or ""
+        codec = str(job_record.get("codec") or "")
+        lines = [f"*Clutch — {status}*", f"File: `{fname}`"]
+        if codec:
+            lines.append(f"Codec: {codec}")
+        if msg:
+            lines.append(f"Message: {msg}")
+        return "\n".join(lines)
+
+    def _send_telegram(self, config: Dict, event: str, job_record: Dict[str, object]):
+        token = config["bot_token"]
+        chat_id = config["chat_id"]
+        text = self._build_message(event, job_record)
+        url = f"https://api.telegram.org/bot{quote(token, safe='')}/sendMessage"
+        data = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
+        req = request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        with request.urlopen(req, timeout=10) as resp:
+            resp.read()
+
+    def _send_webhook(self, config: Dict, event: str, job_record: Dict[str, object]):
+        url = config["url"]
+        headers = dict(config.get("headers") or {})
+        headers.setdefault("Content-Type", "application/json")
+        payload = {
+            "event": event,
+            "job": {
+                "id": job_record.get("id"),
+                "input_file": job_record.get("input_file"),
+                "output_file": job_record.get("output_file"),
+                "codec": job_record.get("codec"),
+                "status": event.replace("job_", ""),
+                "message": job_record.get("message"),
+            },
+        }
+        data = json.dumps(payload).encode()
+        req = request.Request(url, data=data, headers=headers, method="POST")
+        with request.urlopen(req, timeout=10) as resp:
+            resp.read()
+
+    def test_channel(self, channel_id: str) -> Dict[str, object]:
+        """Send a test notification to verify channel configuration."""
+        ch = self.get_channel(channel_id)
+        if not ch:
+            raise ValueError("Channel not found.")
+        dummy_record = {
+            "id": "test-000",
+            "input_file": "test_file.mkv",
+            "output_file": "test_file.mp4",
+            "codec": "nvenc_h265",
+            "message": "This is a test notification from Clutch.",
+        }
+        try:
+            if ch["type"] == "telegram":
+                self._send_telegram(ch["config"], "job_succeeded", dummy_record)
+            elif ch["type"] == "webhook":
+                self._send_webhook(ch["config"], "job_succeeded", dummy_record)
+            return {"ok": True, "message": "Test notification sent."}
+        except Exception as exc:
+            return {"ok": False, "message": str(exc)}
+
+
 class ConversionService:
     def __init__(
         self,
@@ -1268,6 +1489,7 @@ class ConversionService:
     ):
         self.store = JobStore(db_path)
         self.auth = AuthStore(self.store._conn, self.store._lock)
+        self.notifications = NotificationManager(self.store)
         self.allowed_roots = [os.path.abspath(path) for path in (allowed_roots or [])]
         self.default_job_settings = self._normalize_default_job_settings(default_job_settings or {})
         self.worker_count = self._normalize_worker_count(worker_count)
@@ -2424,6 +2646,8 @@ class ConversionService:
                 )
                 self._cleanup_runtime_artifacts(runtime_record)
                 info(f"[{job_id[:8]}] Succeeded: {os.path.basename(output_path)}")
+                final = self.store.get(job_id) or record
+                self.notifications.notify("job_succeeded", final)
             elif status == "queued":
                 runtime_record = self.store.get(job_id) or record
                 self.store.requeue(job_id, message)
@@ -2434,6 +2658,8 @@ class ConversionService:
                 self.store.update_status(job_id, "cancelled", message=message)
                 self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
                 warning(f"[{job_id[:8]}] Cancelled: {message}")
+                final = self.store.get(job_id) or record
+                self.notifications.notify("job_cancelled", final)
             elif status == "skipped":
                 self.store.update_status(job_id, "skipped", progress_percent=100.0, message=message)
                 info(f"[{job_id[:8]}] Skipped: {message}")
@@ -2444,6 +2670,8 @@ class ConversionService:
                 self.store.update_status(job_id, "failed", message=message)
                 self._cleanup_runtime_artifacts(runtime_record, remove_temp=True)
                 print_error(f"[{job_id[:8]}] Failed: {message}")
+                final = self.store.get(job_id) or record
+                self.notifications.notify("job_failed", final)
         except Exception as exc:
             print_error(f"[{job_id[:8]}] Job error for '{input_file}': {exc}")
             try:
@@ -3641,6 +3869,13 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, result)
             return
 
+        if path == "/config/notifications":
+            user = self._require_role("admin")
+            if not user:
+                return
+            self._send_json(200, {"channels": self.server.service.notifications.list_channels()})
+            return
+
         self._send_json(404, {"error": "Not found."})
 
     def do_POST(self):
@@ -3758,6 +3993,42 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "Job not found."})
                 return
             self._send_json(200, record)
+            return
+
+        if path == "/config/notifications":
+            user = self._require_role("admin")
+            if not user:
+                return
+            try:
+                payload = self._read_json()
+                result = self.server.service.notifications.save_channel(payload)
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, result)
+            return
+
+        if path == "/config/notifications/test":
+            user = self._require_role("admin")
+            if not user:
+                return
+            try:
+                payload = self._read_json()
+                channel_id = str(payload.get("id") or "").strip()
+                if not channel_id:
+                    self._send_json(400, {"error": "Missing channel id."})
+                    return
+                result = self.server.service.notifications.test_channel(channel_id)
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, result)
             return
 
         if path == "/config":
@@ -3930,6 +4201,18 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             else:
                 count = _clear_old_log_files()
                 self._send_json(200, {"cleared": count})
+            return
+
+        if path.startswith("/config/notifications/"):
+            user = self._require_role("admin")
+            if not user:
+                return
+            channel_id = path.rsplit("/", 1)[-1]
+            deleted = self.server.service.notifications.delete_channel(channel_id)
+            if not deleted:
+                self._send_json(404, {"error": "Channel not found."})
+                return
+            self._send_json(200, {"deleted": channel_id})
             return
 
         if path == "/jobs":

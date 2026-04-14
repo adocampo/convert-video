@@ -853,14 +853,84 @@
             </div>
         </section>
 
-        <!-- Settings > Notifications (placeholder for Phase 4) -->
+        <!-- Settings > Notifications -->
         <section class="page" id="page-settings-notifications" data-page="settings/notifications" hidden>
             <div class="page-inner page-narrow">
                 <h2>Notifications</h2>
                 <fieldset class="options-section">
                     <legend>Notification Channels</legend>
-                    <div class="empty">Notification settings (Telegram, Webhook) will be available in a future update.
+                    <p class="field-row-help" style="margin-bottom:1rem">
+                        Configure where Clutch sends notifications when jobs finish. You can add multiple Telegram bots or webhook endpoints.
+                    </p>
+                    <div id="notif-channels-list"></div>
+                    <div class="actions" style="margin-top:0.75rem">
+                        <button type="button" class="secondary" id="notif-add-telegram">+ Telegram</button>
+                        <button type="button" class="secondary" id="notif-add-webhook">+ Webhook</button>
                     </div>
+                </fieldset>
+                <fieldset class="options-section" id="notif-editor" hidden>
+                    <legend id="notif-editor-legend">New Channel</legend>
+                    <form id="notif-form">
+                        <input type="hidden" id="notif-id" name="id">
+                        <input type="hidden" id="notif-type" name="type">
+                        <div class="field-row">
+                            <label class="field-row-label" for="notif-name">Name</label>
+                            <div class="field-row-control">
+                                <input type="text" id="notif-name" name="name" placeholder="My Bot">
+                            </div>
+                        </div>
+                        <!-- Telegram fields -->
+                        <div class="field-row notif-field-telegram">
+                            <label class="field-row-label" for="notif-bot-token">Bot Token</label>
+                            <div class="field-row-control">
+                                <input type="text" id="notif-bot-token" name="bot_token" placeholder="123456:ABC-DEF..." autocomplete="off">
+                                <p class="field-row-help">Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> and paste the token here.</p>
+                            </div>
+                        </div>
+                        <div class="field-row notif-field-telegram">
+                            <label class="field-row-label" for="notif-chat-id">Chat ID</label>
+                            <div class="field-row-control">
+                                <input type="text" id="notif-chat-id" name="chat_id" placeholder="-1001234567890">
+                                <p class="field-row-help">The chat, group, or channel ID where messages will be sent.</p>
+                            </div>
+                        </div>
+                        <!-- Webhook fields -->
+                        <div class="field-row notif-field-webhook">
+                            <label class="field-row-label" for="notif-webhook-url">URL</label>
+                            <div class="field-row-control">
+                                <input type="url" id="notif-webhook-url" name="url" placeholder="https://example.com/webhook">
+                            </div>
+                        </div>
+                        <div class="field-row notif-field-webhook">
+                            <label class="field-row-label" for="notif-webhook-headers">Headers</label>
+                            <div class="field-row-control">
+                                <textarea id="notif-webhook-headers" name="headers" rows="3" placeholder='{"Authorization": "Bearer ..."}'></textarea>
+                                <p class="field-row-help">Optional JSON object with custom HTTP headers.</p>
+                            </div>
+                        </div>
+                        <!-- Events -->
+                        <div class="field-row">
+                            <label class="field-row-label">Events</label>
+                            <div class="field-row-control notif-events-grid">
+                                <label class="check check-inline"><input type="checkbox" name="events" value="job_succeeded" checked> Job succeeded</label>
+                                <label class="check check-inline"><input type="checkbox" name="events" value="job_failed" checked> Job failed</label>
+                                <label class="check check-inline"><input type="checkbox" name="events" value="job_cancelled"> Job cancelled</label>
+                            </div>
+                        </div>
+                        <!-- Enabled -->
+                        <div class="field-row">
+                            <label class="field-row-label">Enabled</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"><input type="checkbox" id="notif-enabled" name="enabled" checked> Send notifications</label>
+                            </div>
+                        </div>
+                        <div class="actions actions-centered">
+                            <button class="primary" type="submit">Save Channel</button>
+                            <button class="secondary" type="button" id="notif-test-btn">Test</button>
+                            <button class="ghost" type="button" id="notif-cancel-btn">Cancel</button>
+                        </div>
+                        <div class="status-line" id="notif-status"></div>
+                    </form>
                 </fieldset>
             </div>
         </section>
