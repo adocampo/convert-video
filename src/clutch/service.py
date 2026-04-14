@@ -1416,19 +1416,23 @@ class NotificationManager:
         status = event.replace("job_", "").upper()
         msg = job_record.get("message") or ""
         codec = str(job_record.get("codec") or "")
-        lines = [f"*Clutch — {status}*", f"File: `{fname}`"]
+        lines = [f"<b>Clutch — {status}</b>", f"File: <code>{self._html_escape(fname)}</code>"]
         if codec:
-            lines.append(f"Codec: {codec}")
+            lines.append(f"Codec: {self._html_escape(codec)}")
         if msg:
-            lines.append(f"Message: {msg}")
+            lines.append(f"Message: {self._html_escape(msg)}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _html_escape(text: str) -> str:
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def _send_telegram(self, config: Dict, event: str, job_record: Dict[str, object]):
         token = config["bot_token"]
         chat_id = config["chat_id"]
         text = self._build_message(event, job_record)
-        url = f"https://api.telegram.org/bot{quote(token, safe='')}/sendMessage"
-        data = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode()
         req = request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
         with request.urlopen(req, timeout=10) as resp:
             resp.read()
@@ -1437,7 +1441,18 @@ class NotificationManager:
         url = config["url"]
         headers = dict(config.get("headers") or {})
         headers.setdefault("Content-Type", "application/json")
+        fname = os.path.basename(str(job_record.get("input_file") or "unknown"))
+        status = event.replace("job_", "").upper()
+        msg = job_record.get("message") or ""
+        codec = str(job_record.get("codec") or "")
+        text_parts = [f"Clutch — {status}", f"File: {fname}"]
+        if codec:
+            text_parts.append(f"Codec: {codec}")
+        if msg:
+            text_parts.append(f"Message: {msg}")
+        text = "\n".join(text_parts)
         payload = {
+            "text": text,
             "event": event,
             "job": {
                 "id": job_record.get("id"),

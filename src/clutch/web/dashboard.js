@@ -2291,33 +2291,38 @@
             notifList.innerHTML = '<div class="empty">No notification channels configured yet.</div>';
             return;
         }
-        var html = '';
-        channels.forEach(function (ch) {
-            var icon = ch.type === 'telegram' ? '&#x2708;' : '&#x1F517;';
-            var statusLabel = ch.enabled ? '' : ' <span class="status-badge status-paused">Disabled</span>';
-            var evts = (ch.events || []).join(', ') || 'none';
-            var disabledClass = ch.enabled ? '' : ' disabled';
-            html += '<div class="notif-channel-card' + disabledClass + '" data-channel-id="' + ch.id + '">'
-                + '<div class="notif-channel-icon">' + icon + '</div>'
-                + '<div class="notif-channel-info">'
-                + '<div class="notif-channel-name">' + escapeHtml(ch.name || ch.type) + statusLabel + '</div>'
-                + '<div class="notif-channel-meta">' + ch.type + ' &middot; Events: ' + escapeHtml(evts) + '</div>'
-                + '</div>'
-                + '<div class="notif-channel-actions">'
-                + '<button type="button" class="ghost notif-edit-btn" data-id="' + ch.id + '" title="Edit">&#x270E;</button>'
-                + '<button type="button" class="ghost danger-text notif-delete-btn" data-id="' + ch.id + '" title="Delete">&#x2715;</button>'
-                + '</div>'
-                + '</div>';
-        });
-        notifList.innerHTML = html;
-
-        notifList.querySelectorAll('.notif-edit-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () { editNotifChannel(btn.dataset.id); });
-        });
-        notifList.querySelectorAll('.notif-delete-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () { deleteNotifChannel(btn.dataset.id); });
-        });
+        notifList.innerHTML = '<table class="users-table">'
+            + '<thead><tr><th>Type</th><th>Name</th><th>Events</th><th>Status</th><th></th></tr></thead>'
+            + '<tbody>'
+            + channels.map(function (ch) {
+                var typeLabel = ch.type === 'telegram' ? '&#x2708; Telegram' : '&#x1F517; Webhook';
+                var evts = (ch.events || []).map(function (e) { return e.replace('job_', ''); }).join(', ') || 'none';
+                var statusHtml = ch.enabled
+                    ? '<span class="chip chip-ok">Enabled</span>'
+                    : '<span class="chip chip-muted">Disabled</span>';
+                return '<tr>'
+                    + '<td>' + typeLabel + '</td>'
+                    + '<td>' + escapeHtml(ch.name || '—') + '</td>'
+                    + '<td>' + escapeHtml(evts) + '</td>'
+                    + '<td>' + statusHtml + '</td>'
+                    + '<td class="actions-cell">'
+                    + '<button class="ghost notif-test-list-btn" data-id="' + ch.id + '" title="Send test notification">Test</button> '
+                    + '<button class="ghost notif-edit-btn" data-id="' + ch.id + '" title="Edit">Edit</button> '
+                    + '<button class="ghost danger-text notif-delete-btn" data-id="' + ch.id + '" title="Delete">Delete</button>'
+                    + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table>';
     }
+
+    notifList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.notif-test-list-btn');
+        if (btn) { testNotifChannel(btn, btn.dataset.id); return; }
+        btn = e.target.closest('.notif-edit-btn');
+        if (btn) { editNotifChannel(btn.dataset.id); return; }
+        btn = e.target.closest('.notif-delete-btn');
+        if (btn) { deleteNotifChannel(btn.dataset.id); return; }
+    });
 
     function openNotifEditor(type, channel) {
         notifEditor.hidden = false;
@@ -2374,6 +2379,23 @@
             loadNotifChannels();
         }).catch(function (err) {
             alert('Error: ' + err.message);
+        });
+    }
+
+    function testNotifChannel(triggerBtn, id) {
+        var origText = triggerBtn.innerHTML;
+        triggerBtn.disabled = true;
+        triggerBtn.innerHTML = '&#x23F3;';
+        fetchJson('/config/notifications/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id }),
+        }).then(function (result) {
+            triggerBtn.innerHTML = result.ok ? '&#x2705;' : '&#x274C;';
+            setTimeout(function () { triggerBtn.innerHTML = origText; triggerBtn.disabled = false; }, 2000);
+        }).catch(function () {
+            triggerBtn.innerHTML = '&#x274C;';
+            setTimeout(function () { triggerBtn.innerHTML = origText; triggerBtn.disabled = false; }, 2000);
         });
     }
 

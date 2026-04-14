@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1] - 2026-04-15
+
+### Fixed in 1.7.1
+
+- **Telegram notifications**: fixed HTTP 400 error caused by URL-encoding the bot token (`:` was encoded as `%3A`) and by Markdown v1 parse mode choking on special characters in filenames. Switched to HTML parse mode for reliable message delivery.
+- **Webhook notifications**: fixed HTTP 400 with Slack-compatible webhooks by adding a `text` field to the JSON payload alongside the structured `event`/`job` data.
+
+### Changed in 1.7.1
+
+- Notification channel list now renders as a table (matching the Users page style) with Type, Name, Events, Status columns and inline Test / Edit / Delete buttons per row.
+- All notification form fields (Name, Bot Token, Chat ID, URL, Headers, Events, Enabled) are now aligned on the same grid with uniform widths.
+
 ## [1.7.0] - 2026-04-14
 
 ### Added in 1.7.0

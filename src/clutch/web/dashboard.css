@@ -565,6 +565,8 @@ body {
     color: var(--accent-strong);
     font-size: 0.68rem;
 }
+.chip-ok { color: var(--ok); }
+.chip-muted { color: var(--muted); }
 .schedule-chip-allowed { color: var(--ok); }
 .schedule-chip-blocked { color: var(--fail); }
 
@@ -684,7 +686,9 @@ form {
 .field-row-control .custom-select,
 .field-row-control input[type="number"],
 .field-row-control input[type="password"],
-.field-row-control input[type="text"] {
+.field-row-control input[type="text"],
+.field-row-control input[type="url"],
+.field-row-control textarea {
     width: 280px;
     max-width: 100%;
 }
@@ -2741,50 +2745,6 @@ body.modal-open {
 
 /* ── Notifications ── */
 
-.notif-channel-card {
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.notif-channel-card.disabled {
-    opacity: 0.5;
-}
-
-.notif-channel-icon {
-    font-size: 1.5rem;
-    flex-shrink: 0;
-    width: 2rem;
-    text-align: center;
-}
-
-.notif-channel-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.notif-channel-name {
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.notif-channel-meta {
-    font-size: 0.78rem;
-    color: var(--muted);
-    margin-top: 0.15rem;
-}
-
-.notif-channel-actions {
-    display: flex;
-    gap: 0.4rem;
-    flex-shrink: 0;
-}
-
 .notif-field-telegram,
 .notif-field-webhook {
     display: none;
@@ -2792,7 +2752,7 @@ body.modal-open {
 
 .notif-form-telegram .notif-field-telegram,
 .notif-form-webhook .notif-field-webhook {
-    display: flex;
+    display: grid;
 }
 
 .notif-events-grid {
