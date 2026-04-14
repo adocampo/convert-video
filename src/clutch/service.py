@@ -41,7 +41,7 @@ from clutch.converter import (
 from clutch.iso import display_titles, is_iso_file, scan_iso, select_main_title
 from clutch.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_media_summary, get_media_duration_seconds
 from clutch.output import error as print_error
-from clutch.output import info, success, warning
+from clutch.output import info, success, warning, setup_file_logging, set_log_level
 from clutch.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
 from clutch.updater import get_update_state, install_latest_version, mark_update_installed
 
@@ -1892,6 +1892,10 @@ class ConversionService:
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
+
+        # Apply log level change at runtime
+        set_log_level(self.log_level)
+
         return self.get_service_summary()
 
     def _validate_path(
@@ -2626,6 +2630,101 @@ class ConversionHTTPServer(ThreadingHTTPServer):
         self.service = service
 
 
+# ── Log reading helpers ──
+
+def _list_log_files() -> List[Dict[str, object]]:
+    """Return available log files sorted newest-first."""
+    from clutch.output import get_log_dir
+    log_dir = get_log_dir()
+    if not log_dir or not os.path.isdir(log_dir):
+        return []
+    result = []
+    for name in sorted(os.listdir(log_dir), reverse=True):
+        if not name.startswith("clutch.log"):
+            continue
+        full = os.path.join(log_dir, name)
+        try:
+            st = os.stat(full)
+        except OSError:
+            continue
+        result.append({
+            "name": name,
+            "size": st.st_size,
+            "modified": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+        })
+    return result
+
+
+def _read_log_entries(
+    *,
+    filename: str = "",
+    level: str = "",
+    search: str = "",
+    page: int = 1,
+    limit: int = 200,
+) -> Dict[str, object]:
+    """Read and filter log entries from the active (or specified) log file."""
+    from clutch.output import get_log_dir
+    log_dir = get_log_dir()
+    if not log_dir:
+        return {"entries": [], "total": 0, "page": page, "limit": limit}
+
+    if filename:
+        # Prevent path traversal
+        safe = os.path.basename(filename)
+        target = os.path.join(log_dir, safe)
+    else:
+        target = os.path.join(log_dir, "clutch.log")
+
+    if not os.path.isfile(target):
+        return {"entries": [], "total": 0, "page": page, "limit": limit}
+
+    entries: List[Dict[str, str]] = []
+    valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    search_lower = search.lower()
+
+    try:
+        with open(target, encoding="utf-8", errors="replace") as f:
+            for raw_line in f:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    continue
+                # Expected format: 2026-04-14T12:34:56 [INFO ] clutch: message
+                parts = line.split(" ", 3)
+                if len(parts) < 4:
+                    entry_level = "INFO"
+                    entry_ts = ""
+                    entry_source = ""
+                    entry_msg = line
+                else:
+                    entry_ts = parts[0]
+                    bracket = parts[1].strip("[]").strip()
+                    entry_level = bracket if bracket in valid_levels else "INFO"
+                    entry_source = parts[2].rstrip(":")
+                    entry_msg = parts[3] if len(parts) > 3 else ""
+
+                if level and entry_level != level:
+                    continue
+                if search_lower and search_lower not in line.lower():
+                    continue
+
+                entries.append({
+                    "timestamp": entry_ts,
+                    "level": entry_level,
+                    "source": entry_source,
+                    "message": entry_msg,
+                })
+    except OSError:
+        return {"entries": [], "total": 0, "page": page, "limit": limit}
+
+    total = len(entries)
+    # Return entries in reverse chronological order (newest first), paginated
+    entries.reverse()
+    start = (page - 1) * limit
+    page_entries = entries[start:start + limit]
+    return {"entries": page_entries, "total": total, "page": page, "limit": limit}
+
+
 def _collect_system_stats() -> Dict[str, object]:
     """Collect system resource statistics without external dependencies."""
     stats: Dict[str, object] = {}
@@ -3358,6 +3457,35 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"prices": prices})
             return
 
+        if path == "/system/logs/files":
+            user = self._require_role("admin")
+            if not user:
+                return
+            self._send_json(200, {"files": _list_log_files()})
+            return
+
+        if path == "/system/logs":
+            user = self._require_role("admin")
+            if not user:
+                return
+            filename = str(query.get("file") or "").strip()
+            level_filter = str(query.get("level") or "").upper()
+            search = str(query.get("search") or "").strip()
+            try:
+                page = max(1, int(query.get("page") or 1))
+            except (ValueError, TypeError):
+                page = 1
+            try:
+                limit = max(1, min(5000, int(query.get("limit") or 200)))
+            except (ValueError, TypeError):
+                limit = 200
+            result = _read_log_entries(
+                filename=filename, level=level_filter, search=search,
+                page=page, limit=limit,
+            )
+            self._send_json(200, result)
+            return
+
         self._send_json(404, {"error": "Not found."})
 
     def do_POST(self):
@@ -3714,6 +3842,10 @@ def run_service(
         gpu_devices=gpu_devices,
         schedule_config=schedule_config,
     )
+
+    # Set up application file logging
+    log_dir = os.path.join(build_state_dir(), "logs")
+    setup_file_logging(log_dir, service.log_level, service.log_retention_days)
     if not service.has_persisted_configuration():
         for watch_dir in watch_dirs:
             service.add_watcher(

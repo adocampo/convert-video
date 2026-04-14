@@ -1767,6 +1767,126 @@ body.modal-open {
     color: var(--muted);
 }
 
+/* ── Log viewer ── */
+
+.log-viewer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.log-toolbar select,
+.log-toolbar input[type="text"] {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--fg);
+}
+
+.log-toolbar input[type="text"] {
+    flex: 1;
+    min-width: 120px;
+}
+
+.log-toolbar .secondary {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.9rem;
+}
+
+.log-auto-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.log-entries {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card-bg);
+    max-height: 65vh;
+    overflow-y: auto;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    line-height: 1.55;
+}
+
+.log-row {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.2rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+}
+
+.log-row:last-child {
+    border-bottom: none;
+}
+
+.log-row:hover {
+    background: var(--hover-bg);
+}
+
+.log-ts {
+    flex-shrink: 0;
+    color: var(--muted);
+    min-width: 145px;
+}
+
+.log-lvl {
+    flex-shrink: 0;
+    min-width: 58px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.log-lvl-DEBUG { color: var(--muted); }
+.log-lvl-INFO  { color: var(--accent); }
+.log-lvl-WARNING { color: #e6a817; }
+.log-lvl-ERROR { color: var(--danger); }
+
+.log-src {
+    flex-shrink: 0;
+    color: var(--muted);
+    min-width: 80px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.log-msg {
+    flex: 1;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.log-pagination {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.log-pagination button {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.78rem;
+}
+
 @media (max-width: 920px) {
     :root {
         --sidebar-width: 60px;

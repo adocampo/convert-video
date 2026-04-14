@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-04-14
+
+### Added in 1.6.2
+
+- **Application file logging**: all application events are now written to daily-rotating log files at `~/.local/state/clutch/logs/` using Python `TimedRotatingFileHandler`.
+- **Log viewer** (System > Logs): real-time log viewer with level filter, text search, log file selector, auto-refresh (5s polling), and pagination.
+- **Log reading API**: `GET /system/logs` (paginated, filterable by level/text/file) and `GET /system/logs/files` (list available log files). Admin role required.
+- **Runtime log level changes**: changing the log level in Settings > Logs takes effect immediately without restarting the service.
+- **Automatic log cleanup**: rotated log files beyond the configured retention period are automatically deleted.
+
+### Changed in 1.6.2
+
+- `output.py` refactored: console output functions (`info`, `warning`, `error`, `success`, `skip`, `deleted`) now also write to the file logger, providing dual output (coloured terminal + structured log file).
+
 ## [1.6.1] - 2026-04-14
 
 ### Added in 1.6.1

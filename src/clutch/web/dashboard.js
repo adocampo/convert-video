@@ -952,6 +952,13 @@
         } else {
             stopSysmonPolling();
         }
+        if (page === 'system/logs') {
+            loadLogFiles();
+            loadLogs();
+            startLogPolling();
+        } else {
+            stopLogPolling();
+        }
         if (page === 'system/users') {
             refreshUsers();
             refreshTokens();
@@ -2250,6 +2257,105 @@
     function stopSysmonPolling() {
         if (sysmonTimer) { clearInterval(sysmonTimer); sysmonTimer = null; }
     }
+
+    /* ── Log viewer ── */
+
+    var logLevelFilter = document.getElementById('log-level-filter');
+    var logSearch = document.getElementById('log-search');
+    var logFileSelect = document.getElementById('log-file-select');
+    var logRefreshBtn = document.getElementById('log-refresh');
+    var logAutoRefresh = document.getElementById('log-auto-refresh');
+    var logEntriesEl = document.getElementById('log-entries');
+    var logPagination = document.getElementById('log-pagination');
+    var logTimer = null;
+    var logCurrentPage = 1;
+    var logPageSize = 200;
+
+    function loadLogFiles() {
+        fetchJson('/system/logs/files').then(function (data) {
+            if (!data || !data.files) return;
+            var oldVal = logFileSelect.value;
+            logFileSelect.innerHTML = '<option value="">Current</option>';
+            data.files.forEach(function (f) {
+                if (f.name === 'clutch.log') return;
+                var opt = document.createElement('option');
+                opt.value = f.name;
+                opt.textContent = f.name.replace('clutch.log.', '');
+                logFileSelect.appendChild(opt);
+            });
+            if (oldVal) logFileSelect.value = oldVal;
+        });
+    }
+
+    function loadLogs(page) {
+        if (page !== undefined) logCurrentPage = page;
+        var params = '?page=' + logCurrentPage + '&limit=' + logPageSize;
+        if (logLevelFilter.value) params += '&level=' + encodeURIComponent(logLevelFilter.value);
+        if (logSearch.value.trim()) params += '&search=' + encodeURIComponent(logSearch.value.trim());
+        if (logFileSelect.value) params += '&file=' + encodeURIComponent(logFileSelect.value);
+
+        fetchJson('/system/logs' + params).then(function (data) {
+            if (!data) return;
+            renderLogEntries(data.entries || []);
+            renderLogPagination(data.total || 0, data.page || 1, data.limit || logPageSize);
+        });
+    }
+
+    function renderLogEntries(entries) {
+        if (!entries.length) {
+            logEntriesEl.innerHTML = '<div class="empty">No log entries found.</div>';
+            return;
+        }
+        var html = '';
+        entries.forEach(function (e) {
+            html += '<div class="log-row">'
+                + '<span class="log-ts">' + escapeHtml(e.timestamp || '') + '</span>'
+                + '<span class="log-lvl log-lvl-' + escapeHtml(e.level || 'INFO') + '">' + escapeHtml(e.level || '') + '</span>'
+                + '<span class="log-src">' + escapeHtml(e.source || '') + '</span>'
+                + '<span class="log-msg">' + escapeHtml(e.message || '') + '</span>'
+                + '</div>';
+        });
+        logEntriesEl.innerHTML = html;
+    }
+
+    function renderLogPagination(total, page, limit) {
+        var totalPages = Math.max(1, Math.ceil(total / limit));
+        if (totalPages <= 1) { logPagination.innerHTML = ''; return; }
+        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-logpage="' + (page - 1) + '">&laquo; Prev</button>';
+        html += '<span>Page ' + page + ' / ' + totalPages + ' (' + total + ' entries)</span>';
+        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-logpage="' + (page + 1) + '">Next &raquo;</button>';
+        logPagination.innerHTML = html;
+    }
+
+    logPagination.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-logpage]');
+        if (btn) loadLogs(parseInt(btn.dataset.logpage, 10));
+    });
+    logLevelFilter.addEventListener('change', function () { loadLogs(1); });
+    logFileSelect.addEventListener('change', function () { loadLogs(1); });
+    logRefreshBtn.addEventListener('click', function () { loadLogs(); });
+
+    var logSearchTimeout;
+    logSearch.addEventListener('input', function () {
+        clearTimeout(logSearchTimeout);
+        logSearchTimeout = setTimeout(function () { loadLogs(1); }, 400);
+    });
+
+    function startLogPolling() {
+        stopLogPolling();
+        if (logAutoRefresh.checked) {
+            logTimer = setInterval(function () { loadLogs(); }, 5000);
+        }
+    }
+
+    function stopLogPolling() {
+        if (logTimer) { clearInterval(logTimer); logTimer = null; }
+    }
+
+    logAutoRefresh.addEventListener('change', function () {
+        if (logAutoRefresh.checked) startLogPolling();
+        else stopLogPolling();
+    });
 
     /* ── Auth / Users ── */
 
