@@ -204,6 +204,17 @@ class AuthStore:
                 )
                 """
             )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    user_id INTEGER PRIMARY KEY,
+                    theme TEXT NOT NULL DEFAULT '',
+                    language TEXT NOT NULL DEFAULT '',
+                    date_format TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             # Add auth_skipped flag to service_config (may already exist)
             svc_cols = {
                 row["name"]
@@ -414,6 +425,37 @@ class AuthStore:
                 (new_hash, datetime.now(timezone.utc).isoformat(), user_id),
             )
             self._conn.execute("DELETE FROM auth_tokens WHERE user_id = ?", (user_id,))
+
+    # ── User preferences ──
+
+    def get_user_preferences(self, user_id: int) -> Dict[str, str]:
+        """Return user preferences or empty defaults."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT theme, language, date_format FROM user_preferences WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        if row:
+            return {"theme": row["theme"], "language": row["language"], "date_format": row["date_format"]}
+        return {"theme": "", "language": "", "date_format": ""}
+
+    def update_user_preferences(
+        self, user_id: int, *, theme: str = "", language: str = "", date_format: str = ""
+    ) -> Dict[str, str]:
+        """Upsert user preferences."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO user_preferences (user_id, theme, language, date_format)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    theme = excluded.theme,
+                    language = excluded.language,
+                    date_format = excluded.date_format
+                """,
+                (user_id, theme, language, date_format),
+            )
+        return {"theme": theme, "language": language, "date_format": date_format}
 
     # ── Authentication ──
 

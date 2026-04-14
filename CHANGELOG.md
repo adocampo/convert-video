@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-04-14
+
+### Added in 1.6.1
+
+- **Sonarr-style sidebar**: sidebar now uses collapsible Settings and System groups with accordion behaviour (only one group expanded at a time).
+- **Flyout menus**: in tablet mode (collapsed sidebar), clicking a group icon opens a flyout panel instead of expanding inline sub-pages.
+- **Nav link tooltips**: collapsed sidebar shows label tooltips on hover via CSS pseudo-elements.
+- **Settings > User page**: new page with profile info, theme preference, and inline change-password form accessible to all roles.
+- **Unified user popup**: clicking avatar/username in the sidebar footer opens a popup menu with Settings and Sign out, consistent across desktop, tablet, and mobile.
+- **User preferences backend**: new `user_preferences` table and API routes for per-user theme and settings.
+
+### Changed in 1.6.1
+
+- Sidebar restructured from 6 flat pages to 4 top-level links + 2 collapsible groups (Settings with 6 sub-pages, System with 4 sub-pages).
+- Role-based sidebar visibility: operators see Activity, Jobs, Watchers, Schedule, and Settings > User only; admin-only pages are hidden.
+- Sidebar footer replaced inline icon buttons with a click-to-popup menu to avoid username truncation in narrow sidebars.
+
 ## [1.6.0] - 2026-04-14
 
 ### Added in 1.6.0

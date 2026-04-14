@@ -305,6 +305,14 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN schedule_config_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "log_level" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN log_level TEXT NOT NULL DEFAULT 'INFO'"
+                )
+            if "log_retention_days" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN log_retention_days INTEGER NOT NULL DEFAULT 30"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchers (
@@ -577,7 +585,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -603,6 +611,8 @@ class JobStore:
             "worker_count": int(row["worker_count"] or 1),
             "gpu_devices": gpu_devices,
             "schedule_config": schedule_config,
+            "log_level": str(row["log_level"] or "INFO"),
+            "log_retention_days": int(row["log_retention_days"] or 30),
         }
 
     def save_service_config(
@@ -612,18 +622,22 @@ class JobStore:
         worker_count: int,
         gpu_devices: List[int],
         schedule_config: Optional[Dict[str, object]] = None,
+        log_level: str = "INFO",
+        log_retention_days: int = 30,
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json)
-                VALUES (1, ?, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
                     worker_count = excluded.worker_count,
                     gpu_devices_json = excluded.gpu_devices_json,
-                    schedule_config_json = excluded.schedule_config_json
+                    schedule_config_json = excluded.schedule_config_json,
+                    log_level = excluded.log_level,
+                    log_retention_days = excluded.log_retention_days
                 """,
                 (
                     json.dumps(list(allowed_roots)),
@@ -631,6 +645,8 @@ class JobStore:
                     int(worker_count),
                     json.dumps(list(gpu_devices)),
                     json.dumps(schedule_config or {}),
+                    str(log_level),
+                    int(log_retention_days),
                 ),
             )
 
@@ -1250,6 +1266,8 @@ class ConversionService:
             self.default_job_settings = self._normalize_default_job_settings(initial_default_job_settings)
             self.worker_count = self._normalize_worker_count(initial_worker_count)
             self.gpu_devices = parse_gpu_devices(initial_gpu_devices)
+            self.log_level = "INFO"
+            self.log_retention_days = 30
             schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
             self.scheduler.update_config(schedule_cfg)
             self.store.save_service_config(
@@ -1258,6 +1276,8 @@ class ConversionService:
                 self.worker_count,
                 self.gpu_devices,
                 schedule_cfg.to_dict(),
+                self.log_level,
+                self.log_retention_days,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -1272,6 +1292,8 @@ class ConversionService:
                 self.gpu_devices = parse_gpu_devices(persisted_config.get("gpu_devices"))
             except ValueError:
                 self.gpu_devices = []
+            self.log_level = str(persisted_config.get("log_level") or "INFO")
+            self.log_retention_days = int(persisted_config.get("log_retention_days") or 30)
             schedule_raw = persisted_config.get("schedule_config") or {}
             self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
 
@@ -1847,12 +1869,26 @@ class ConversionService:
                 # Wake the schedule monitor immediately so it re-evaluates
                 self._schedule_wake_event.set()
 
+        # Update log settings if present in payload
+        if "log_level" in payload:
+            level = str(payload.get("log_level") or "INFO").upper()
+            if level in ("DEBUG", "INFO", "WARNING", "ERROR"):
+                self.log_level = level
+        if "log_retention_days" in payload:
+            try:
+                days = int(payload.get("log_retention_days") or 30)
+                self.log_retention_days = max(1, min(365, days))
+            except (TypeError, ValueError):
+                pass
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
             self.worker_count,
             self.gpu_devices,
             self.scheduler.config.to_dict(),
+            self.log_level,
+            self.log_retention_days,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -2132,6 +2168,8 @@ class ConversionService:
             "schedule_config": self.scheduler.config.to_dict(),
             "schedule_status": self.scheduler.get_status(),
             "bidding_zones": BIDDING_ZONES,
+            "log_level": self.log_level,
+            "log_retention_days": self.log_retention_days,
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -2921,6 +2959,14 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"user": user})
             return True
 
+        if path == "/auth/me/preferences":
+            user = self._require_role("viewer")
+            if not user:
+                return True
+            prefs = self.server.service.auth.get_user_preferences(user["id"])
+            self._send_json(200, prefs)
+            return True
+
         if path == "/auth/users":
             user = self._require_role("admin")
             if not user:
@@ -3132,6 +3178,24 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_auth_put(self, path: str) -> bool:
         """Handle PUT requests under ``/auth/*``. Returns True if handled."""
+        if path == "/auth/me/preferences":
+            user = self._require_role("viewer")
+            if not user:
+                return True
+            try:
+                payload = self._read_json()
+                prefs = self.server.service.auth.update_user_preferences(
+                    user["id"],
+                    theme=str(payload.get("theme") or ""),
+                    language=str(payload.get("language") or ""),
+                    date_format=str(payload.get("date_format") or ""),
+                )
+            except (json.JSONDecodeError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+                return True
+            self._send_json(200, prefs)
+            return True
+
         if path.startswith("/auth/users/"):
             user = self._require_role("admin")
             if not user:
@@ -3150,6 +3214,10 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                     email=payload.get("email"),
                     role=payload.get("role"),
                 )
+                # Admin set-password (without knowing current password)
+                set_password = str(payload.get("set_password") or "").strip()
+                if set_password:
+                    self.server.service.auth.set_password_admin(target_id, set_password)
             except (json.JSONDecodeError, ValueError) as exc:
                 self._send_json(400, {"error": str(exc)})
                 return True

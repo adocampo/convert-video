@@ -891,36 +891,79 @@
 
     /* ── Sidebar Navigation ── */
 
-    var validPages = ['activity', 'jobs', 'watchers', 'schedule', 'system', 'users'];
+    var validPages = [
+        'activity', 'jobs', 'watchers', 'schedule',
+        'settings/general', 'settings/media', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
+        'system/users', 'system/logs', 'system/tasks', 'system/about',
+    ];
 
     function navigateTo(page) {
         if (validPages.indexOf(page) === -1) page = 'activity';
+
+        // Role guard: non-admins cannot access settings/* (except settings/user) or system/* pages
+        if (state.auth.enabled && state.auth.user && state.auth.user.role !== 'admin') {
+            if ((page.indexOf('settings/') === 0 && page !== 'settings/user') || page.indexOf('system/') === 0) {
+                page = 'activity';
+            }
+        }
+
         validPages.forEach(function (p) {
-            var section = document.getElementById('page-' + p);
+            var section = document.getElementById('page-' + p.replace('/', '-'));
             if (section) section.hidden = (p !== page);
         });
+
         var links = sidebar.querySelectorAll('.sidebar-link');
         links.forEach(function (link) {
             link.classList.toggle('active', link.dataset.page === page);
         });
+
+        // Also sync flyout links
+        var flyoutLinks = sidebar.querySelectorAll('.sidebar-flyout a');
+        flyoutLinks.forEach(function (link) {
+            link.classList.toggle('active', link.dataset.page === page);
+        });
+
+        // Auto-open the parent sidebar group when navigating to a sub-page
+        if (!isCollapsedSidebar()) {
+            var groups = sidebar.querySelectorAll('.sidebar-group');
+            groups.forEach(function (group) {
+                var toggle = group.querySelector('.sidebar-group-toggle');
+                if (!toggle) return;
+                var groupName = toggle.dataset.group;
+                if (page.indexOf(groupName + '/') === 0) {
+                    // Accordion: close others first
+                    sidebar.querySelectorAll('.sidebar-group.open').forEach(function (g) {
+                        if (g !== group) g.classList.remove('open');
+                    });
+                    group.classList.add('open');
+                }
+            });
+        }
+
         if (page === 'schedule' && priceProvider.value) {
             loadPriceChart();
         }
-        if (page === 'watchers' || page === 'system') {
+        if (page === 'settings/media' || page === 'watchers') {
             initCustomSelects();
             syncAllCustomSelects();
         }
-        if (page === 'system') {
+        if (page === 'system/about') {
             startSysmonPolling();
         } else {
             stopSysmonPolling();
         }
-        if (page === 'users') {
+        if (page === 'system/users') {
             refreshUsers();
             refreshTokens();
             if (state.auth.user && state.auth.user.role === 'admin') {
                 refreshSmtp();
             }
+        }
+        if (page === 'settings/smtp') {
+            refreshSmtp();
+        }
+        if (page === 'settings/user') {
+            populateUserSettings();
         }
         closeSidebar();
     }
@@ -1515,6 +1558,16 @@
         settingsForm.elements.default_force.checked = Boolean(defaults.force);
         settingsForm.elements.default_verbose.checked = Boolean(defaults.verbose);
         watcherForm.elements.delete_source.checked = Boolean(defaults.delete_source);
+
+        // Log settings
+        var logLevelEl = document.getElementById('settings-log-level');
+        var logRetentionEl = document.getElementById('settings-log-retention');
+        if (logLevelEl) logLevelEl.value = summary.log_level || 'INFO';
+        if (logRetentionEl) logRetentionEl.value = String(summary.log_retention_days || 30);
+
+        // General settings (read-only info)
+        var authStatusEl = document.getElementById('general-auth-status');
+        if (authStatusEl) authStatusEl.textContent = state.auth.enabled ? 'Enabled' : 'Disabled';
 
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
@@ -2203,8 +2256,10 @@
     var sidebarUser = document.getElementById('sidebar-user');
     var sidebarUserName = document.getElementById('sidebar-user-name');
     var sidebarUserRole = document.getElementById('sidebar-user-role');
-    var sidebarLogout = document.getElementById('sidebar-logout');
-    var navUsersItem = document.getElementById('nav-users-item');
+    var sidebarAvatar = document.getElementById('sidebar-avatar');
+    var sidebarSignOutBtn = document.getElementById('sidebar-sign-out-btn');
+    var navSettingsGroup = document.getElementById('nav-settings-group');
+    var navSystemGroup = document.getElementById('nav-system-group');
     var usersList = document.getElementById('users-list');
     var userFormSection = document.getElementById('user-form-section');
     var userFormLegend = document.getElementById('user-form-legend');
@@ -2214,6 +2269,7 @@
     var userFormEmail = document.getElementById('user-form-email');
     var userFormPassword = document.getElementById('user-form-password');
     var userFormPasswordRow = document.getElementById('user-form-password-row');
+    var userFormSetPasswordRow = document.getElementById('user-form-set-password-row');
     var userFormRole = document.getElementById('user-form-role');
     var userFormSubmit = document.getElementById('user-form-submit');
     var userFormCancel = document.getElementById('user-form-cancel');
@@ -2221,12 +2277,244 @@
     var addUserBtn = document.getElementById('add-user-btn');
     var changePasswordForm = document.getElementById('change-password-form');
     var changePasswordStatus = document.getElementById('change-password-status');
-    var smtpSection = document.getElementById('smtp-section');
     var smtpForm = document.getElementById('smtp-form');
     var smtpStatus = document.getElementById('smtp-status');
     var tokensList = document.getElementById('tokens-list');
     var tokensStatus = document.getElementById('tokens-status');
     var createTokenBtn = document.getElementById('create-token-btn');
+
+    /* ── Avatar helper ── */
+
+    function userInitials(name) {
+        var parts = String(name || '?').trim().split(/[\s._-]+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return String(name || '?').substring(0, 2).toUpperCase();
+    }
+
+    function avatarColor(name) {
+        var hash = 0;
+        var s = String(name || '');
+        for (var i = 0; i < s.length; i++) hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
+        var hue = ((hash % 360) + 360) % 360;
+        return 'hsl(' + hue + ', 45%, 45%)';
+    }
+
+    function renderAvatar(el, user) {
+        if (!el || !user) return;
+        var initials = userInitials(user.username);
+        el.style.background = avatarColor(user.username);
+        el.textContent = initials;
+        // Try Gravatar if email is available
+        if (user.email) {
+            var img = new Image();
+            var emailHash = simpleHash(user.email.trim().toLowerCase());
+            img.src = 'https://www.gravatar.com/avatar/' + emailHash + '?s=96&d=404';
+            img.onload = function () {
+                el.textContent = '';
+                el.appendChild(img);
+            };
+            // On error, keep initials (default)
+        }
+    }
+
+    // Simple string hash for Gravatar (produces hex string; not MD5 but serves as cache key)
+    // For proper Gravatar we need MD5 — include a minimal implementation
+    function simpleHash(str) {
+        return md5(str);
+    }
+
+    // Minimal MD5 implementation for Gravatar
+    function md5(string) {
+        function md5cycle(x, k) {
+            var a = x[0], b = x[1], c = x[2], d = x[3];
+            a = ff(a, b, c, d, k[0], 7, -680876936); d = ff(d, a, b, c, k[1], 12, -389564586);
+            c = ff(c, d, a, b, k[2], 17, 606105819); b = ff(b, c, d, a, k[3], 22, -1044525330);
+            a = ff(a, b, c, d, k[4], 7, -176418897); d = ff(d, a, b, c, k[5], 12, 1200080426);
+            c = ff(c, d, a, b, k[6], 17, -1473231341); b = ff(b, c, d, a, k[7], 22, -45705983);
+            a = ff(a, b, c, d, k[8], 7, 1770035416); d = ff(d, a, b, c, k[9], 12, -1958414417);
+            c = ff(c, d, a, b, k[10], 17, -42063); b = ff(b, c, d, a, k[11], 22, -1990404162);
+            a = ff(a, b, c, d, k[12], 7, 1804603682); d = ff(d, a, b, c, k[13], 12, -40341101);
+            c = ff(c, d, a, b, k[14], 17, -1502002290); b = ff(b, c, d, a, k[15], 22, 1236535329);
+            a = gg(a, b, c, d, k[1], 5, -165796510); d = gg(d, a, b, c, k[6], 9, -1069501632);
+            c = gg(c, d, a, b, k[11], 14, 643717713); b = gg(b, c, d, a, k[0], 20, -373897302);
+            a = gg(a, b, c, d, k[5], 5, -701558691); d = gg(d, a, b, c, k[10], 9, 38016083);
+            c = gg(c, d, a, b, k[15], 14, -660478335); b = gg(b, c, d, a, k[4], 20, -405537848);
+            a = gg(a, b, c, d, k[9], 5, 568446438); d = gg(d, a, b, c, k[14], 9, -1019803690);
+            c = gg(c, d, a, b, k[3], 14, -187363961); b = gg(b, c, d, a, k[8], 20, 1163531501);
+            a = gg(a, b, c, d, k[13], 5, -1444681467); d = gg(d, a, b, c, k[2], 9, -51403784);
+            c = gg(c, d, a, b, k[7], 14, 1735328473); b = gg(b, c, d, a, k[12], 20, -1926607734);
+            a = hh(a, b, c, d, k[5], 4, -378558); d = hh(d, a, b, c, k[8], 11, -2022574463);
+            c = hh(c, d, a, b, k[11], 16, 1839030562); b = hh(b, c, d, a, k[14], 23, -35309556);
+            a = hh(a, b, c, d, k[1], 4, -1530992060); d = hh(d, a, b, c, k[4], 11, 1272893353);
+            c = hh(c, d, a, b, k[7], 16, -155497632); b = hh(b, c, d, a, k[10], 23, -1094730640);
+            a = hh(a, b, c, d, k[13], 4, 681279174); d = hh(d, a, b, c, k[0], 11, -358537222);
+            c = hh(c, d, a, b, k[3], 16, -722521979); b = hh(b, c, d, a, k[6], 23, 76029189);
+            a = hh(a, b, c, d, k[9], 4, -640364487); d = hh(d, a, b, c, k[12], 11, -421815835);
+            c = hh(c, d, a, b, k[15], 16, 530742520); b = hh(b, c, d, a, k[2], 23, -995338651);
+            a = ii(a, b, c, d, k[0], 6, -198630844); d = ii(d, a, b, c, k[7], 10, 1126891415);
+            c = ii(c, d, a, b, k[14], 15, -1416354905); b = ii(b, c, d, a, k[5], 21, -57434055);
+            a = ii(a, b, c, d, k[12], 6, 1700485571); d = ii(d, a, b, c, k[3], 10, -1894986606);
+            c = ii(c, d, a, b, k[10], 15, -1051523); b = ii(b, c, d, a, k[1], 21, -2054922799);
+            a = ii(a, b, c, d, k[8], 6, 1873313359); d = ii(d, a, b, c, k[15], 10, -30611744);
+            c = ii(c, d, a, b, k[6], 15, -1560198380); b = ii(b, c, d, a, k[13], 21, 1309151649);
+            a = ii(a, b, c, d, k[4], 6, -145523070); d = ii(d, a, b, c, k[11], 10, -1120210379);
+            c = ii(c, d, a, b, k[2], 15, 718787259); b = ii(b, c, d, a, k[9], 21, -343485551);
+            x[0] = add32(a, x[0]); x[1] = add32(b, x[1]); x[2] = add32(c, x[2]); x[3] = add32(d, x[3]);
+        }
+        function cmn(q, a, b, x, s, t) { a = add32(add32(a, q), add32(x, t)); return add32((a << s) | (a >>> (32 - s)), b); }
+        function ff(a, b, c, d, x, s, t) { return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+        function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+        function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+        function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+        function md5blk(s) {
+            var md5blks = [], i;
+            for (i = 0; i < 64; i += 4) {
+                md5blks[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) + (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24);
+            }
+            return md5blks;
+        }
+        function md5blk_array(a) {
+            var md5blks = [], i;
+            for (i = 0; i < 64; i += 4) {
+                md5blks[i >> 2] = a[i] + (a[i + 1] << 8) + (a[i + 2] << 16) + (a[i + 3] << 24);
+            }
+            return md5blks;
+        }
+        var hex_chr = '0123456789abcdef'.split('');
+        function rhex(n) {
+            var s = '', j = 0;
+            for (; j < 4; j++) s += hex_chr[(n >> (j * 8 + 4)) & 0x0f] + hex_chr[(n >> (j * 8)) & 0x0f];
+            return s;
+        }
+        function hex(x) { for (var i = 0; i < x.length; i++) x[i] = rhex(x[i]); return x.join(''); }
+        function add32(a, b) { return (a + b) & 0xFFFFFFFF; }
+
+        var n = string.length, state = [1732584193, -271733879, -1732584194, 271733878], i;
+        for (i = 64; i <= n; i += 64) md5cycle(state, md5blk(string.substring(i - 64, i)));
+        string = string.substring(i - 64);
+        var tail = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        for (i = 0; i < string.length; i++) tail[i >> 2] |= string.charCodeAt(i) << ((i % 4) << 3);
+        tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+        if (i > 55) { md5cycle(state, tail); tail = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]; }
+        tail[14] = n * 8;
+        md5cycle(state, tail);
+        return hex(state);
+    }
+
+    /* ── Sidebar group toggle ── */
+
+    function isCollapsedSidebar() {
+        return window.matchMedia('(max-width: 920px)').matches &&
+               !window.matchMedia('(max-width: 640px)').matches;
+    }
+
+    function closeAllFlyouts() {
+        sidebar.querySelectorAll('.sidebar-group.flyout-open').forEach(function (g) {
+            g.classList.remove('flyout-open');
+        });
+    }
+
+    (function initSidebarGroups() {
+        var toggles = sidebar.querySelectorAll('.sidebar-group-toggle');
+        toggles.forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                var group = btn.closest('.sidebar-group');
+                if (!group) return;
+
+                if (isCollapsedSidebar()) {
+                    // Flyout mode: toggle flyout-open, accordion
+                    e.stopPropagation();
+                    var wasOpen = group.classList.contains('flyout-open');
+                    closeAllFlyouts();
+                    if (!wasOpen) group.classList.add('flyout-open');
+                } else {
+                    // Normal mode: toggle inline sub-menu, accordion
+                    var wasOpen = group.classList.contains('open');
+                    sidebar.querySelectorAll('.sidebar-group.open').forEach(function (g) {
+                        g.classList.remove('open');
+                    });
+                    if (!wasOpen) group.classList.add('open');
+                }
+            });
+        });
+
+        // Close flyout when clicking outside
+        document.addEventListener('mousedown', function (e) {
+            if (!sidebar.contains(e.target)) {
+                closeAllFlyouts();
+            }
+        });
+
+        // Close flyout on navigation
+        window.addEventListener('hashchange', function () {
+            closeAllFlyouts();
+        });
+    })();
+
+    /* ── User Settings page ── */
+
+    var userSettingsAvatar = document.getElementById('user-settings-avatar');
+    var userSettingsUsername = document.getElementById('user-settings-username');
+    var userSettingsEmail = document.getElementById('user-settings-email');
+    var userSettingsRole = document.getElementById('user-settings-role');
+    var userSettingsTheme = document.getElementById('user-settings-theme');
+
+    function populateUserSettings() {
+        var user = state.auth.user;
+        if (!user) return;
+        if (userSettingsAvatar) renderAvatar(userSettingsAvatar, user);
+        if (userSettingsUsername) userSettingsUsername.value = user.username;
+        if (userSettingsEmail) userSettingsEmail.value = user.email || '';
+        if (userSettingsRole) userSettingsRole.textContent = user.role;
+        if (userSettingsTheme) userSettingsTheme.value = state.theme;
+    }
+
+    if (userSettingsTheme) {
+        userSettingsTheme.addEventListener('change', function () {
+            applyTheme(userSettingsTheme.value);
+            persistTheme(userSettingsTheme.value);
+            if (themeSelect) themeSelect.value = userSettingsTheme.value;
+        });
+    }
+
+    /* ── Sidebar sign-out ── */
+
+    function doSignOut() {
+        fetchJson('/auth/logout', { method: 'POST' }).catch(function () { /* ignore */ });
+        state.auth.token = '';
+        state.auth.user = null;
+        try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
+        window.location.href = '/login';
+    }
+
+    if (sidebarSignOutBtn) {
+        sidebarSignOutBtn.addEventListener('click', doSignOut);
+    }
+
+    /* ── User popup menu ── */
+
+    var sidebarUserPopup = document.getElementById('sidebar-user-popup');
+    var sidebarUserToggle = document.getElementById('sidebar-user-toggle');
+
+    if (sidebarUserToggle) {
+        sidebarUserToggle.addEventListener('click', function (e) {
+            if (!sidebarUserPopup) return;
+            e.stopPropagation();
+            sidebarUserPopup.hidden = !sidebarUserPopup.hidden;
+        });
+    }
+
+    // Close popup when clicking outside
+    document.addEventListener('mousedown', function (e) {
+        if (sidebarUserPopup && !sidebarUserPopup.hidden && sidebarUser && !sidebarUser.contains(e.target)) {
+            sidebarUserPopup.hidden = true;
+        }
+    });
+
+    // Close popup on navigation
+    window.addEventListener('hashchange', function () {
+        if (sidebarUserPopup) sidebarUserPopup.hidden = true;
+    });
 
     function getStoredToken() {
         try { return localStorage.getItem(tokenStorageKey) || ''; } catch (_) { return ''; }
@@ -2259,36 +2547,46 @@
         var user = state.auth.user;
         if (!user || !state.auth.enabled) {
             if (sidebarUser) sidebarUser.hidden = true;
-            if (navUsersItem) navUsersItem.hidden = true;
+            if (navSettingsGroup) navSettingsGroup.hidden = true;
+            if (navSystemGroup) navSystemGroup.hidden = true;
             return;
         }
         if (sidebarUser) {
             sidebarUser.hidden = false;
             sidebarUserName.textContent = user.username;
             sidebarUserRole.textContent = user.role;
+            renderAvatar(sidebarAvatar, user);
         }
-        // Show Users page only for admin/operator (admin can manage, operator can view own profile)
-        if (navUsersItem) {
-            navUsersItem.hidden = false;
+        // Settings and System groups visibility
+        var isAdmin = user.role === 'admin';
+        if (navSettingsGroup) {
+            // Settings group is always visible (for User sub-page), but admin-only sub-links are hidden
+            navSettingsGroup.hidden = false;
+            var settingsSubLinks = navSettingsGroup.querySelectorAll('.sidebar-sub-link');
+            settingsSubLinks.forEach(function (link) {
+                var page = link.dataset.page;
+                if (page === 'settings/user') {
+                    link.parentElement.hidden = false;
+                } else {
+                    link.parentElement.hidden = !isAdmin;
+                }
+            });
+            // Also hide admin-only flyout links
+            var settingsFlyoutLinks = navSettingsGroup.querySelectorAll('.sidebar-flyout a');
+            settingsFlyoutLinks.forEach(function (link) {
+                var page = link.dataset.page;
+                if (page === 'settings/user') {
+                    link.hidden = false;
+                } else {
+                    link.hidden = !isAdmin;
+                }
+            });
         }
-        // SMTP section only for admin
-        if (smtpSection) {
-            smtpSection.hidden = user.role !== 'admin';
-        }
+        if (navSystemGroup) navSystemGroup.hidden = !isAdmin;
         // Add user button only for admin
         if (addUserBtn) {
-            addUserBtn.style.display = user.role === 'admin' ? '' : 'none';
+            addUserBtn.style.display = isAdmin ? '' : 'none';
         }
-    }
-
-    if (sidebarLogout) {
-        sidebarLogout.addEventListener('click', function () {
-            fetchJson('/auth/logout', { method: 'POST' }).catch(function () { /* ignore */ });
-            state.auth.token = '';
-            state.auth.user = null;
-            try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
-            window.location.href = '/login';
-        });
     }
 
     async function refreshUsers() {
@@ -2359,6 +2657,7 @@
         userFormPassword.value = '';
         userFormPassword.required = true;
         userFormPasswordRow.style.display = '';
+        if (userFormSetPasswordRow) userFormSetPasswordRow.hidden = true;
         userFormRole.value = 'viewer';
         userFormSubmit.textContent = 'Create';
         setStatus(userFormStatus, '');
@@ -2383,6 +2682,12 @@
             userFormPasswordRow.style.display = 'none';
             userFormRole.value = user.role;
             userFormSubmit.textContent = 'Save';
+            // Show admin set-password field when editing other users
+            if (userFormSetPasswordRow) {
+                userFormSetPasswordRow.hidden = false;
+                var setPassInput = document.getElementById('user-form-set-password');
+                if (setPassInput) setPassInput.value = '';
+            }
             setStatus(userFormStatus, '');
         });
     }
@@ -2418,7 +2723,11 @@
             };
 
             if (id) {
-                // Edit existing user
+                // Edit existing user — include admin set-password if provided
+                var setPass = document.getElementById('user-form-set-password');
+                if (setPass && setPass.value) {
+                    payload.set_password = setPass.value;
+                }
                 try {
                     await fetchJson('/auth/users/' + id, {
                         method: 'PUT',
@@ -2700,6 +3009,31 @@
             settingsButton.disabled = false;
         }
     });
+
+    // Save log settings
+    var saveLogSettingsBtn = document.getElementById('save-log-settings');
+    var logSettingsStatus = document.getElementById('log-settings-status');
+    if (saveLogSettingsBtn) {
+        saveLogSettingsBtn.addEventListener('click', async function () {
+            var logLevelEl = document.getElementById('settings-log-level');
+            var logRetentionEl = document.getElementById('settings-log-retention');
+            var payload = {
+                log_level: logLevelEl ? logLevelEl.value : 'INFO',
+                log_retention_days: logRetentionEl ? Number(logRetentionEl.value) : 30,
+            };
+            setStatus(logSettingsStatus, 'Saving…');
+            try {
+                await fetchJson('/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                setStatus(logSettingsStatus, 'Log settings saved.', 'ok');
+            } catch (err) {
+                setStatus(logSettingsStatus, err.message, 'error');
+            }
+        });
+    }
 
     watcherForm.addEventListener('submit', async function (event) {
         event.preventDefault();
@@ -3065,6 +3399,8 @@
     themeSelect.addEventListener('change', function () {
         applyTheme(themeSelect.value);
         persistTheme(themeSelect.value);
+        // Sync user settings theme selector
+        if (userSettingsTheme) userSettingsTheme.value = themeSelect.value;
     });
 
     releaseButton.addEventListener('click', async function () {
