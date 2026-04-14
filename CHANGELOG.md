@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.2] - 2026-04-15
+
+### Changed in 1.7.2
+
+- **Modularized `service.py`**: split the monolithic 4 300-line module into six focused files — `store.py` (job data & SQLite persistence), `notifications.py` (Telegram / webhook delivery), `watcher.py` (directory watcher & worker handles), `logs.py` (log file helpers & system stats), `http_handler.py` (HTTP request handler & static assets), and a slimmed-down `service.py` (orchestration only). Public API is unchanged; all existing imports continue to work via re-exports.
+
 ## [1.7.1] - 2026-04-15
 
 ### Fixed in 1.7.1
