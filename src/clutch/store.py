@@ -283,6 +283,10 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN log_retention_days INTEGER NOT NULL DEFAULT 30"
                 )
+            if "default_date_format" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN default_date_format TEXT NOT NULL DEFAULT ''"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchers (
@@ -569,7 +573,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -582,7 +586,7 @@ class JobStore:
         except json.JSONDecodeError:
             default_job_settings = {}
         try:
-            gpu_devices = parse_gpu_devices(json.loads(row["gpu_devices_json"] or "[]"))
+            gpu_devices = json.loads(row["gpu_devices_json"] or "[]")
         except (json.JSONDecodeError, ValueError):
             gpu_devices = []
         try:
@@ -597,6 +601,7 @@ class JobStore:
             "schedule_config": schedule_config,
             "log_level": str(row["log_level"] or "INFO"),
             "log_retention_days": int(row["log_retention_days"] or 30),
+            "default_date_format": str(row["default_date_format"] or ""),
         }
 
     def save_service_config(
@@ -608,12 +613,13 @@ class JobStore:
         schedule_config: Optional[Dict[str, object]] = None,
         log_level: str = "INFO",
         log_retention_days: int = 30,
+        default_date_format: str = "",
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
@@ -621,7 +627,8 @@ class JobStore:
                     gpu_devices_json = excluded.gpu_devices_json,
                     schedule_config_json = excluded.schedule_config_json,
                     log_level = excluded.log_level,
-                    log_retention_days = excluded.log_retention_days
+                    log_retention_days = excluded.log_retention_days,
+                    default_date_format = excluded.default_date_format
                 """,
                 (
                     json.dumps(list(allowed_roots)),
@@ -631,6 +638,7 @@ class JobStore:
                     json.dumps(schedule_config or {}),
                     str(log_level),
                     int(log_retention_days),
+                    str(default_date_format),
                 ),
             )
 

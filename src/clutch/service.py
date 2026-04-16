@@ -35,8 +35,8 @@ from clutch.iso import is_iso_file, scan_iso, select_main_title
 from clutch.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_media_summary, get_media_duration_seconds
 from clutch.notifications import NotificationManager
 from clutch.output import error as print_error
-from clutch.output import info, success, warning, setup_file_logging, set_log_level
-from clutch.scheduler import ScheduleConfig, ScheduleEngine
+from clutch.output import debug, info, success, warning, setup_file_logging, set_log_level
+from clutch.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
 from clutch.store import (
     ACTIVE_JOB_STATUSES,
     ConversionJob,
@@ -129,6 +129,7 @@ class ConversionService:
             self.gpu_devices = parse_gpu_devices(initial_gpu_devices)
             self.log_level = "INFO"
             self.log_retention_days = 30
+            self.default_date_format = ""
             schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
             self.scheduler.update_config(schedule_cfg)
             self.store.save_service_config(
@@ -139,6 +140,7 @@ class ConversionService:
                 schedule_cfg.to_dict(),
                 self.log_level,
                 self.log_retention_days,
+                self.default_date_format,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -155,6 +157,7 @@ class ConversionService:
                 self.gpu_devices = []
             self.log_level = str(persisted_config.get("log_level") or "INFO")
             self.log_retention_days = int(persisted_config.get("log_retention_days") or 30)
+            self.default_date_format = str(persisted_config.get("default_date_format") or "")
             schedule_raw = persisted_config.get("schedule_config") or {}
             self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
 
@@ -742,6 +745,19 @@ class ConversionService:
             except (TypeError, ValueError):
                 pass
 
+        # Update auth mode if present in payload
+        if "auth_enabled" in payload:
+            if payload.get("auth_enabled"):
+                self.auth.enable_auth()
+            else:
+                self.auth.skip_auth()
+
+        # Update default date format if present in payload
+        if "default_date_format" in payload:
+            fmt = str(payload.get("default_date_format") or "")
+            if fmt in ("", "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"):
+                self.default_date_format = fmt
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
@@ -750,6 +766,7 @@ class ConversionService:
             self.scheduler.config.to_dict(),
             self.log_level,
             self.log_retention_days,
+            self.default_date_format,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -780,17 +797,141 @@ class ConversionService:
     def _is_browsable_input_file(self, path: str) -> bool:
         return path.lower().endswith(VIDEO_EXTENSIONS) or path.lower().endswith(".iso")
 
-    def _collect_directory_input_files(self, directory: str, *, recursive: bool) -> List[str]:
+    def _collect_directory_input_files(self, directory: str, *, recursive: bool, filter_pattern: str = "") -> List[str]:
+        import time as _time
         normalized_directory = normalize_path(directory)
         matches: List[str] = []
+        scanned = 0
+
+        debug(f"filter: dir={normalized_directory!r} recursive={recursive} pattern={filter_pattern!r}")
+
+        # Build a filter function from the pattern
+        _filter_fn = None
+        if filter_pattern:
+            import fnmatch, re
+            # If pattern contains glob chars, treat as fnmatch; otherwise case-insensitive substring
+            if any(c in filter_pattern for c in ('*', '?', '[')):
+                # Normalize [X..Y] range syntax to standard [X-Y] glob ranges
+                glob = re.sub(r'\[([^\]]*?)\.\.([^\]]*?)\]',
+                              lambda m: '[' + m.group(1) + '-' + m.group(2) + ']',
+                              filter_pattern)
+                # Fix unclosed brackets — if [ has no matching ], close it
+                open_count = 0
+                fixed = []
+                for ch in glob:
+                    if ch == '[':
+                        open_count += 1
+                    elif ch == ']':
+                        open_count -= 1
+                    fixed.append(ch)
+                if open_count > 0:
+                    fixed.append(']')
+                    debug(f"filter: auto-closed unclosed bracket in pattern")
+                glob = ''.join(fixed)
+                # Auto-wrap in wildcards so the pattern matches as "contains"
+                if not glob.startswith('*'):
+                    glob = '*' + glob
+                if not glob.endswith('*'):
+                    glob = glob + '*'
+                _re = re.compile(fnmatch.translate(glob), re.IGNORECASE)
+                debug(f"filter: glob={glob!r} regex={_re.pattern!r}")
+                _filter_fn = lambda name: _re.match(name) is not None
+            else:
+                _lower = filter_pattern.lower()
+                debug(f"filter: substring mode, needle={_lower!r}")
+                _filter_fn = lambda name: _lower in name.lower()
+
+        t0 = _time.monotonic()
 
         if recursive:
-            for root, dirnames, filenames in os.walk(normalized_directory):
-                dirnames.sort()
-                for filename in sorted(filenames):
-                    entry_path = normalize_path(os.path.join(root, filename))
-                    if self._is_browsable_input_file(entry_path):
-                        matches.append(entry_path)
+            # ── Fast path: when a filter is active, scan top-level entries
+            # and only recurse into directories whose name matches the
+            # pattern (same strategy as CLI --find). ──
+            if _filter_fn:
+                top_dirs = []
+                matching_dirs = []
+                try:
+                    with os.scandir(normalized_directory) as it:
+                        for entry in it:
+                            try:
+                                if entry.is_dir(follow_symlinks=True):
+                                    top_dirs.append(entry.path)
+                                    if _filter_fn(entry.name):
+                                        matching_dirs.append(entry.path)
+                                elif entry.is_file(follow_symlinks=True):
+                                    if self._is_browsable_input_file(entry.path):
+                                        scanned += 1
+                                        if _filter_fn(entry.name):
+                                            matches.append(entry.path)
+                            except OSError:
+                                continue
+                except (PermissionError, OSError):
+                    pass
+
+                if matching_dirs:
+                    debug(f"filter: fast path — {len(matching_dirs)}/{len(top_dirs)} top-level dirs match")
+                    for d in sorted(matching_dirs):
+                        for root, _, filenames in os.walk(d):
+                            for filename in sorted(filenames):
+                                filepath = os.path.join(root, filename)
+                                if self._is_browsable_input_file(filepath):
+                                    scanned += 1
+                                    if not _filter_fn(filename):
+                                        continue
+                                    matches.append(filepath)
+                    elapsed = _time.monotonic() - t0
+                    if matches:
+                        debug(f"filter: recursive scan done in {elapsed:.2f}s — scanned={scanned} matched={len(matches)} first={os.path.basename(matches[0])!r}")
+                    else:
+                        debug(f"filter: recursive scan done in {elapsed:.2f}s — scanned={scanned} matched=0")
+                    return matches
+
+                debug("filter: no top-level dirs matched, falling back to full scan")
+
+            # ── Slow path: no filter, or no top-level dir names matched ──
+            from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+
+            def _list_dir(dirpath):
+                """Return (subdirs, files) for one directory."""
+                subdirs = []
+                files = []
+                try:
+                    with os.scandir(dirpath) as it:
+                        for entry in it:
+                            try:
+                                if entry.is_dir(follow_symlinks=True):
+                                    subdirs.append(entry.path)
+                                elif entry.is_file(follow_symlinks=True):
+                                    files.append((entry.path, entry.name))
+                            except OSError:
+                                continue
+                except (PermissionError, OSError):
+                    pass
+                return subdirs, files
+
+            all_files: list[tuple[str, str]] = []
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                pending = {pool.submit(_list_dir, normalized_directory)}
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        subdirs, files = future.result()
+                        all_files.extend(files)
+                        for sd in subdirs:
+                            pending.add(pool.submit(_list_dir, sd))
+
+            for filepath, filename in sorted(all_files):
+                if self._is_browsable_input_file(filepath):
+                    scanned += 1
+                    if _filter_fn and not _filter_fn(filename):
+                        continue
+                    matches.append(filepath)
+
+            elapsed = _time.monotonic() - t0
+            if matches:
+                debug(f"filter: recursive scan done in {elapsed:.2f}s — scanned={scanned} matched={len(matches)} first={os.path.basename(matches[0])!r}")
+            else:
+                debug(f"filter: recursive scan done in {elapsed:.2f}s — scanned={scanned} matched=0")
             return matches
 
         try:
@@ -802,11 +943,19 @@ class ConversionService:
                     except OSError:
                         continue
                     if is_file and self._is_browsable_input_file(entry_path):
+                        scanned += 1
+                        if _filter_fn and not _filter_fn(entry.name):
+                            continue
                         matches.append(entry_path)
         except PermissionError as exc:
             raise ValueError(f"Permission denied: {normalized_directory}: {exc}") from exc
 
         matches.sort()
+        elapsed = _time.monotonic() - t0
+        if matches:
+            debug(f"filter: flat scan done in {elapsed:.2f}s — scanned={scanned} matched={len(matches)} first={os.path.basename(matches[0])!r}")
+        else:
+            debug(f"filter: flat scan done in {elapsed:.2f}s — scanned={scanned} matched=0")
         return matches
 
     def _get_default_browser_path(self, restricted_roots: List[str]) -> str:
@@ -931,8 +1080,11 @@ class ConversionService:
             return self.submit_job(job)
 
         self._validate_path(input_path, require_directory=True)
-        matched_paths = self._collect_directory_input_files(input_path, recursive=recursive)
+        filter_pattern = str(payload.get("filter_pattern") or "").strip()
+        matched_paths = self._collect_directory_input_files(input_path, recursive=recursive, filter_pattern=filter_pattern)
         if not matched_paths:
+            if filter_pattern:
+                raise ValueError(f"No supported video files matching '{filter_pattern}' found in directory: {normalize_path(input_path)}")
             raise ValueError(f"No supported video files found in directory: {normalize_path(input_path)}")
 
         first_id = ""
@@ -1035,6 +1187,8 @@ class ConversionService:
             "bidding_zones": BIDDING_ZONES,
             "log_level": self.log_level,
             "log_retention_days": self.log_retention_days,
+            "auth_enabled": self.auth.is_auth_enabled(),
+            "default_date_format": self.default_date_format,
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:

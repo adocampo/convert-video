@@ -42,6 +42,7 @@
             user: null,
             token: '',
         },
+        dateFormat: 'YYYY-MM-DD',
     };
 
     const tokenStorageKey = 'clutch-token';
@@ -75,6 +76,11 @@
     const inputKindField = document.getElementById('input-kind');
     const inputSelectionHint = document.getElementById('input-selection-hint');
     const inputRecursiveField = document.getElementById('input-recursive');
+    const recursiveToggleInline = document.getElementById('recursive-toggle-inline');
+    const browserRecursiveToggle = document.getElementById('browser-recursive-toggle');
+    const browserRecursiveField = document.getElementById('browser-recursive');
+    const filterPatternRow = document.getElementById('filter-pattern-row');
+    const inputFilterPattern = document.getElementById('input-filter-pattern');
     const browseInputFileButton = document.getElementById('browse-input-file');
     const browseInputDirectoryButton = document.getElementById('browse-input-directory');
     const clearInputFileButton = document.getElementById('clear-input-file');
@@ -180,15 +186,16 @@
         return String(value).padStart(2, '0');
     }
 
-    function buildSubmittedDisplay(date) {
-        return [
-            date.getFullYear(),
-            padNumber(date.getMonth() + 1),
-            padNumber(date.getDate()),
-        ].join('-') + ' ' + [
-            padNumber(date.getHours()),
-            padNumber(date.getMinutes()),
-        ].join(':');
+    function buildSubmittedDisplay(date, showSeconds) {
+        var y = date.getFullYear();
+        var m = padNumber(date.getMonth() + 1);
+        var d = padNumber(date.getDate());
+        var time = ' ' + padNumber(date.getHours()) + ':' + padNumber(date.getMinutes());
+        if (showSeconds) time += ':' + padNumber(date.getSeconds());
+        var fmt = state.dateFormat || 'YYYY-MM-DD';
+        if (fmt === 'DD/MM/YYYY') return d + '/' + m + '/' + y + time;
+        if (fmt === 'MM/DD/YYYY') return m + '/' + d + '/' + y + time;
+        return y + '-' + m + '-' + d + time;
     }
 
     function formatBytes(value) {
@@ -504,7 +511,7 @@
         });
     }
 
-    function formatIsoTimestamp(value) {
+    function formatIsoTimestamp(value, showSeconds) {
         if (!value) {
             return '';
         }
@@ -513,7 +520,7 @@
         if (Number.isNaN(parsed.getTime())) {
             return String(value);
         }
-        return buildSubmittedDisplay(parsed);
+        return buildSubmittedDisplay(parsed, showSeconds);
     }
 
     function markdownToPlainText(markdown) {
@@ -696,7 +703,7 @@
             state.auth.token = '';
             state.auth.user = null;
             try { localStorage.removeItem(tokenStorageKey); } catch (ignored) { /* noop */ }
-            window.location.href = '/login';
+            window.location.replace('/login');
             throw new Error('Session expired.');
         }
 
@@ -730,7 +737,8 @@
         const nextKind = kind === 'directory' ? 'directory' : 'file';
         inputFileField.value = path || '';
         inputKindField.value = nextKind;
-        inputRecursiveField.disabled = nextKind !== 'directory';
+        if (recursiveToggleInline) recursiveToggleInline.hidden = nextKind !== 'directory';
+        if (filterPatternRow) filterPatternRow.hidden = nextKind !== 'directory';
         inputFileField.setAttribute(
             'title',
             path
@@ -739,15 +747,20 @@
         );
         if (nextKind !== 'directory') {
             inputRecursiveField.checked = false;
+            if (inputFilterPattern) inputFilterPattern.value = '';
+            if (filterPreview) filterPreview.innerHTML = '';
+            var previewRow = document.getElementById('filter-preview-row');
+            if (previewRow) previewRow.hidden = true;
         }
 
         if (!path) {
-            inputSelectionHint.textContent = 'Choose a single file or a folder on the source.';
+            inputSelectionHint.textContent = 'Choose a single file or a folder on the source. Folders support glob filtering.';
             return;
         }
 
         if (nextKind === 'directory') {
-            inputSelectionHint.textContent = 'Selected source folder. Enable the recursive option to include subdirectories.';
+            inputSelectionHint.textContent = 'Selected source folder. Use the filter below to narrow files by pattern.';
+            if (path) scheduleFilterPreview();
             return;
         }
 
@@ -756,6 +769,69 @@
 
     function clearInputSelection() {
         setInputSelection('', 'file');
+    }
+
+    // ── Filter pattern live preview ──
+    var filterPreview = document.getElementById('filter-preview');
+    var filterPreviewTimer = null;
+
+    function fetchFilterPreview() {
+        var dir = inputFileField.value;
+        var pattern = inputFilterPattern ? inputFilterPattern.value.trim() : '';
+        var previewRow = document.getElementById('filter-preview-row');
+        if (!dir || inputKindField.value !== 'directory' || !pattern) {
+            if (filterPreview) filterPreview.innerHTML = '';
+            if (previewRow) previewRow.hidden = true;
+            return;
+        }
+        var recursive = inputRecursiveField.checked ? '1' : '0';
+        var url = '/browse/match?path=' + encodeURIComponent(dir)
+            + '&pattern=' + encodeURIComponent(pattern)
+            + '&recursive=' + recursive;
+        filterPreview.innerHTML = '<div class="filter-preview-loading"><span class="filter-preview-spinner"></span>Searching…</div>';
+        if (previewRow) previewRow.hidden = false;
+        fetchJson(url).then(function (data) {
+            if (!filterPreview) return;
+            var names = data.matches || [];
+            var total = data.total || 0;
+            if (!names.length) {
+                filterPreview.innerHTML = '<div class="filter-preview-header">No matches</div>';
+                if (previewRow) previewRow.hidden = false;
+                return;
+            }
+            var maxShow = 30;
+            var label = total + ' file' + (total !== 1 ? 's' : '') + ' matching';
+            var html = '<div class="filter-preview-header">' + escapeHtml(label) + '</div>';
+            html += '<ul class="filter-preview-list">';
+            names.slice(0, maxShow).forEach(function (n) {
+                html += '<li>' + escapeHtml(n) + '</li>';
+            });
+            html += '</ul>';
+            if (total > maxShow) {
+                html += '<div class="filter-preview-more">\u2026 and ' + (total - maxShow) + ' more</div>';
+            }
+            filterPreview.innerHTML = html;
+            if (previewRow) previewRow.hidden = false;
+        }).catch(function () {
+            if (filterPreview) filterPreview.innerHTML = '';
+            if (previewRow) previewRow.hidden = true;
+        });
+    }
+
+    function scheduleFilterPreview() {
+        if (filterPreviewTimer) clearTimeout(filterPreviewTimer);
+        filterPreviewTimer = setTimeout(fetchFilterPreview, 350);
+    }
+
+    if (inputFilterPattern) {
+        inputFilterPattern.addEventListener('input', scheduleFilterPreview);
+    }
+    if (inputRecursiveField) {
+        inputRecursiveField.addEventListener('change', function () {
+            if (inputKindField.value === 'directory' && inputFileField.value) {
+                scheduleFilterPreview();
+            }
+        });
     }
 
     function setWatcherDirectory(path) {
@@ -889,6 +965,19 @@
         setBrowserStatus('', '');
     }
 
+    /* ── Scroll + Highlight utility ── */
+
+    function scrollAndHighlight(el) {
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.remove('highlight-pulse');
+        void el.offsetWidth;
+        el.classList.add('highlight-pulse');
+        el.addEventListener('animationend', function () {
+            el.classList.remove('highlight-pulse');
+        }, { once: true });
+    }
+
     /* ── Sidebar Navigation ── */
 
     var validPages = [
@@ -959,7 +1048,7 @@
         }
         if (page === 'system/users') {
             refreshUsers();
-            refreshTokens();
+            refreshAdminTokens();
             if (state.auth.user && state.auth.user.role === 'admin') {
                 refreshSmtp();
             }
@@ -976,13 +1065,31 @@
         }
         if (page === 'settings/user') {
             populateUserSettings();
+            refreshUserTokens();
         }
         closeSidebar();
+
+        // Scroll to sub-section if specified
+        var scrollTarget = getScrollTargetFromHash();
+        if (scrollTarget) {
+            requestAnimationFrame(function () {
+                var el = document.getElementById(scrollTarget);
+                if (el) scrollAndHighlight(el);
+            });
+        }
     }
 
     function getPageFromHash() {
-        var hash = window.location.hash.replace('#', '');
-        return validPages.indexOf(hash) !== -1 ? hash : 'activity';
+        var raw = window.location.hash.replace('#', '');
+        var parts = raw.split(':');
+        var page = parts[0];
+        return validPages.indexOf(page) !== -1 ? page : 'activity';
+    }
+
+    function getScrollTargetFromHash() {
+        var raw = window.location.hash.replace('#', '');
+        var parts = raw.split(':');
+        return parts[1] || null;
     }
 
     function closeSidebar() {
@@ -1326,6 +1433,7 @@
             setInputSelection(path, 'file');
             setFormStatus('Source file selected.', 'ok');
         } else if (state.browser.target === 'input_directory') {
+            if (browserRecursiveField) inputRecursiveField.checked = browserRecursiveField.checked;
             setInputSelection(path, 'directory');
             setFormStatus('Source folder selected.', 'ok');
         } else if (state.browser.target === 'allowed_root') {
@@ -1529,6 +1637,10 @@
         browserCurrentPath.value = '';
         browserShowHidden.checked = false;
         browserList.innerHTML = '<div class="empty">Loading...</div>';
+        if (browserRecursiveToggle) {
+            browserRecursiveToggle.hidden = options.selection !== 'directory' || options.target !== 'input_directory';
+            if (browserRecursiveField) browserRecursiveField.checked = inputRecursiveField.checked;
+        }
         browserModal.hidden = false;
         document.body.classList.add('modal-open');
         loadBrowserPath(options.path || '', { resetFilter: true, focusFilter: true });
@@ -1553,7 +1665,19 @@
         renderReleaseControl(summary.update_info || {});
 
         if (sidebarVersion && state.release.local_version) {
-            sidebarVersion.textContent = 'v' + state.release.local_version;
+            var vText = 'v' + state.release.local_version;
+            var dot = state.release.update_available
+                ? '<span class="sidebar-version-dot" title="Update available: v' + escapeHtml(state.release.remote_version) + '"></span>'
+                : '';
+            sidebarVersion.innerHTML = '<a href="#system/about:about-version-section">' + escapeHtml(vText) + dot + '</a>';
+            sidebarVersion.querySelector('a').addEventListener('click', function (e) {
+                if (getPageFromHash() === 'system/about') {
+                    e.preventDefault();
+                    window.location.hash = '#system/about:about-version-section';
+                    var el = document.getElementById('about-version-section');
+                    if (el) scrollAndHighlight(el);
+                }
+            });
         }
     }
 
@@ -1577,9 +1701,13 @@
         if (logLevelEl) logLevelEl.value = summary.log_level || 'INFO';
         if (logRetentionEl) logRetentionEl.value = String(summary.log_retention_days || 30);
 
-        // General settings (read-only info)
-        var authStatusEl = document.getElementById('general-auth-status');
-        if (authStatusEl) authStatusEl.textContent = state.auth.enabled ? 'Enabled' : 'Disabled';
+        // General settings
+        var authEnabledEl = document.getElementById('general-auth-enabled');
+        if (authEnabledEl) authEnabledEl.checked = Boolean(summary.auth_enabled);
+
+        var dateFormatEl = document.getElementById('general-date-format');
+        if (dateFormatEl && summary.default_date_format) dateFormatEl.value = summary.default_date_format;
+        state.dateFormat = summary.default_date_format || 'YYYY-MM-DD';
 
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
@@ -1640,13 +1768,7 @@
                     syncAllCustomSelects();
                     watcherButton.textContent = 'Update watcher';
                     cancelEditWatcherButton.hidden = false;
-                    watcherForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    watcherForm.classList.remove('highlight-pulse');
-                    void watcherForm.offsetWidth;
-                    watcherForm.classList.add('highlight-pulse');
-                    watcherForm.addEventListener('animationend', function () {
-                        watcherForm.classList.remove('highlight-pulse');
-                    }, { once: true });
+                    scrollAndHighlight(watcherForm);
                     // Disable all Edit/Remove buttons while editing
                     Array.prototype.forEach.call(
                         watchersContainer.querySelectorAll('[data-edit-watcher], [data-remove-watcher]'),
@@ -1922,7 +2044,7 @@
             else if (job.status === 'skipped') progressLabel = 'Skipped';
             else if (progress > 0) progressLabel = progress.toFixed(1) + '%';
 
-            const submitted = job.submitted_display || job.submitted_at || '';
+            const submitted = formatIsoTimestamp(job.submitted_at) || job.submitted_display || '';
             const isOpen = shouldShowJobOpen(job);
             const isActive = job.id === state.activeQueueJobId;
             const activeClass = isActive ? ' jt-row-active' : '';
@@ -2158,10 +2280,10 @@
     }
 
     function updateActivityBadge(jobs) {
-        var active = jobs.filter(function (j) { return j.status === 'running' || j.status === 'paused'; }).length;
+        var pending = jobs.filter(function (j) { return j.status === 'queued' || j.status === 'running' || j.status === 'paused'; }).length;
         if (navActivityBadge) {
-            navActivityBadge.hidden = !active;
-            navActivityBadge.textContent = String(active);
+            navActivityBadge.hidden = !pending;
+            navActivityBadge.textContent = String(pending);
         }
     }
 
@@ -2326,6 +2448,7 @@
 
     function openNotifEditor(type, channel) {
         notifEditor.hidden = false;
+        scrollAndHighlight(notifEditor);
         notifForm.className = 'notif-form-' + type;
         notifTypeInput.value = type;
         notifIdInput.value = (channel && channel.id) || '';
@@ -2511,10 +2634,12 @@
             + '<thead><tr><th>Filename</th><th>Size</th><th>Last Modified</th><th></th></tr></thead>'
             + '<tbody>';
         files.forEach(function (f) {
-            var mod = f.modified ? f.modified.replace('T', ' ').substring(0, 16) : '–';
+            var mod = f.modified ? formatIsoTimestamp(f.modified) : '–';
             var size = formatBytes(f.size || 0);
             var isActive = f.name === 'clutch.log';
-            var actions = '<a href="/system/logs/download?file=' + encodeURIComponent(f.name) + '" class="ghost" download>Download</a>';
+            var downloadUrl = '/system/logs/download?file=' + encodeURIComponent(f.name);
+            if (state.auth.token) downloadUrl += '&token=' + encodeURIComponent(state.auth.token);
+            var actions = '<a href="' + downloadUrl + '" class="ghost" download>Download</a>';
             if (!isActive) {
                 actions += ' <button class="ghost danger-text" data-delete-logfile="' + escapeHtml(f.name) + '">Delete</button>';
             }
@@ -2603,7 +2728,7 @@
         var html = '';
         entries.forEach(function (e) {
             html += '<div class="log-row">'
-                + '<span class="log-ts">' + escapeHtml(e.timestamp || '') + '</span>'
+                + '<span class="log-ts">' + escapeHtml(formatIsoTimestamp(e.timestamp, true) || e.timestamp || '') + '</span>'
                 + '<span class="log-lvl log-lvl-' + escapeHtml(e.level || 'INFO') + '">' + escapeHtml(e.level || '') + '</span>'
                 + '<span class="log-src">' + escapeHtml(e.source || '') + '</span>'
                 + '<span class="log-msg">' + escapeHtml(e.message || '') + '</span>'
@@ -2625,7 +2750,15 @@
         var btn = e.target.closest('[data-logpage]');
         if (btn) loadLogs(parseInt(btn.dataset.logpage, 10));
     });
-    logLevelFilter.addEventListener('change', function () { loadLogs(1); });
+    logLevelFilter.addEventListener('change', function () {
+        // Also set the server log level so DEBUG entries are actually written
+        fetchJson('/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_level: logLevelFilter.value || 'INFO' }),
+        }).catch(function () { /* best-effort */ });
+        loadLogs(1);
+    });
     logFileSelect.addEventListener('change', function () { loadLogs(1); });
     logRefreshBtn.addEventListener('click', function () { loadLogs(); });
 
@@ -2720,7 +2853,7 @@
             var sizeOut = t.output_size_bytes ? formatBytes(Number(t.output_size_bytes)) : '–';
             var comp = t.compression_percent != null ? ' (' + Number(t.compression_percent).toFixed(1) + '%)' : '';
             var dur = taskDurationLabel(t);
-            var sub = t.submitted_display || t.submitted_at || '';
+            var sub = formatIsoTimestamp(t.submitted_at) || t.submitted_display || '';
             var rowCls = t.status === 'failed' ? ' class="task-row-failed"' : '';
             return '<tr' + rowCls + '>'
                 + '<td title="' + escapeHtml(t.input_file || '') + '">' + escapeHtml(name) + '</td>'
@@ -2829,9 +2962,8 @@
     var changePasswordStatus = document.getElementById('change-password-status');
     var smtpForm = document.getElementById('smtp-form');
     var smtpStatus = document.getElementById('smtp-status');
-    var tokensList = document.getElementById('tokens-list');
-    var tokensStatus = document.getElementById('tokens-status');
-    var createTokenBtn = document.getElementById('create-token-btn');
+    var adminTokensList = document.getElementById('admin-tokens-list');
+    var adminTokensStatus = document.getElementById('admin-tokens-status');
 
     /* ── Avatar helper ── */
 
@@ -3008,6 +3140,7 @@
     var userSettingsEmail = document.getElementById('user-settings-email');
     var userSettingsRole = document.getElementById('user-settings-role');
     var userSettingsTheme = document.getElementById('user-settings-theme');
+    var userSettingsDateFormat = document.getElementById('user-settings-date-format');
 
     function populateUserSettings() {
         var user = state.auth.user;
@@ -3017,6 +3150,14 @@
         if (userSettingsEmail) userSettingsEmail.value = user.email || '';
         if (userSettingsRole) userSettingsRole.textContent = user.role;
         if (userSettingsTheme) userSettingsTheme.value = state.theme;
+        // Load user preferences from server
+        if (state.auth.enabled && state.auth.token) {
+            fetchJson('/auth/me/preferences').then(function (prefs) {
+                if (userSettingsDateFormat) userSettingsDateFormat.value = prefs.date_format || '';
+                // Apply user date format override (user pref > server default)
+                if (prefs.date_format) state.dateFormat = prefs.date_format;
+            }).catch(function () { /* ignore */ });
+        }
     }
 
     if (userSettingsTheme) {
@@ -3024,6 +3165,95 @@
             applyTheme(userSettingsTheme.value);
             persistTheme(userSettingsTheme.value);
             if (themeSelect) themeSelect.value = userSettingsTheme.value;
+            // Also persist theme to server
+            if (state.auth.enabled && state.auth.token) {
+                fetchJson('/auth/me/preferences', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ theme: userSettingsTheme.value }),
+                }).catch(function () { /* ignore */ });
+            }
+        });
+    }
+
+    if (userSettingsDateFormat) {
+        userSettingsDateFormat.addEventListener('change', function () {
+            var fmt = userSettingsDateFormat.value;
+            if (fmt) state.dateFormat = fmt;
+            if (state.auth.enabled && state.auth.token) {
+                fetchJson('/auth/me/preferences', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date_format: fmt }),
+                }).then(function () {
+                    showToast('Date format saved.');
+                    // Re-render jobs to reflect new format
+                    refreshJobs();
+                }).catch(function (err) { showToast(err.message, 'error'); });
+            }
+        });
+    }
+
+    // ── Personal API Tokens (User Settings) ──
+    var userTokensList = document.getElementById('user-tokens-list');
+    var userCreateTokenBtn = document.getElementById('user-create-token-btn');
+    var userTokensStatus = document.getElementById('user-tokens-status');
+
+    async function refreshUserTokens() {
+        if (!state.auth.enabled || !userTokensList) return;
+        try {
+            var data = await fetchJson('/auth/tokens');
+            renderUserTokensList(data.tokens || []);
+        } catch (_) {
+            if (userTokensList) userTokensList.innerHTML = '<div class="empty">Could not load tokens.</div>';
+        }
+    }
+
+    function renderUserTokensList(tokens) {
+        if (!userTokensList) return;
+        if (!tokens.length) {
+            userTokensList.innerHTML = '<div class="empty">No personal API tokens.</div>';
+            return;
+        }
+        userTokensList.innerHTML = '<table class="users-table">'
+            + '<thead><tr><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
+            + '<tbody>'
+            + tokens.map(function (t) {
+                return '<tr>'
+                    + '<td>' + escapeHtml(t.name || '(unnamed)') + '</td>'
+                    + '<td>' + escapeHtml(formatIsoTimestamp(t.created_at) || String(t.created_at || '').substring(0, 10)) + '</td>'
+                    + '<td>' + escapeHtml(formatIsoTimestamp(t.expires_at) || String(t.expires_at || '').substring(0, 10)) + '</td>'
+                    + '<td class="actions-cell"><button class="ghost danger-text" data-delete-user-token="' + t.id + '">Revoke</button></td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table>';
+    }
+
+    if (userTokensList) {
+        userTokensList.addEventListener('click', function (e) {
+            var tokenId = e.target.dataset.deleteUserToken;
+            if (tokenId) {
+                fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
+                    .then(function () { refreshUserTokens(); showToast('Token revoked.'); })
+                    .catch(function (err) { showToast(err.message, 'error'); });
+            }
+        });
+    }
+
+    if (userCreateTokenBtn) {
+        userCreateTokenBtn.addEventListener('click', function () {
+            var name = prompt('Token name (optional):');
+            if (name === null) return;
+            fetchJson('/auth/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name || 'API token', days: 365 }),
+            })
+                .then(function (data) {
+                    setStatus(userTokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
+                    refreshUserTokens();
+                })
+                .catch(function (err) { setStatus(userTokensStatus, err.message, 'error'); });
         });
     }
 
@@ -3034,7 +3264,7 @@
         state.auth.token = '';
         state.auth.user = null;
         try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
-        window.location.href = '/login';
+        window.location.replace('/login');
     }
 
     if (sidebarSignOutBtn) {
@@ -3075,10 +3305,13 @@
         return fetchJson('/auth/status').then(function (data) {
             state.auth.enabled = data.auth_enabled;
             if (!data.auth_enabled) {
+                // Auth disabled — treat as anonymous admin
+                state.auth.user = { id: 0, username: 'admin', email: '', role: 'admin' };
+                renderAuthUI();
                 return;
             }
             if (!state.auth.token) {
-                window.location.href = '/login';
+                window.location.replace('/login');
                 throw new Error('Login required.');
             }
             return fetchJson('/auth/me').then(function (me) {
@@ -3087,7 +3320,7 @@
             }).catch(function () {
                 state.auth.token = '';
                 try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
-                window.location.href = '/login';
+                window.location.replace('/login');
                 throw new Error('Session expired.');
             });
         });
@@ -3095,10 +3328,26 @@
 
     function renderAuthUI() {
         var user = state.auth.user;
-        if (!user || !state.auth.enabled) {
+        if (!user) {
             if (sidebarUser) sidebarUser.hidden = true;
             if (navSettingsGroup) navSettingsGroup.hidden = true;
             if (navSystemGroup) navSystemGroup.hidden = true;
+            return;
+        }
+        if (!state.auth.enabled) {
+            // Auth disabled — show everything, hide user widget
+            if (sidebarUser) sidebarUser.hidden = true;
+            if (navSettingsGroup) {
+                navSettingsGroup.hidden = false;
+                navSettingsGroup.querySelectorAll('.sidebar-sub-link').forEach(function (link) {
+                    link.parentElement.hidden = false;
+                });
+                navSettingsGroup.querySelectorAll('.sidebar-flyout a').forEach(function (link) {
+                    link.hidden = false;
+                });
+            }
+            if (navSystemGroup) navSystemGroup.hidden = false;
+            if (addUserBtn) addUserBtn.style.display = 'none';
             return;
         }
         if (sidebarUser) {
@@ -3213,6 +3462,7 @@
     function openNewUser() {
         if (!userFormSection) return;
         userFormSection.hidden = false;
+        scrollAndHighlight(userFormSection);
         userFormLegend.textContent = 'New User';
         userFormId.value = '';
         userFormUsername.value = '';
@@ -3236,6 +3486,7 @@
             if (!user) return;
             if (!userFormSection) return;
             userFormSection.hidden = false;
+            scrollAndHighlight(userFormSection);
             userFormLegend.textContent = 'Edit User';
             userFormId.value = String(user.id);
             userFormUsername.value = user.username;
@@ -3346,7 +3597,7 @@
                 setTimeout(function () {
                     state.auth.token = '';
                     try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
-                    window.location.href = '/login';
+                    window.location.replace('/login');
                 }, 1500);
             } catch (err) {
                 setStatus(changePasswordStatus, err.message, 'error');
@@ -3420,62 +3671,46 @@
         });
     }
 
-    // API Tokens
-    async function refreshTokens() {
-        if (!state.auth.enabled) return;
+    // Admin: All API Tokens
+    async function refreshAdminTokens() {
+        if (!state.auth.enabled || !state.auth.user || state.auth.user.role !== 'admin') return;
         try {
-            var data = await fetchJson('/auth/tokens');
-            renderTokensList(data.tokens || []);
+            var data = await fetchJson('/auth/tokens/all');
+            renderAdminTokensList(data.tokens || []);
         } catch (_) {
-            if (tokensList) tokensList.innerHTML = '<div class="empty">Could not load tokens.</div>';
+            if (adminTokensList) adminTokensList.innerHTML = '<div class="empty">Could not load tokens.</div>';
         }
     }
 
-    function renderTokensList(tokens) {
-        if (!tokensList) return;
+    function renderAdminTokensList(tokens) {
+        if (!adminTokensList) return;
         if (!tokens.length) {
-            tokensList.innerHTML = '<div class="empty">No API tokens.</div>';
+            adminTokensList.innerHTML = '<div class="empty">No API tokens.</div>';
             return;
         }
-        tokensList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
+        adminTokensList.innerHTML = '<table class="users-table">'
+            + '<thead><tr><th>User</th><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
             + '<tbody>'
             + tokens.map(function (t) {
                 return '<tr>'
+                    + '<td>' + escapeHtml(t.username || '—') + '</td>'
                     + '<td>' + escapeHtml(t.name || '(unnamed)') + '</td>'
-                    + '<td>' + escapeHtml(String(t.created_at || '').substring(0, 10)) + '</td>'
-                    + '<td>' + escapeHtml(String(t.expires_at || '').substring(0, 10)) + '</td>'
-                    + '<td class="actions-cell"><button class="ghost danger-text" data-delete-token="' + t.id + '">Revoke</button></td>'
+                    + '<td>' + escapeHtml(formatIsoTimestamp(t.created_at) || String(t.created_at || '').substring(0, 10)) + '</td>'
+                    + '<td>' + escapeHtml(formatIsoTimestamp(t.expires_at) || String(t.expires_at || '').substring(0, 10)) + '</td>'
+                    + '<td class="actions-cell"><button class="ghost danger-text" data-admin-delete-token="' + t.id + '">Revoke</button></td>'
                     + '</tr>';
             }).join('')
             + '</tbody></table>';
     }
 
-    if (tokensList) {
-        tokensList.addEventListener('click', function (e) {
-            var tokenId = e.target.dataset.deleteToken;
+    if (adminTokensList) {
+        adminTokensList.addEventListener('click', function (e) {
+            var tokenId = e.target.dataset.adminDeleteToken;
             if (tokenId) {
                 fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
-                    .then(function () { refreshTokens(); showToast('Token revoked.'); })
+                    .then(function () { refreshAdminTokens(); showToast('Token revoked.'); })
                     .catch(function (err) { showToast(err.message, 'error'); });
             }
-        });
-    }
-
-    if (createTokenBtn) {
-        createTokenBtn.addEventListener('click', function () {
-            var name = prompt('Token name (optional):');
-            if (name === null) return; // cancelled
-            fetchJson('/auth/tokens', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name || 'API token', days: 365 }),
-            })
-                .then(function (data) {
-                    setStatus(tokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
-                    refreshTokens();
-                })
-                .catch(function (err) { setStatus(tokensStatus, err.message, 'error'); });
         });
     }
 
@@ -3509,6 +3744,7 @@
             input_file: formData.get('input_file'),
             input_kind: formData.get('input_kind') || 'file',
             recursive: formData.get('recursive') === 'on',
+            filter_pattern: formData.get('filter_pattern') || '',
             output_dir: formData.get('output_dir'),
             codec: formData.get('codec'),
             encode_speed: formData.get('encode_speed'),
@@ -3965,6 +4201,38 @@
         // Sync user settings theme selector
         if (userSettingsTheme) userSettingsTheme.value = themeSelect.value;
     });
+
+    // ── General Settings Save ──
+    var generalSaveBtn = document.getElementById('general-settings-save');
+    var generalSaveStatus = document.getElementById('general-settings-status');
+    if (generalSaveBtn) {
+        generalSaveBtn.addEventListener('click', async function () {
+            var authEl = document.getElementById('general-auth-enabled');
+            var dateEl = document.getElementById('general-date-format');
+            var payload = {
+                auth_enabled: authEl ? authEl.checked : undefined,
+                default_date_format: dateEl ? dateEl.value : undefined,
+            };
+            generalSaveBtn.disabled = true;
+            if (generalSaveStatus) setStatus(generalSaveStatus, '');
+            try {
+                var result = await fetchJson('/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                applySummaryToForms(result);
+                renderMeta(result);
+                if (generalSaveStatus) setStatus(generalSaveStatus, 'Saved', 'ok');
+                showToast('General settings saved.', 'ok');
+            } catch (err) {
+                if (generalSaveStatus) setStatus(generalSaveStatus, 'Error', 'error');
+                showToast('Failed to save general settings.', 'error');
+            } finally {
+                generalSaveBtn.disabled = false;
+            }
+        });
+    }
 
     releaseButton.addEventListener('click', async function () {
         if (state.release.update_in_progress) {

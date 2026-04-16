@@ -268,6 +268,11 @@
 
     <script>
         (function () {
+            // If auth is disabled, redirect to dashboard immediately
+            fetch('/auth/status').then(function (r) { return r.json(); }).then(function (d) {
+                if (!d.auth_enabled) window.location.replace('/');
+            }).catch(function () { /* ignore */ });
+
             var viewLogin = document.getElementById('view-login');
             var viewForgot = document.getElementById('view-forgot');
             var viewReset = document.getElementById('view-reset');

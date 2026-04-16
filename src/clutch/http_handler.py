@@ -6,7 +6,7 @@ import signal as _signal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Dict, List, Optional
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, urlparse
 
 from clutch import APP_NAME, get_version
 from clutch.auth import has_role
@@ -24,7 +24,7 @@ from clutch.logs import (
     _read_log_entries,
 )
 from clutch.mediainfo import VIDEO_EXTENSIONS, get_media_duration_seconds
-from clutch.output import set_log_level
+from clutch.output import debug, error, info, set_log_level
 from clutch.scheduler import BIDDING_ZONES
 from clutch.store import ConversionJob
 from clutch.updater import get_update_state
@@ -47,6 +47,13 @@ class ConversionHTTPServer(ThreadingHTTPServer):
     def __init__(self, server_address, request_handler_class, service: ConversionService):
         super().__init__(server_address, request_handler_class)
         self.service = service
+
+    def handle_error(self, request, client_address):
+        import sys, traceback
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+            return
+        error(f"Exception handling request from {client_address}:\n{traceback.format_exc()}")
 
 
 
@@ -159,6 +166,12 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         auth_header = self.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             return auth_header[7:].strip()
+        # Fallback: token in query string (for file downloads via <a href>)
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        token_list = qs.get("token")
+        if token_list:
+            return str(token_list[0]).strip()
         return ""
 
     def _get_auth_user(self) -> Optional[Dict[str, object]]:
@@ -222,6 +235,9 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             return True
 
         if path == "/login":
+            if not self.server.service.auth.is_auth_enabled():
+                self._send_redirect("/")
+                return True
             self._send_html(200, read_web_asset("login.html"))
             return True
 
@@ -261,6 +277,13 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             if not user:
                 return True
             self._send_json(200, {"tokens": self.server.service.auth.list_tokens(user["id"])})
+            return True
+
+        if path == "/auth/tokens/all":
+            user = self._require_role("admin")
+            if not user:
+                return True
+            self._send_json(200, {"tokens": self.server.service.auth.list_all_tokens()})
             return True
 
         if path == "/auth/smtp":
@@ -543,7 +566,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 self._send_json(400, {"error": "Invalid token ID."})
                 return True
-            deleted = self.server.service.auth.delete_token_by_id(token_id, user["id"])
+            # Admin can delete any token; non-admin only their own
+            if user.get("role") == "admin":
+                deleted = self.server.service.auth.admin_delete_token(token_id)
+            else:
+                deleted = self.server.service.auth.delete_token_by_id(token_id, user["id"])
             if not deleted:
                 self._send_json(404, {"error": "Token not found."})
                 return True
@@ -612,6 +639,33 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(exc)})
                 return
             self._send_json(200, payload)
+            return
+
+        if path == "/browse/match":
+            import time as _time
+            directory = str(query.get("path") or "").strip()
+            pattern = str(query.get("pattern") or "").strip()
+            recursive_val = str(query.get("recursive") or "").strip().lower()
+            recursive = recursive_val in {"1", "true", "yes", "on"}
+            debug(f"browse/match: path={directory!r} pattern={pattern!r} recursive={recursive}")
+            if not directory:
+                self._send_json(400, {"error": "path is required"})
+                return
+            try:
+                from clutch.service import normalize_path
+                norm_dir = normalize_path(directory)
+                t0 = _time.monotonic()
+                matched = self.server.service._collect_directory_input_files(
+                    directory, recursive=recursive, filter_pattern=pattern,
+                )
+                elapsed = _time.monotonic() - t0
+                rel_paths = [os.path.relpath(p, norm_dir) for p in matched]
+                debug(f"browse/match: {len(rel_paths)} results in {elapsed:.2f}s")
+                self._send_json(200, {"matches": rel_paths, "total": len(rel_paths)})
+            except ValueError as exc:
+                debug(f"browse/match: error — {exc}")
+                self._send_json(400, {"error": str(exc)})
+                return
             return
 
         if path == "/config":

@@ -561,6 +561,28 @@ class AuthStore:
             )
             return cur.rowcount > 0
 
+    def admin_delete_token(self, token_id: int) -> bool:
+        """Delete any token by ID regardless of owner (admin-only)."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM auth_tokens WHERE id = ?",
+                (token_id,),
+            )
+            return cur.rowcount > 0
+
+    def list_all_tokens(self) -> List[Dict[str, object]]:
+        """List all API tokens across all users (admin view)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT t.id, t.name, t.created_at, t.expires_at, t.user_id, u.username "
+                "FROM auth_tokens t JOIN users u ON t.user_id = u.id "
+                "WHERE t.expires_at > ? AND t.name != '_session' AND t.name != '' "
+                "ORDER BY t.created_at DESC",
+                (now,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     # ── Password reset ──
 
     def create_password_reset(self, email: str) -> Optional[Tuple[str, Dict[str, object]]]:

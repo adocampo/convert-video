@@ -103,6 +103,11 @@ def warning(msg: str):
     logger.warning(msg)
 
 
+def debug(msg: str):
+    _status("DBG ", MAGENTA_COLOR, msg)
+    logger.debug(msg)
+
+
 def error(msg: str):
     _status("FAIL", RED_COLOR, msg, stream=sys.stderr)
     logger.error(msg)

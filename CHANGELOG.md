@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.3] - 2026-04-16
+
+### Added in 1.7.3
+
+- **Filter pattern for directory jobs**: new Filter field with live preview when submitting a directory. Supports glob wildcards (`*`, `?`, `[2-5]`), character ranges (`[X..Y]` auto-converted to `[X-Y]`), and plain substring matching.
+- **`debug()` logging function**: prints to stdout and writes to the file logger for end-to-end visibility.
+- **Detailed DEBUG logging** across the filter pipeline (`service.py`) and the `/browse/match` endpoint (`http_handler.py`) — pattern, glob, regex, timing, and result counts.
+- **Loading spinner** in the filter preview while the server scans the directory.
+- **Include subdirectories toggle** replaced the old checkbox with a full-size toggle knob in both the form and the browser modal footer.
+- **Settings > General**: authentication toggle and Save button (previously read-only).
+- **User preferences**: per-user date format and theme stored server-side; date format selector on the User Settings page.
+- **Personal API tokens** section in User Settings; admin "All API Tokens" view in System > Users.
+- **Sidebar version link**: click the version number to scroll to the About section; update-available dot indicator.
+- **Log download auth**: log file downloads now pass the bearer token via query string so `<a href>` links work with authentication enabled.
+
+### Fixed in 1.7.3
+
+- **Recursive directory scan performance**: replaced sequential `os.walk` (36 s on NAS) with a two-tier strategy — fast path filters top-level directories first (same as CLI `--find`, ~0.2 s), falling back to a parallel `ThreadPoolExecutor` scan with 8 workers (~3 s).
+- **Log viewer level filter**: changed from exact match to threshold-based (selecting DEBUG now shows all levels, not only DEBUG entries).
+- **Log viewer dropdown**: now also sets the server log level via `POST /config` so DEBUG entries are actually written.
+- **Unclosed bracket auto-close**: `[2..3` patterns no longer break fnmatch — a missing `]` is appended automatically.
+- **`BrokenPipeError` noise**: silenced `BrokenPipeError` and `ConnectionResetError` in `handle_error` instead of logging them as ERROR.
+- **Auth-disabled flow**: `/login` redirects to `/` when auth is off; anonymous users get admin-level UI.
+- **Sidebar active badge**: counts queued + running + paused jobs (was missing queued).
+- **Date formatting**: all timestamps (jobs, tasks, logs, log files) now respect the configured date format.
+
+### Changed in 1.7.3
+
+- `_collect_directory_input_files` accepts an optional `filter_pattern` parameter and builds an `fnmatch` or substring filter internally.
+- `save_service_config` / `load_service_config` now persist `default_date_format`.
+- `store.py`: added `default_date_format` column migration; fixed `gpu_devices` double-parse.
+- `auth.py`: added `admin_delete_token` and `list_all_tokens` methods.
+- `login.html`: early redirect when auth is disabled.
+
 ## [1.7.2] - 2026-04-15
 
 ### Changed in 1.7.2

@@ -229,27 +229,45 @@
                     <div class="field-row">
                         <label class="field-row-label">Source path</label>
                         <div class="field-row-control">
-                            <div class="path-row">
-                                <div class="path-picker">
-                                    <input id="input-file" name="input_file"
-                                        placeholder="Choose a file or folder on the source"
-                                        title="Source file or folder to convert." readonly required>
-                                    <input id="input-kind" name="input_kind" type="hidden" value="file">
-                                    <div class="actions">
-                                        <button class="secondary" type="button" id="browse-input-file"
-                                            title="Browse the source and pick a single file.">Choose file</button>
-                                        <button class="secondary" type="button" id="browse-input-directory"
-                                            title="Browse the source and pick a folder.">Choose folder</button>
-                                        <button class="ghost" type="button" id="clear-input-file"
-                                            title="Clear the current source selection.">Clear</button>
-                                    </div>
-                                    <p class="small picker-help" id="input-selection-hint">Choose a single file or a
-                                        folder on the source.</p>
-                                </div>
-                                <label class="check check-inline" title="Include files from subdirectories."><input
-                                        id="input-recursive" type="checkbox" name="recursive" disabled>Include
-                                    subdirectories</label>
+                            <input id="input-file" name="input_file" placeholder="Choose a file or folder on the source"
+                                title="Source file or folder to convert." readonly required>
+                            <input id="input-kind" name="input_kind" type="hidden" value="file">
+                            <div class="actions">
+                                <button class="secondary" type="button" id="browse-input-file"
+                                    title="Browse the source and pick a single file.">Choose file</button>
+                                <button class="secondary" type="button" id="browse-input-directory"
+                                    title="Browse the source and pick a folder.">Choose folder</button>
+                                <button class="ghost" type="button" id="clear-input-file"
+                                    title="Clear the current source selection.">Clear</button>
+                                <label class="toggle-inline" id="recursive-toggle-inline" hidden
+                                    title="Include files from subdirectories.">
+                                    <span class="toggle-switch">
+                                        <input id="input-recursive" type="checkbox" name="recursive">
+                                        <span class="toggle-slider"></span>
+                                    </span>
+                                    <span class="toggle-inline-label">Include subdirectories</span>
+                                </label>
                             </div>
+                            <p class="small picker-help" id="input-selection-hint">Choose a single file or a
+                                folder on the source.</p>
+                        </div>
+                    </div>
+
+                    <div class="field-row" id="filter-pattern-row" hidden>
+                        <label class="field-row-label">Filter</label>
+                        <div class="field-row-control">
+                            <input id="input-filter-pattern" name="filter_pattern" type="text"
+                                placeholder="e.g. *T6xC[2-3]* or season01"
+                                title="Only convert files matching this pattern. Supports glob wildcards and character ranges.">
+                            <p class="field-row-help">Glob: <code>*</code> any text, <code>?</code> single char,
+                                <code>[2-5]</code> range, <code>[abc]</code> set. Plain text = substring match.</p>
+                        </div>
+                    </div>
+
+                    <div class="field-row" id="filter-preview-row" hidden>
+                        <label class="field-row-label">Matches</label>
+                        <div class="field-row-control">
+                            <div id="filter-preview" class="filter-preview"></div>
                         </div>
                     </div>
 
@@ -630,8 +648,11 @@
                     <div class="field-row">
                         <label class="field-row-label">Authentication</label>
                         <div class="field-row-control">
-                            <span id="general-auth-status" class="chip">—</span>
-                            <p class="field-row-help">Authentication is configured during initial setup.</p>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="general-auth-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <p class="field-row-help">Enable or disable authentication for the dashboard.</p>
                         </div>
                     </div>
                 </fieldset>
@@ -668,6 +689,10 @@
                         </div>
                     </div>
                 </fieldset>
+                <div class="actions actions-centered">
+                    <button id="general-settings-save" class="primary" type="button">Save</button>
+                </div>
+                <div class="status-line" id="general-settings-status"></div>
             </div>
         </section>
 
@@ -991,6 +1016,17 @@
                         </div>
                     </div>
                     <div class="field-row">
+                        <label class="field-row-label" for="user-settings-date-format">Date format</label>
+                        <div class="field-row-control">
+                            <select id="user-settings-date-format" title="Date display format for your account.">
+                                <option value="">Default (server)</option>
+                                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field-row">
                         <label class="field-row-label" for="user-settings-language">Language</label>
                         <div class="field-row-control">
                             <select id="user-settings-language" disabled title="More languages coming soon.">
@@ -1028,6 +1064,14 @@
                         </div>
                         <div class="status-line" id="change-password-status"></div>
                     </form>
+                </fieldset>
+                <fieldset class="options-section">
+                    <legend>Personal API Tokens</legend>
+                    <div id="user-tokens-list"></div>
+                    <div class="actions actions-centered" style="margin-top:1rem">
+                        <button class="secondary" type="button" id="user-create-token-btn">Create token</button>
+                    </div>
+                    <div class="status-line" id="user-tokens-status"></div>
                 </fieldset>
             </div>
         </section>
@@ -1133,12 +1177,9 @@
                 </fieldset>
 
                 <fieldset class="options-section">
-                    <legend>API Tokens</legend>
-                    <div id="tokens-list"></div>
-                    <div class="actions actions-centered" style="margin-top:1rem">
-                        <button class="secondary" type="button" id="create-token-btn">Create token</button>
-                    </div>
-                    <div class="status-line" id="tokens-status"></div>
+                    <legend>All API Tokens</legend>
+                    <div id="admin-tokens-list"></div>
+                    <div class="status-line" id="admin-tokens-status"></div>
                 </fieldset>
             </div>
         </section>
@@ -1226,7 +1267,7 @@
                     </div>
                 </fieldset>
 
-                <fieldset class="options-section">
+                <fieldset class="options-section" id="about-version-section">
                     <legend>Version</legend>
                     <div class="field-row">
                         <label class="field-row-label">Version</label>
@@ -1295,6 +1336,14 @@
             </div>
             <div class="browser-footer">
                 <span id="path-browser-eyebrow" class="browser-eyebrow"></span>
+                <label class="toggle-inline" id="browser-recursive-toggle" hidden
+                    title="Include files from subdirectories.">
+                    <span class="toggle-switch">
+                        <input id="browser-recursive" type="checkbox">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-inline-label">Include subdirectories</span>
+                </label>
                 <div class="browser-footer-actions">
                     <button class="ghost" type="button" data-close-browser>Cancel</button>
                     <button class="primary" type="button" id="browser-select-current" title="Use this path."
