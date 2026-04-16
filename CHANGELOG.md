@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.4] - 2026-04-16
+
+### Added in 1.7.4
+
+- **Keyboard navigation for the jobs table**: Arrow Up/Down to move between rows, Arrow Right to expand, Arrow Left to collapse, Enter to toggle, Space to select/deselect, Delete to clear a job (with confirmation).
+- **System > Changelog page**: full changelog history served from the backend via `GET /system/changelog`.
+- **Update progress bar**: indeterminate pulsing progress bar next to the update button while a release is being applied.
+- **Dirty-tracking for all forms**: Save, Add Watcher, Queue Job, Save Schedule and similar buttons are disabled until the form has unsaved changes.
+
+### Fixed in 1.7.4
+
+- **Watcher crash on first file**: missing `ConversionJob` and `success` imports in `watcher.py` caused a `NameError` that killed the watcher thread after enqueuing the first file, preventing the remaining files from being processed.
+- **Bulk actions bar layout shift**: the bar now reserves its height at all times (`visibility` instead of `display: none`) so the table never jumps when a checkbox is toggled.
+- **Confirm dialog Enter key**: Enter now activates whichever button is focused (Cancel, Remove, etc.) instead of always confirming.
+
+### Changed in 1.7.4
+
+- Queued jobs are now collapsed by default in the Activity table; only running, paused, and cancelling jobs auto-expand.
+
 ## [1.7.3] - 2026-04-16
 
 ### Added in 1.7.3

@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from clutch.mediainfo import VIDEO_EXTENSIONS, check_already_converted
-from clutch.output import info, warning
+from clutch.output import info, success, warning
+from clutch.store import ConversionJob
 
 if TYPE_CHECKING:
     from clutch.service import ConversionService

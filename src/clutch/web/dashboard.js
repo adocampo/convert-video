@@ -17,6 +17,7 @@
         activeQueueJobId: '',
         queueJobIds: [],
         lastJobs: [],
+        selectedJobs: new Set(),
         jobSortColumn: 'default',
         jobSortAsc: true,
         browser: {
@@ -71,6 +72,12 @@
     const jobsFilterStatus = document.getElementById('jobs-filter-status');
     const jobsCount = document.getElementById('jobs-count');
     const toggleExpandJobsButton = document.getElementById('toggle-expand-jobs');
+    const bulkActionsBar = document.getElementById('bulk-actions');
+    const bulkActionsCount = document.getElementById('bulk-actions-count');
+    const bulkCancelBtn = document.getElementById('bulk-cancel');
+    const bulkRetryBtn = document.getElementById('bulk-retry');
+    const bulkClearBtn = document.getElementById('bulk-clear');
+    const bulkDeselectBtn = document.getElementById('bulk-deselect');
     const form = document.getElementById('job-form');
     const inputFileField = document.getElementById('input-file');
     const inputKindField = document.getElementById('input-kind');
@@ -161,6 +168,7 @@
     const confirmMessage = document.getElementById('confirm-message');
     const confirmOkButton = document.getElementById('confirm-ok');
     const confirmCancelButton = document.getElementById('confirm-cancel');
+    const confirmInput = document.getElementById('confirm-input');
     const sysmonContainer = document.getElementById('sysmon-container');
     const startupParams = new URLSearchParams(window.location.search);
     const systemThemeQuery = window.matchMedia
@@ -431,29 +439,132 @@
         if (ms > 0) timer = setTimeout(dismiss, ms);
     }
 
-    function showConfirm(options) {
+    // Shared modal helper: supports confirm, alert and prompt modes
+    function _showModal(options) {
         return new Promise(function (resolve) {
+            var mode = options._mode || 'confirm';
             confirmTitle.textContent = options.title || 'Confirm';
-            confirmMessage.textContent = options.message || 'Are you sure?';
+            confirmMessage.textContent = options.message || '';
             confirmOkButton.textContent = options.ok || 'Ok';
+
+            // Style the OK button: danger (red) for confirms, primary for prompts/alerts
+            if (mode === 'confirm' && !options.primary) {
+                confirmOkButton.classList.add('confirm-danger');
+                confirmOkButton.classList.remove('confirm-ok-primary');
+            } else {
+                confirmOkButton.classList.remove('confirm-danger');
+                confirmOkButton.classList.add('confirm-ok-primary');
+            }
+
+            // Show/hide input for prompt mode
+            if (mode === 'prompt') {
+                confirmInput.hidden = false;
+                confirmInput.value = options.defaultValue || '';
+                confirmInput.placeholder = options.placeholder || '';
+            } else {
+                confirmInput.hidden = true;
+                confirmInput.value = '';
+            }
+
+            // Show/hide cancel button for alert mode
+            if (mode === 'alert') {
+                confirmCancelButton.hidden = true;
+            } else {
+                confirmCancelButton.hidden = false;
+            }
+
             confirmModal.hidden = false;
+
+            // Focus the appropriate element
+            if (mode === 'prompt') {
+                confirmInput.focus();
+            } else if (mode === 'alert') {
+                confirmOkButton.focus();
+            } else {
+                confirmCancelButton.focus();
+            }
+
+            var backdrop = confirmModal.querySelector('.confirm-backdrop');
 
             function cleanup() {
                 confirmModal.hidden = true;
                 confirmOkButton.removeEventListener('click', onOk);
                 confirmCancelButton.removeEventListener('click', onCancel);
                 backdrop.removeEventListener('click', onCancel);
+                document.removeEventListener('keydown', onKeyDown, true);
             }
 
-            var backdrop = confirmModal.querySelector('.confirm-backdrop');
+            function getResult() {
+                if (mode === 'prompt') return confirmInput.value;
+                return true;
+            }
 
-            function onOk() { cleanup(); resolve(true); }
-            function onCancel() { cleanup(); resolve(false); }
+            function onOk() { cleanup(); resolve(getResult()); }
+            function onCancel() { cleanup(); resolve(mode === 'prompt' ? null : false); }
 
+            // Keyboard: Esc = cancel, Enter = ok, Tab = focus trap
+            function onKeyDown(e) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                    return;
+                }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (document.activeElement === confirmCancelButton) {
+                        onCancel();
+                    } else {
+                        onOk();
+                    }
+                    return;
+                }
+                if (e.key === 'Tab') {
+                    // Focus trap: cycle only between dialog focusable elements
+                    var focusable = Array.from(
+                        confirmModal.querySelectorAll('button:not([hidden]), input:not([hidden])')
+                    ).filter(function (el) { return el.offsetParent !== null; });
+                    if (focusable.length === 0) return;
+                    var idx = focusable.indexOf(document.activeElement);
+                    if (e.shiftKey) {
+                        idx = idx <= 0 ? focusable.length - 1 : idx - 1;
+                    } else {
+                        idx = idx >= focusable.length - 1 ? 0 : idx + 1;
+                    }
+                    e.preventDefault();
+                    focusable[idx].focus();
+                }
+            }
+
+            document.addEventListener('keydown', onKeyDown, true);
             confirmOkButton.addEventListener('click', onOk);
             confirmCancelButton.addEventListener('click', onCancel);
             backdrop.addEventListener('click', onCancel);
         });
+    }
+
+    function showConfirm(options) {
+        options._mode = 'confirm';
+        return _showModal(options);
+    }
+
+    function showAlert(options) {
+        if (typeof options === 'string') options = { message: options };
+        options._mode = 'alert';
+        options.title = options.title || 'Alert';
+        options.ok = options.ok || 'Ok';
+        options.primary = true;
+        return _showModal(options);
+    }
+
+    function showPrompt(options) {
+        if (typeof options === 'string') options = { message: options };
+        options._mode = 'prompt';
+        options.title = options.title || 'Input';
+        options.ok = options.ok || 'Ok';
+        options.primary = true;
+        return _showModal(options);
     }
 
     function isInteractiveTarget(target) {
@@ -613,6 +724,12 @@
             releaseButton.classList.toggle('has-badge', nextInfo.update_available);
         }
 
+        // Update progress bar
+        var updateProgressEl = document.getElementById('update-progress');
+        if (updateProgressEl) {
+            updateProgressEl.hidden = !nextInfo.update_in_progress;
+        }
+
         // Changelog text
         if (changelogRow && changelogText) {
             var cl = changelogToHtml(nextInfo.changelog);
@@ -659,6 +776,84 @@
             lastError || 'The service is restarting. Reload the page in a few seconds if it does not reconnect automatically.',
             'error', 0
         );
+    }
+
+    // ── Full changelog page ──
+
+    var changelogFullLoaded = false;
+
+    function changelogMarkdownToHtml(md) {
+        var lines = String(md || '').split('\n');
+        var html = [];
+        var inList = false;
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+
+            // ## [version] - date
+            var versionMatch = line.match(/^## \[(.+?)\]\s*-\s*(.+)/);
+            if (versionMatch) {
+                if (inList) { html.push('</ul>'); inList = false; }
+                html.push('<div class="changelog-version-block" id="changelog-' + escapeHtml(versionMatch[1]) + '">');
+                html.push('<h3 class="changelog-version-title">' + escapeHtml('v' + versionMatch[1]) + ' <span class="changelog-date">' + escapeHtml(versionMatch[2].trim()) + '</span></h3>');
+                continue;
+            }
+
+            // ### Section heading
+            var sectionMatch = line.match(/^### (.+)/);
+            if (sectionMatch) {
+                if (inList) { html.push('</ul>'); inList = false; }
+                html.push('<strong>' + escapeHtml(sectionMatch[1]) + '</strong>');
+                continue;
+            }
+
+            // Bullet items
+            var bulletMatch = line.match(/^- (.+)/);
+            if (bulletMatch) {
+                if (!inList) { html.push('<ul>'); inList = true; }
+                var text = escapeHtml(bulletMatch[1])
+                    .replace(/`([^`]+)`/g, '<code>$1</code>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                html.push('<li>' + text + '</li>');
+                continue;
+            }
+
+            // Close list on empty lines / other content
+            if (line.trim() === '') {
+                if (inList) { html.push('</ul>'); inList = false; }
+                // Close version block if next line is a new version or EOF
+                if (i + 1 < lines.length && lines[i + 1].match(/^## \[/)) {
+                    html.push('</div>');
+                }
+                continue;
+            }
+
+            // Plain paragraph text
+            if (line.trim()) {
+                if (inList) { html.push('</ul>'); inList = false; }
+                var pText = escapeHtml(line.trim())
+                    .replace(/`([^`]+)`/g, '<code>$1</code>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                html.push('<p class="changelog-paragraph">' + pText + '</p>');
+            }
+        }
+        if (inList) html.push('</ul>');
+        html.push('</div>'); // close last version block
+        return html.join('\n');
+    }
+
+    async function loadFullChangelog() {
+        if (changelogFullLoaded) return;
+        var container = document.getElementById('changelog-full-container');
+        if (!container) return;
+        try {
+            var data = await fetchJson('/system/changelog');
+            var rendered = changelogMarkdownToHtml(data.changelog || '');
+            container.innerHTML = '<div class="changelog-text changelog-full-text">' + rendered + '</div>';
+            changelogFullLoaded = true;
+        } catch (err) {
+            container.innerHTML = '<div class="empty">Failed to load changelog.</div>';
+        }
     }
 
     function applyTheme(theme) {
@@ -737,6 +932,7 @@
         const nextKind = kind === 'directory' ? 'directory' : 'file';
         inputFileField.value = path || '';
         inputKindField.value = nextKind;
+        inputFileField.dispatchEvent(new Event('change', { bubbles: true }));
         if (recursiveToggleInline) recursiveToggleInline.hidden = nextKind !== 'directory';
         if (filterPatternRow) filterPatternRow.hidden = nextKind !== 'directory';
         inputFileField.setAttribute(
@@ -836,6 +1032,7 @@
 
     function setWatcherDirectory(path) {
         watcherDirectoryField.value = path || '';
+        watcherDirectoryField.dispatchEvent(new Event('change', { bubbles: true }));
         watcherDirectoryField.setAttribute(
             'title',
             path
@@ -846,6 +1043,7 @@
 
     function setWatcherOutputDir(path) {
         watcherOutputDirField.value = path || '';
+        watcherOutputDirField.dispatchEvent(new Event('change', { bubbles: true }));
         watcherOutputDirField.setAttribute(
             'title',
             path
@@ -874,6 +1072,7 @@
             watchersContainer.querySelectorAll('[data-edit-watcher], [data-remove-watcher]'),
             function (btn) { btn.disabled = false; }
         );
+        resetDirtyTracker('watcher-form');
     }
 
     function syncAllowedRootsField() {
@@ -909,6 +1108,7 @@
                     }
                     state.allowedRoots.splice(index, 1);
                     renderAllowedRoots();
+                    if (settingsButton) settingsButton.disabled = false;
                     setStatus(settingsStatus, 'Allowed source root removed. Save settings to apply.', 'ok');
                 });
             }
@@ -931,6 +1131,7 @@
         }
         state.allowedRoots = state.allowedRoots.concat([normalized]);
         renderAllowedRoots();
+        if (settingsButton) settingsButton.disabled = false;
         setStatus(settingsStatus, 'Allowed source root added. Save settings to apply.', 'ok');
     }
 
@@ -983,7 +1184,7 @@
     var validPages = [
         'activity', 'jobs', 'watchers', 'schedule',
         'settings/general', 'settings/media', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
-        'system/users', 'system/logs', 'system/tasks', 'system/about',
+        'system/users', 'system/logs', 'system/tasks', 'system/changelog', 'system/about',
     ];
 
     function navigateTo(page) {
@@ -1055,6 +1256,9 @@
         }
         if (page === 'system/tasks') {
             loadTasks();
+        }
+        if (page === 'system/changelog') {
+            loadFullChangelog();
         }
         if (page === 'settings/smtp') {
             refreshSmtp();
@@ -1141,6 +1345,7 @@
                     var idx = Number(btn.dataset.removeRule);
                     state.scheduleRules.splice(idx, 1);
                     renderScheduleRules();
+                    if (saveScheduleButton) saveScheduleButton.disabled = false;
                 });
             }
         );
@@ -1158,6 +1363,7 @@
                     } else {
                         rule.days = rule.days.filter(function (d) { return d !== day; });
                     }
+                    if (saveScheduleButton) saveScheduleButton.disabled = false;
                 });
             }
         );
@@ -1171,6 +1377,7 @@
                     var rule = state.scheduleRules[idx];
                     if (!rule) return;
                     rule[field] = input.value;
+                    if (saveScheduleButton) saveScheduleButton.disabled = false;
                 });
             }
         );
@@ -1386,10 +1593,10 @@
                 body: JSON.stringify({ schedule_config: collectScheduleConfig() }),
             });
             setStatus(scheduleStatusEl, 'Schedule saved.', 'ok');
+            resetDirtyTracker('schedule');
             await Promise.all([refreshSummary(), refreshJobs()]);
         } catch (error) {
             setStatus(scheduleStatusEl, error.message, 'error');
-        } finally {
             saveScheduleButton.disabled = false;
         }
     }
@@ -1446,9 +1653,11 @@
             setStatus(watcherStatus, 'Watcher output directory selected.', 'ok');
         } else if (state.browser.target === 'output_directory') {
             outputDirField.value = path;
+            outputDirField.dispatchEvent(new Event('change', { bubbles: true }));
             setFormStatus('Destination folder selected.', 'ok');
         } else if (state.browser.target === 'default_output_directory') {
             defaultOutputDirField.value = path;
+            defaultOutputDirField.dispatchEvent(new Event('change', { bubbles: true }));
             setStatus(settingsStatus, 'Default destination folder selected.', 'ok');
         }
         closePathBrowser();
@@ -1681,6 +1890,117 @@
         }
     }
 
+    // ── Form dirty tracking ──
+    // Tracks whether form fields have changed from their initial values.
+    // Save/submit buttons start disabled and only enable when a change is detected.
+
+    var dirtyTrackers = {};
+
+    function formSnapshot(formEl) {
+        var snap = {};
+        var els = formEl.elements;
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            if (!el.name && !el.id) continue;
+            var key = el.name || el.id;
+            if (el.type === 'checkbox') {
+                snap[key] = el.checked;
+            } else if (el.type !== 'submit' && el.type !== 'button' && el.type !== 'hidden') {
+                snap[key] = el.value;
+            }
+        }
+        return snap;
+    }
+
+    function formSnapshotFromIds(ids) {
+        var snap = {};
+        ids.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            snap[id] = el.type === 'checkbox' ? el.checked : el.value;
+        });
+        return snap;
+    }
+
+    function isFormDirty(formEl, snapshot) {
+        var els = formEl.elements;
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            if (!el.name && !el.id) continue;
+            var key = el.name || el.id;
+            if (!(key in snapshot)) continue;
+            if (el.type === 'checkbox') {
+                if (el.checked !== snapshot[key]) return true;
+            } else if (el.type !== 'submit' && el.type !== 'button' && el.type !== 'hidden') {
+                if (el.value !== snapshot[key]) return true;
+            }
+        }
+        return false;
+    }
+
+    function isIdsDirty(ids, snapshot) {
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (!el) continue;
+            var current = el.type === 'checkbox' ? el.checked : el.value;
+            if (current !== snapshot[ids[i]]) return true;
+        }
+        return false;
+    }
+
+    function setupFormDirtyTracking(name, formEl, btnEl) {
+        if (!formEl || !btnEl) return;
+        var snap = formSnapshot(formEl);
+        dirtyTrackers[name] = { form: formEl, btn: btnEl, snapshot: snap, type: 'form' };
+        btnEl.disabled = true;
+        function check() {
+            var dirty = isFormDirty(formEl, dirtyTrackers[name].snapshot);
+            btnEl.disabled = !dirty;
+        }
+        formEl.addEventListener('input', check);
+        formEl.addEventListener('change', check);
+    }
+
+    function setupIdsDirtyTracking(name, ids, btnEl) {
+        if (!btnEl) return;
+        var snap = formSnapshotFromIds(ids);
+        dirtyTrackers[name] = { ids: ids, btn: btnEl, snapshot: snap, type: 'ids' };
+        btnEl.disabled = true;
+        function check() {
+            var dirty = isIdsDirty(ids, dirtyTrackers[name].snapshot);
+            btnEl.disabled = !dirty;
+        }
+        ids.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', check);
+                el.addEventListener('change', check);
+            }
+        });
+    }
+
+    function resetDirtyTracker(name) {
+        var tracker = dirtyTrackers[name];
+        if (!tracker) return;
+        if (tracker.type === 'form') {
+            tracker.snapshot = formSnapshot(tracker.form);
+        } else {
+            tracker.snapshot = formSnapshotFromIds(tracker.ids);
+        }
+        tracker.btn.disabled = true;
+    }
+
+    function refreshDirtyTracker(name) {
+        var tracker = dirtyTrackers[name];
+        if (!tracker) return;
+        if (tracker.type === 'form') {
+            tracker.snapshot = formSnapshot(tracker.form);
+        } else {
+            tracker.snapshot = formSnapshotFromIds(tracker.ids);
+        }
+        tracker.btn.disabled = true;
+    }
+
     function applySummaryToForms(summary) {
         const defaults = summary.default_job_settings || {};
         setAllowedRoots(summary.allowed_roots || []);
@@ -1712,6 +2032,12 @@
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
         syncAllCustomSelects();
+
+        // Reset dirty trackers after server values are applied
+        refreshDirtyTracker('settings-form');
+        refreshDirtyTracker('log-settings');
+        refreshDirtyTracker('general-settings');
+        refreshDirtyTracker('schedule');
     }
 
     function renderWatchers(watchers) {
@@ -1890,7 +2216,7 @@
         if (Object.prototype.hasOwnProperty.call(state.expandedJobs, job.id)) {
             return Boolean(state.expandedJobs[job.id]);
         }
-        return job.status === 'running' || job.status === 'paused' || job.status === 'queued' || job.status === 'cancelling';
+        return job.status === 'running' || job.status === 'paused' || job.status === 'cancelling';
     }
 
     function pruneExpandedJobs(jobs) {
@@ -1994,6 +2320,97 @@
         return state.jobSortAsc ? ' ▲' : ' ▼';
     }
 
+    // ── Bulk selection helpers ──
+
+    function pruneSelectedJobs(visibleIds) {
+        // Remove selections that are no longer in the visible set
+        var validIds = new Set(visibleIds);
+        state.selectedJobs.forEach(function (id) {
+            if (!validIds.has(id)) state.selectedJobs.delete(id);
+        });
+    }
+
+    function updateBulkActionsBar() {
+        var count = state.selectedJobs.size;
+        if (bulkActionsBar) {
+            bulkActionsBar.style.visibility = count === 0 ? 'hidden' : 'visible';
+            bulkActionsCount.textContent = count + ' selected';
+        }
+        // Update select-all checkbox state
+        var selectAllCb = jobsContainer.querySelector('#jt-select-all');
+        if (selectAllCb) {
+            var visibleRows = jobsContainer.querySelectorAll('.jt-row[data-job-id]');
+            var visibleCount = visibleRows.length;
+            var selectedVisible = 0;
+            visibleRows.forEach(function (row) {
+                if (state.selectedJobs.has(row.dataset.jobId)) selectedVisible++;
+            });
+            selectAllCb.checked = visibleCount > 0 && selectedVisible === visibleCount;
+            selectAllCb.indeterminate = selectedVisible > 0 && selectedVisible < visibleCount;
+        }
+    }
+
+    function toggleJobSelection(jobId, selected) {
+        if (selected) {
+            state.selectedJobs.add(jobId);
+        } else {
+            state.selectedJobs.delete(jobId);
+        }
+        updateBulkActionsBar();
+    }
+
+    function selectAllVisibleJobs(checked) {
+        var visibleRows = jobsContainer.querySelectorAll('.jt-row[data-job-id]');
+        visibleRows.forEach(function (row) {
+            var jobId = row.dataset.jobId;
+            if (checked) {
+                state.selectedJobs.add(jobId);
+            } else {
+                state.selectedJobs.delete(jobId);
+            }
+            var cb = row.querySelector('.jt-select-cb');
+            if (cb) cb.checked = checked;
+        });
+        updateBulkActionsBar();
+    }
+
+    async function bulkAction(action) {
+        var ids = Array.from(state.selectedJobs);
+        if (!ids.length) return;
+
+        var actionLabel = { cancel: 'Cancel', retry: 'Retry', clear: 'Remove' }[action] || action;
+        var confirmed = await showConfirm({
+            title: actionLabel + ' ' + ids.length + ' job' + (ids.length > 1 ? 's' : ''),
+            message: actionLabel + ' ' + ids.length + ' selected job' + (ids.length > 1 ? 's' : '') + '?',
+            ok: actionLabel,
+        });
+        if (!confirmed) return;
+
+        var succeeded = 0;
+        var failed = 0;
+        for (var i = 0; i < ids.length; i++) {
+            try {
+                if (action === 'cancel') {
+                    await fetchJson('/jobs/' + ids[i], { method: 'DELETE' });
+                } else if (action === 'retry') {
+                    await fetchJson('/jobs/' + ids[i] + '/retry', { method: 'POST' });
+                } else if (action === 'clear') {
+                    await fetchJson('/jobs/' + ids[i] + '?purge=1', { method: 'DELETE' });
+                }
+                succeeded++;
+            } catch (e) {
+                failed++;
+            }
+        }
+
+        state.selectedJobs.clear();
+        updateBulkActionsBar();
+        var msg = actionLabel + ': ' + succeeded + ' succeeded';
+        if (failed) msg += ', ' + failed + ' failed';
+        setFormStatus(msg, failed ? 'error' : 'ok');
+        await refreshJobs();
+    }
+
     function renderJobs(jobs) {
         state.lastJobs = jobs.slice();
         var filtered = filterJobs(jobs);
@@ -2002,6 +2419,8 @@
             state.expandedJobs = {};
             state.activeQueueJobId = '';
             state.queueJobIds = [];
+            state.selectedJobs.clear();
+            updateBulkActionsBar();
             jobsContainer.innerHTML = jobs.length
                 ? '<div class="empty">No jobs match the current filter.</div>'
                 : '<div class="empty">No jobs yet.</div>';
@@ -2012,6 +2431,8 @@
         pruneExpandedJobs(filtered);
 
         const sortedJobs = sortJobs(filtered);
+        // Prune selections to only visible job IDs
+        pruneSelectedJobs(sortedJobs.map(function (j) { return j.id; }));
         ensureActiveQueueJob(sortedJobs);
 
         var headerCols = [
@@ -2024,7 +2445,9 @@
             { key: 'submitted', label: 'Submitted' },
         ];
 
-        var thead = '<thead><tr>' + headerCols.map(function (c) {
+        var thead = '<thead><tr>'
+            + '<th class="jt-select-cell"><input type="checkbox" id="jt-select-all" title="Select all visible jobs"></th>'
+            + headerCols.map(function (c) {
             var cls = state.jobSortColumn === c.key ? ' class="jt-sorted"' : '';
             return '<th' + cls + ' data-sort-col="' + c.key + '">' + c.label + buildSortIndicator(c.key) + '</th>';
         }).join('') + '<th></th></tr></thead>';
@@ -2070,7 +2493,10 @@
 
             var actionBtns = [moveNextButton, pauseButton, cancelButton, retryButton, clearButton].filter(Boolean).join(' ');
 
+            var isChecked = state.selectedJobs.has(job.id) ? ' checked' : '';
+
             var mainRow = '<tr class="jt-row' + activeClass + '" data-job-id="' + job.id + '">'
+                + '<td class="jt-select-cell"><input type="checkbox" class="jt-select-cb" data-select-job="' + job.id + '"' + isChecked + '></td>'
                 + '<td class="jt-name" title="' + escapeHtml(basename(job.input_file)) + '">' + escapeHtml(basename(job.input_file)) + '</td>'
                 + '<td><span class="badge badge-sm ' + escapeHtml(job.status) + '">' + escapeHtml(job.status) + '</span></td>'
                 + '<td class="jt-progress"><div class="progress-track"><div class="progress-fill progress-fill-' + escapeHtml(job.status) + '" style="width:' + progress.toFixed(1) + '%"></div></div><span class="jt-progress-label">' + escapeHtml(progressLabel) + '</span></td>'
@@ -2107,7 +2533,7 @@
                 + '</div>';
 
             var detailRow = '<tr class="jt-detail-row' + (isOpen ? '' : ' jt-detail-hidden') + '" data-detail-for="' + job.id + '">'
-                + '<td colspan="8"><div class="jt-detail-inner">'
+                + '<td colspan="9"><div class="jt-detail-inner">'
                 + '<div class="jt-detail-columns">' + srcCol + outCol + '</div>'
                 + footerDetails
                 + '</div></td></tr>';
@@ -2116,6 +2542,7 @@
         }).join('');
 
         jobsContainer.innerHTML = '<table class="jobs-table"><colgroup>'
+            + '<col class="jt-col-select">'
             + '<col class="jt-col-name"><col class="jt-col-status"><col class="jt-col-progress">'
             + '<col class="jt-col-codec"><col class="jt-col-size"><col class="jt-col-eta">'
             + '<col class="jt-col-submitted"><col class="jt-col-actions">'
@@ -2139,13 +2566,31 @@
             }
         );
 
+        // Select-all checkbox
+        var selectAllCb = jobsContainer.querySelector('#jt-select-all');
+        if (selectAllCb) {
+            selectAllCb.addEventListener('change', function () {
+                selectAllVisibleJobs(selectAllCb.checked);
+            });
+        }
+
+        // Individual row checkboxes
+        Array.prototype.forEach.call(
+            jobsContainer.querySelectorAll('.jt-select-cb'),
+            function (cb) {
+                cb.addEventListener('change', function () {
+                    toggleJobSelection(cb.dataset.selectJob, cb.checked);
+                });
+            }
+        );
+
         // Row click to toggle detail
         Array.prototype.forEach.call(
             jobsContainer.querySelectorAll('.jt-row'),
             function (row) {
                 row.style.cursor = 'pointer';
                 row.addEventListener('click', function (event) {
-                    if (event.target && event.target.closest('button')) return;
+                    if (event.target && (event.target.closest('button') || event.target.closest('input[type="checkbox"]'))) return;
                     var jobId = row.dataset.jobId;
                     state.activeQueueJobId = jobId;
                     var detailRow = jobsContainer.querySelector('[data-detail-for="' + jobId + '"]');
@@ -2277,6 +2722,7 @@
         updateActiveQueueSelection();
         updateToggleExpandButton();
         updateActivityBadge(sortedJobs);
+        updateBulkActionsBar();
     }
 
     function updateActivityBadge(jobs) {
@@ -2477,11 +2923,13 @@
 
         setStatus(notifStatus, '');
         notifTestBtn.style.display = channel ? '' : 'none';
+        resetDirtyTracker('notif-form');
     }
 
     function closeNotifEditor() {
         notifEditor.hidden = true;
         notifForm.reset();
+        resetDirtyTracker('notif-form');
     }
 
     function editNotifChannel(id) {
@@ -2496,12 +2944,14 @@
     }
 
     function deleteNotifChannel(id) {
-        if (!confirm('Delete this notification channel?')) return;
-        fetchJson('/config/notifications/' + id, { method: 'DELETE' }).then(function () {
-            closeNotifEditor();
-            loadNotifChannels();
-        }).catch(function (err) {
-            alert('Error: ' + err.message);
+        showConfirm({ title: 'Delete Channel', message: 'Delete this notification channel?', ok: 'Delete' }).then(function (confirmed) {
+            if (!confirmed) return;
+            fetchJson('/config/notifications/' + id, { method: 'DELETE' }).then(function () {
+                closeNotifEditor();
+                loadNotifChannels();
+            }).catch(function (err) {
+                showAlert({ title: 'Error', message: err.message });
+            });
         });
     }
 
@@ -2562,6 +3012,7 @@
             body: JSON.stringify(payload),
         }).then(function (result) {
             setStatus(notifStatus, 'Channel saved.', 'ok');
+            resetDirtyTracker('notif-form');
             notifIdInput.value = result.id || notifIdInput.value;
             notifTestBtn.style.display = '';
             loadNotifChannels();
@@ -2659,9 +3110,11 @@
             var btn = e.target.closest('[data-delete-logfile]');
             if (!btn) return;
             var name = btn.dataset.deleteLogfile;
-            if (!confirm('Delete log file "' + name + '"?')) return;
-            fetchJson('/system/logs/files?file=' + encodeURIComponent(name), { method: 'DELETE' }).then(function () {
-                loadLogFilesTable();
+            showConfirm({ title: 'Delete Log File', message: 'Delete log file "' + name + '"?', ok: 'Delete' }).then(function (confirmed) {
+                if (!confirmed) return;
+                fetchJson('/system/logs/files?file=' + encodeURIComponent(name), { method: 'DELETE' }).then(function () {
+                    loadLogFilesTable();
+                });
             });
         });
     }
@@ -2672,9 +3125,11 @@
 
     if (logFilesClearBtn) {
         logFilesClearBtn.addEventListener('click', function () {
-            if (!confirm('Delete all rotated log files? The active log will be kept.')) return;
-            fetchJson('/system/logs/files', { method: 'DELETE' }).then(function () {
-                loadLogFilesTable();
+            showConfirm({ title: 'Clear Log Files', message: 'Delete all rotated log files? The active log will be kept.', ok: 'Delete All' }).then(function (confirmed) {
+                if (!confirmed) return;
+                fetchJson('/system/logs/files', { method: 'DELETE' }).then(function () {
+                    loadLogFilesTable();
+                });
             });
         });
     }
@@ -3233,27 +3688,31 @@
         userTokensList.addEventListener('click', function (e) {
             var tokenId = e.target.dataset.deleteUserToken;
             if (tokenId) {
-                fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
-                    .then(function () { refreshUserTokens(); showToast('Token revoked.'); })
-                    .catch(function (err) { showToast(err.message, 'error'); });
+                showConfirm({ title: 'Revoke Token', message: 'Revoke this API token? Any integrations using it will stop working.', ok: 'Revoke' }).then(function (confirmed) {
+                    if (!confirmed) return;
+                    fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
+                        .then(function () { refreshUserTokens(); showToast('Token revoked.'); })
+                        .catch(function (err) { showToast(err.message, 'error'); });
+                });
             }
         });
     }
 
     if (userCreateTokenBtn) {
         userCreateTokenBtn.addEventListener('click', function () {
-            var name = prompt('Token name (optional):');
-            if (name === null) return;
-            fetchJson('/auth/tokens', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name || 'API token', days: 365 }),
-            })
-                .then(function (data) {
-                    setStatus(userTokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
-                    refreshUserTokens();
+            showPrompt({ title: 'Create Token', message: 'Token name (optional):', placeholder: 'API token', ok: 'Create' }).then(function (name) {
+                if (name === null) return;
+                fetchJson('/auth/tokens', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name || 'API token', days: 365 }),
                 })
-                .catch(function (err) { setStatus(userTokensStatus, err.message, 'error'); });
+                    .then(function (data) {
+                        setStatus(userTokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
+                        refreshUserTokens();
+                    })
+                    .catch(function (err) { setStatus(userTokensStatus, err.message, 'error'); });
+            });
         });
     }
 
@@ -3618,6 +4077,7 @@
                 smtpForm.elements.password.placeholder = cfg.password ? '(unchanged)' : '';
                 smtpForm.elements.use_tls.checked = cfg.use_tls !== false;
                 smtpForm.elements.from_address.value = cfg.from_address || '';
+                resetDirtyTracker('smtp-form');
             }
         } catch (_) { /* noop */ }
     }
@@ -3643,6 +4103,7 @@
                     body: JSON.stringify(payload),
                 });
                 setStatus(smtpStatus, 'SMTP settings saved.', 'ok');
+                resetDirtyTracker('smtp-form');
             } catch (err) {
                 setStatus(smtpStatus, err.message, 'error');
             }
@@ -3707,9 +4168,12 @@
         adminTokensList.addEventListener('click', function (e) {
             var tokenId = e.target.dataset.adminDeleteToken;
             if (tokenId) {
-                fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
-                    .then(function () { refreshAdminTokens(); showToast('Token revoked.'); })
-                    .catch(function (err) { showToast(err.message, 'error'); });
+                showConfirm({ title: 'Revoke Token', message: 'Revoke this API token? Any integrations using it will stop working.', ok: 'Revoke' }).then(function (confirmed) {
+                    if (!confirmed) return;
+                    fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
+                        .then(function () { refreshAdminTokens(); showToast('Token revoked.'); })
+                        .catch(function (err) { showToast(err.message, 'error'); });
+                });
             }
         });
     }
@@ -3763,11 +4227,11 @@
             });
             form.reset();
             clearInputSelection();
+            resetDirtyTracker('job-form');
             setFormStatus(response.message || `Queued job ${response.id}`, 'ok');
             await refreshJobs();
         } catch (error) {
             setFormStatus(error.message, 'error');
-        } finally {
             submitButton.disabled = false;
         }
     });
@@ -3801,10 +4265,10 @@
                 body: JSON.stringify(payload),
             });
             setStatus(settingsStatus, 'Settings saved.', 'ok');
+            resetDirtyTracker('settings-form');
             await refreshSummary();
         } catch (error) {
             setStatus(settingsStatus, error.message, 'error');
-        } finally {
             settingsButton.disabled = false;
         }
     });
@@ -3828,6 +4292,7 @@
                     body: JSON.stringify(payload),
                 });
                 setStatus(logSettingsStatus, 'Log settings saved.', 'ok');
+                resetDirtyTracker('log-settings');
             } catch (err) {
                 setStatus(logSettingsStatus, err.message, 'error');
             }
@@ -3876,7 +4341,6 @@
             await refreshSummary();
         } catch (error) {
             setStatus(watcherStatus, error.message, 'error');
-        } finally {
             watcherButton.disabled = false;
         }
     });
@@ -3994,6 +4458,7 @@
 
     clearOutputDirButton.addEventListener('click', function () {
         outputDirField.value = '';
+        outputDirField.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
     browseDefaultOutputDirButton.addEventListener('click', function () {
@@ -4009,6 +4474,7 @@
 
     clearDefaultOutputDirButton.addEventListener('click', function () {
         defaultOutputDirField.value = '';
+        defaultOutputDirField.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
     browserUpButton.addEventListener('click', function () {
@@ -4084,6 +4550,8 @@
     addScheduleRuleButton.addEventListener('click', function () {
         state.scheduleRules.push(makeDefaultRule());
         renderScheduleRules();
+        // Mark schedule as dirty since rules changed
+        if (saveScheduleButton) saveScheduleButton.disabled = false;
     });
 
     saveScheduleButton.addEventListener('click', function () {
@@ -4127,9 +4595,13 @@
     });
 
     document.addEventListener('keydown', function (event) {
-        if (!browserModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
+        if (!browserModal.hidden || !confirmModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
             return;
         }
+
+        // Only handle queue keys when the activity page is visible
+        var activityPage = document.getElementById('page-activity');
+        if (!activityPage || activityPage.hidden) return;
 
         if (isInteractiveTarget(event.target)) {
             return;
@@ -4147,16 +4619,60 @@
             return;
         }
 
-        if (event.key !== 'Enter') {
+        if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            if (state.activeQueueJobId) {
+                var dr = jobsContainer.querySelector('[data-detail-for="' + state.activeQueueJobId + '"]');
+                if (dr && dr.classList.contains('jt-detail-hidden')) {
+                    dr.classList.remove('jt-detail-hidden');
+                    state.expandedJobs[state.activeQueueJobId] = true;
+                    updateToggleExpandButton();
+                }
+            }
             return;
         }
 
-        if (!state.queueJobIds.length) {
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            if (state.activeQueueJobId) {
+                var dr = jobsContainer.querySelector('[data-detail-for="' + state.activeQueueJobId + '"]');
+                if (dr && !dr.classList.contains('jt-detail-hidden')) {
+                    dr.classList.add('jt-detail-hidden');
+                    state.expandedJobs[state.activeQueueJobId] = false;
+                    updateToggleExpandButton();
+                }
+            }
             return;
         }
 
-        event.preventDefault();
-        toggleActiveQueueJob();
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (state.queueJobIds.length) {
+                toggleActiveQueueJob();
+            }
+            return;
+        }
+
+        if (event.key === ' ') {
+            event.preventDefault();
+            if (state.activeQueueJobId) {
+                var isSelected = state.selectedJobs.has(state.activeQueueJobId);
+                toggleJobSelection(state.activeQueueJobId, !isSelected);
+                var cb = jobsContainer.querySelector('.jt-select-cb[data-select-job="' + state.activeQueueJobId + '"]');
+                if (cb) cb.checked = !isSelected;
+            }
+            return;
+        }
+
+        if (event.key === 'Delete') {
+            event.preventDefault();
+            if (!state.activeQueueJobId) return;
+            var clearBtn = jobsContainer.querySelector('[data-clear-id="' + state.activeQueueJobId + '"]');
+            if (clearBtn && !clearBtn.disabled) {
+                clearBtn.click();
+            }
+            return;
+        }
     });
 
     clearJobsButton.addEventListener('click', function (event) {
@@ -4195,6 +4711,17 @@
         }
     );
 
+    // ── Bulk action button handlers ──
+    if (bulkCancelBtn) bulkCancelBtn.addEventListener('click', function () { bulkAction('cancel'); });
+    if (bulkRetryBtn) bulkRetryBtn.addEventListener('click', function () { bulkAction('retry'); });
+    if (bulkClearBtn) bulkClearBtn.addEventListener('click', function () { bulkAction('clear'); });
+    if (bulkDeselectBtn) bulkDeselectBtn.addEventListener('click', function () {
+        state.selectedJobs.clear();
+        var cbs = jobsContainer.querySelectorAll('.jt-select-cb');
+        cbs.forEach(function (cb) { cb.checked = false; });
+        updateBulkActionsBar();
+    });
+
     themeSelect.addEventListener('change', function () {
         applyTheme(themeSelect.value);
         persistTheme(themeSelect.value);
@@ -4228,7 +4755,6 @@
             } catch (err) {
                 if (generalSaveStatus) setStatus(generalSaveStatus, 'Error', 'error');
                 showToast('Failed to save general settings.', 'error');
-            } finally {
                 generalSaveBtn.disabled = false;
             }
         });
@@ -4241,9 +4767,11 @@
 
         if (state.release.update_available) {
             const targetVersion = state.release.remote_version || 'latest';
-            const confirmed = window.confirm(
-                `Install clutch ${targetVersion} and restart the service now?\n\nAny active conversions will be stopped and returned to the queue from the beginning.`
-            );
+            const confirmed = await showConfirm({
+                title: 'Install Update',
+                message: 'Install clutch ' + targetVersion + ' and restart the service now?\n\nAny active conversions will be stopped and returned to the queue from the beginning.',
+                ok: 'Install',
+            });
             if (!confirmed) {
                 return;
             }
@@ -4341,6 +4869,34 @@
     }
 
     initCustomSelects();
+
+    // ── Setup dirty tracking for all save/submit forms ──
+    setupFormDirtyTracking('settings-form', settingsForm, settingsButton);
+    setupFormDirtyTracking('watcher-form', watcherForm, watcherButton);
+    setupFormDirtyTracking('smtp-form', document.getElementById('smtp-form'),
+        document.querySelector('#smtp-form .primary[type="submit"]'));
+    setupFormDirtyTracking('notif-form', document.getElementById('notif-form'),
+        document.querySelector('#notif-form .primary[type="submit"]'));
+
+    // Schedule: tracked by individual element IDs
+    setupIdsDirtyTracking('schedule', [
+        'schedule-enabled', 'schedule-mode', 'schedule-priority', 'schedule-pause-behavior',
+        'price-provider', 'price-bidding-zone', 'price-entsoe-key',
+        'price-strategy', 'price-threshold', 'price-cheapest-hours',
+    ], saveScheduleButton);
+
+    // General settings
+    setupIdsDirtyTracking('general-settings', [
+        'general-auth-enabled', 'general-date-format',
+    ], document.getElementById('general-settings-save'));
+
+    // Log settings
+    setupIdsDirtyTracking('log-settings', [
+        'settings-log-level', 'settings-log-retention',
+    ], document.getElementById('save-log-settings'));
+
+    // Job form: the source path is required so it starts empty; enable submit only when form has content
+    setupFormDirtyTracking('job-form', form, submitButton);
 
     document.addEventListener('mousedown', function (e) {
         if (!e.target.closest('.custom-select')) {

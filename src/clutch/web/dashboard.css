@@ -1225,6 +1225,45 @@ button:disabled {
 .jt-col-submitted { width: 140px; }
 .jt-col-actions { width: 1px; }
 
+/* ── Bulk selection ── */
+
+.jt-col-select { width: 36px; }
+
+.jt-select-cell {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.jt-select-cell input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.bulk-actions {
+    visibility: hidden;
+}
+
+.bulk-actions-count {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent-strong);
+    margin-right: 4px;
+}
+
 .jt-detail-row td {
     padding: 0;
     border-bottom: 1px solid var(--panel-separator);
@@ -1655,6 +1694,72 @@ button:disabled {
     border-radius: 14px;
 }
 
+/* ── Full changelog page ── */
+.changelog-full-text {
+    max-width: 100%;
+}
+
+.changelog-version-block {
+    padding: 18px 0;
+    border-bottom: 1px solid var(--panel-separator);
+}
+
+.changelog-version-block:first-child {
+    padding-top: 0;
+}
+
+.changelog-version-block:last-child {
+    border-bottom: none;
+}
+
+.changelog-version-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--accent-strong);
+    margin-bottom: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.changelog-date {
+    font-weight: 400;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-left: 6px;
+}
+
+.changelog-paragraph {
+    font-size: 0.76rem;
+    line-height: 1.55;
+    color: var(--muted);
+    margin: 4px 0;
+}
+
+/* ── Update progress bar ── */
+.update-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.update-progress {
+    flex: 1;
+    max-width: 220px;
+    min-width: 120px;
+}
+
+.update-progress[hidden] { display: none; }
+
+.update-progress-fill {
+    animation: updatePulse 1.8s ease-in-out infinite;
+}
+
+@keyframes updatePulse {
+    0%   { width: 15%; }
+    50%  { width: 85%; }
+    100% { width: 15%; }
+}
+
 body.modal-open {
     overflow: hidden;
 }
@@ -1722,6 +1827,25 @@ body.modal-open {
 
 .confirm-danger {
     background: var(--fail) !important;
+    color: #fff !important;
+}
+
+.confirm-input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--field-bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+}
+
+.confirm-input[hidden] { display: none; }
+
+.confirm-ok-primary {
+    background: linear-gradient(135deg, var(--accent) 0%, #158677 100%) !important;
     color: #fff !important;
 }
 

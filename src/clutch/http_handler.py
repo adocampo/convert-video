@@ -41,6 +41,35 @@ def read_web_asset_bytes(name: str) -> bytes:
     return files("clutch.web").joinpath(name).read_bytes()
 
 
+_changelog_cache: str | None = None
+
+
+def _read_changelog() -> str:
+    """Read CHANGELOG.md from the project root (best-effort)."""
+    global _changelog_cache
+    if _changelog_cache is not None:
+        return _changelog_cache
+    # Try common locations relative to the package
+    import clutch as _pkg
+    candidates = []
+    pkg_file = os.path.abspath(_pkg.__file__)
+    # src/clutch/__init__.py -> project root
+    candidates.append(os.path.join(os.path.dirname(pkg_file), "..", "..", "CHANGELOG.md"))
+    # Installed editable: src/clutch -> ../../CHANGELOG.md
+    candidates.append(os.path.join(os.path.dirname(pkg_file), "..", "..", "..", "CHANGELOG.md"))
+    for candidate in candidates:
+        norm = os.path.normpath(candidate)
+        if os.path.isfile(norm):
+            try:
+                with open(norm, "r", encoding="utf-8") as fh:
+                    _changelog_cache = fh.read()
+                return _changelog_cache
+            except OSError:
+                pass
+    _changelog_cache = ""
+    return _changelog_cache
+
+
 class ConversionHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -763,6 +792,14 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 status=status_filter, codec=codec_filter, search=search,
             )
             self._send_json(200, result)
+            return
+
+        if path == "/system/changelog":
+            user = self._require_role("viewer")
+            if not user:
+                return
+            content = _read_changelog()
+            self._send_json(200, {"changelog": content})
             return
 
         if path == "/config/notifications":

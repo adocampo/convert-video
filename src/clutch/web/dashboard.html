@@ -111,6 +111,8 @@
                             <span class="sidebar-label">Logs</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/tasks" data-page="system/tasks">
                             <span class="sidebar-label">Tasks</span></a></li>
+                    <li><a class="sidebar-link sidebar-sub-link" href="#system/changelog" data-page="system/changelog">
+                            <span class="sidebar-label">Changelog</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/about" data-page="system/about">
                             <span class="sidebar-label">About</span></a></li>
                 </ul>
@@ -120,6 +122,7 @@
                     <a href="#system/users" data-page="system/users">Users</a>
                     <a href="#system/logs" data-page="system/logs">Logs</a>
                     <a href="#system/tasks" data-page="system/tasks">Tasks</a>
+                    <a href="#system/changelog" data-page="system/changelog">Changelog</a>
                     <a href="#system/about" data-page="system/about">About</a>
                 </div>
             </li>
@@ -180,6 +183,15 @@
             <div class="page-inner">
                 <div class="jobs-header">
                     <h2>Activity</h2>
+                    <div class="bulk-actions" id="bulk-actions">
+                        <span class="bulk-actions-count" id="bulk-actions-count">0 selected</span>
+                        <button class="ghost" type="button" id="bulk-cancel"
+                            title="Cancel selected jobs">Cancel</button>
+                        <button class="ghost" type="button" id="bulk-retry" title="Retry selected jobs">Retry</button>
+                        <button class="ghost" type="button" id="bulk-clear" title="Remove selected jobs">Clear</button>
+                        <button class="ghost" type="button" id="bulk-deselect" title="Deselect all">Deselect
+                            all</button>
+                    </div>
                     <div class="jobs-header-actions">
                         <button class="ghost" type="button" id="toggle-expand-jobs"
                             title="Expand or collapse all job details.">Collapse all</button>
@@ -260,7 +272,8 @@
                                 placeholder="e.g. *T6xC[2-3]* or season01"
                                 title="Only convert files matching this pattern. Supports glob wildcards and character ranges.">
                             <p class="field-row-help">Glob: <code>*</code> any text, <code>?</code> single char,
-                                <code>[2-5]</code> range, <code>[abc]</code> set. Plain text = substring match.</p>
+                                <code>[2-5]</code> range, <code>[abc]</code> set. Plain text = substring match.
+                            </p>
                         </div>
                     </div>
 
@@ -1255,6 +1268,16 @@
             </div>
         </section>
 
+        <!-- System > Changelog -->
+        <section class="page" id="page-system-changelog" data-page="system/changelog" hidden>
+            <div class="page-inner page-narrow">
+                <h2>Changelog</h2>
+                <div class="changelog-full" id="changelog-full-container">
+                    <div class="empty">Loading changelog…</div>
+                </div>
+            </div>
+        </section>
+
         <!-- System > About -->
         <section class="page" id="page-system-about" data-page="system/about" hidden>
             <div class="page-inner page-narrow">
@@ -1278,10 +1301,17 @@
                     <div class="field-row">
                         <label class="field-row-label">Updates</label>
                         <div class="field-row-control">
-                            <button class="secondary" type="button" id="release-check"
-                                aria-label="Check for new versions" title="Check for new versions">
-                                <span id="release-label">Check for updates</span>
-                            </button>
+                            <div class="update-row">
+                                <button class="secondary" type="button" id="release-check"
+                                    aria-label="Check for new versions" title="Check for new versions">
+                                    <span id="release-label">Check for updates</span>
+                                </button>
+                                <div class="update-progress" id="update-progress" hidden>
+                                    <div class="progress-track">
+                                        <div class="progress-fill update-progress-fill" id="update-progress-fill"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="field-row" id="changelog-row" hidden>
@@ -1358,12 +1388,13 @@
     <!-- ── Custom confirm dialog ── -->
     <div class="confirm-modal" id="confirm-modal" hidden>
         <div class="confirm-backdrop"></div>
-        <div class="confirm-dialog">
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
             <div class="confirm-header">
                 <h3 id="confirm-title">Confirm</h3>
             </div>
             <div class="confirm-body">
                 <p id="confirm-message"></p>
+                <input type="text" id="confirm-input" class="confirm-input" hidden autocomplete="off" />
             </div>
             <div class="confirm-footer">
                 <button class="ghost" type="button" id="confirm-cancel">Cancel</button>
