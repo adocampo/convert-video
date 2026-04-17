@@ -687,6 +687,7 @@ form {
     align-items: start;
     padding: 8px 0;
 }
+.field-row[hidden] { display: none; }
 
 .field-row-label {
     font-size: 0.8rem;
