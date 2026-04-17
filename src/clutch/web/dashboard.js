@@ -5034,6 +5034,9 @@
             showToast('Showing fake update available… upgrade starts in 3 s', 'ok', 0);
             await delay(3000);
 
+            // Force-hide changelog before starting the upgrade
+            if (changelogRow) changelogRow.hidden = true;
+
             // Step 1: trigger the fake upgrade on the backend
             var payload = await fetchJson('/debug/fake-upgrade', { method: 'POST' });
             renderReleaseControl(payload.update_info || {
