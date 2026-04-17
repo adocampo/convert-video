@@ -7,6 +7,7 @@ import signal as _signal
 import sys
 import threading
 import time
+import uuid
 from typing import Callable, Dict, List, Optional
 
 from clutch import APP_NAME, build_state_dir, get_version
