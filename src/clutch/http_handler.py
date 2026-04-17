@@ -45,18 +45,20 @@ _changelog_cache: str | None = None
 
 
 def _read_changelog() -> str:
-    """Read CHANGELOG.md from the project root (best-effort)."""
+    """Read CHANGELOG.md bundled inside the package or from the project root."""
     global _changelog_cache
     if _changelog_cache is not None:
         return _changelog_cache
-    # Try common locations relative to the package
     import clutch as _pkg
-    candidates = []
-    pkg_file = os.path.abspath(_pkg.__file__)
-    # src/clutch/__init__.py -> project root
-    candidates.append(os.path.join(os.path.dirname(pkg_file), "..", "..", "CHANGELOG.md"))
-    # Installed editable: src/clutch -> ../../CHANGELOG.md
-    candidates.append(os.path.join(os.path.dirname(pkg_file), "..", "..", "..", "CHANGELOG.md"))
+    pkg_dir = os.path.dirname(os.path.abspath(_pkg.__file__))
+    candidates = [
+        # Bundled inside the clutch package directory
+        os.path.join(pkg_dir, "CHANGELOG.md"),
+        # Dev layout: src/clutch/__init__.py -> project root
+        os.path.join(pkg_dir, "..", "..", "CHANGELOG.md"),
+        # Editable install
+        os.path.join(pkg_dir, "..", "..", "..", "CHANGELOG.md"),
+    ]
     for candidate in candidates:
         norm = os.path.normpath(candidate)
         if os.path.isfile(norm):
