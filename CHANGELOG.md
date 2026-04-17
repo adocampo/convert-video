@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.11] - 2026-04-17
+
+### Fixed in 1.7.11
+
+- **Changelog preview persists after update**: the changelog summary in System > About now correctly disappears once the updated version is running, instead of lingering after the service restart.
+- **Changelog page header noise**: the raw `# Changelog` heading and boilerplate description line are now stripped from the System > Changelog page.
+- **Scroll-to-top button not showing**: the floating arrow on the Changelog page was invisible due to an HTML `hidden` attribute that overrode the CSS visibility toggle.
+
 ## [1.7.10] - 2026-04-17
 
 ### Fixed in 1.7.10

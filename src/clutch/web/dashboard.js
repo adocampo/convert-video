@@ -711,6 +711,11 @@
             update_step_label: String(updateInfo.update_step_label || ''),
         };
 
+        // If local matches remote, the update is done — treat as no-update
+        if (nextInfo.local_version && nextInfo.remote_version && nextInfo.local_version === nextInfo.remote_version) {
+            nextInfo.update_available = false;
+        }
+
         state.release = nextInfo;
 
         // Version display
@@ -832,6 +837,10 @@
 
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
+
+            // Skip top-level heading ("# Changelog") and boilerplate description
+            if (line.match(/^# /)) continue;
+            if (line.match(/^All notable changes/i)) continue;
 
             // ## [version] - date
             var versionMatch = line.match(/^## \[(.+?)\]\s*-\s*(.+)/);
