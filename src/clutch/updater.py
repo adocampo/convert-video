@@ -251,16 +251,34 @@ def _pipx_package_installed(package_name: str) -> bool:
     return result.returncode == 0 and package_name in result.stdout
 
 
-def install_latest_version() -> subprocess.CompletedProcess:
-    """Install the latest clutch version from GitHub via pipx."""
+def install_latest_version(*, on_progress: "Callable[[str], None] | None" = None) -> subprocess.CompletedProcess:
+    """Install the latest clutch version from GitHub via pipx.
+
+    If *on_progress* is provided it is called with each meaningful line from
+    the pipx output so the caller can update the UI step label.
+    """
     if _pipx_package_installed(LEGACY_APP_NAME):
         subprocess.run(
             ["pipx", "uninstall", LEGACY_APP_NAME],
             capture_output=False,
         )
-    return subprocess.run(
+    proc = subprocess.Popen(
         ["pipx", "install", f"git+https://github.com/{GITHUB_REPO}.git", "--force"],
-        capture_output=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    output_lines: list[str] = []
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        line = raw_line.strip()
+        if line:
+            output_lines.append(line)
+            if on_progress:
+                on_progress(line)
+    returncode = proc.wait()
+    return subprocess.CompletedProcess(
+        proc.args, returncode, stdout="\n".join(output_lines), stderr="",
     )
 
 

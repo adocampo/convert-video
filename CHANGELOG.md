@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.9] - 2026-04-17
+
+### Improved in 1.7.9
+
+- **Granular update progress**: the upgrade progress bar now tracks real pipx output phases (resolving package, installing, installed version, restarting) instead of jumping from zero to halfway and disappearing. Each phase updates the label and advances the bar incrementally.
+- **Changelog cleanup after update**: the update changelog preview in System > About is now force-cleared when the service restarts on the new version, and the full Changelog page cache is invalidated so it picks up the new content immediately.
+
 ## [1.7.8] - 2026-04-17
 
 ### Added in 1.7.8

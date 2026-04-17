@@ -804,6 +804,9 @@
                 const updateInfo = payload.update_info || {};
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
                     showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
+                    // Force-clear the update changelog preview and reload the full changelog
+                    if (changelogRow) changelogRow.hidden = true;
+                    changelogFullLoaded = false;
                     await refreshJobs();
                     return;
                 }

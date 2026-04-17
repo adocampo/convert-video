@@ -97,7 +97,7 @@ class ConversionService:
         self._update_lock = threading.Lock()
         self._upgrade_in_progress = False
         self._upgrade_step = 0
-        self._upgrade_step_total = 5
+        self._upgrade_step_total = 6
         self._upgrade_step_label = ""
         self._restart_requested = False
         self._restart_command = [sys.argv[0], *sys.argv[1:]]
@@ -535,21 +535,47 @@ class ConversionService:
             self._set_upgrade_step(1, "Checking legacy packages…")
             info(f"Starting self-upgrade to {target_version or 'latest'}")
 
-            self._set_upgrade_step(2, "Downloading and installing…")
-            result = install_latest_version()
+            self._set_upgrade_step(2, "Resolving package…")
+
+            def _on_pipx_line(line: str):
+                """Parse pipx output lines to update the progress step."""
+                low = line.lower()
+                # Strip spinner characters (braille patterns U+2800–U+28FF)
+                clean = low.lstrip("\u2800\u2801\u2802\u2803\u2804\u2805\u2806\u2807"
+                                   "\u2808\u2809\u280a\u280b\u280c\u280d\u280e\u280f"
+                                   "\u2810\u2811\u2812\u2813\u2814\u2815\u2816\u2817"
+                                   "\u2818\u2819\u281a\u281b\u281c\u281d\u281e\u281f"
+                                   "\u2820\u2821\u2822\u2823\u2824\u2825\u2826\u2827"
+                                   "\u2828\u2829\u282a\u282b\u282c\u282d\u282e\u282f"
+                                   "\u2830\u2831\u2832\u2833\u2834\u2835\u2836\u2837"
+                                   "\u2838\u2839\u283a\u283b\u283c\u283d\u283e\u283f").strip()
+                if "determining package name" in clean:
+                    self._set_upgrade_step(2, "Resolving package…")
+                elif "installing" in clean and "from spec" in clean:
+                    self._set_upgrade_step(3, "Installing…")
+                elif "installed package" in clean:
+                    # e.g. "installed package clutch 1.7.8, ..."
+                    import re as _re
+                    m = _re.search(r"installed package \S+ ([\d.]+)", clean)
+                    ver_label = f" v{m.group(1)}" if m else ""
+                    self._set_upgrade_step(4, f"Installed{ver_label}")
+                elif "done!" in clean:
+                    self._set_upgrade_step(4, "Install complete")
+
+            result = install_latest_version(on_progress=_on_pipx_line)
             if result.returncode != 0:
                 raise RuntimeError("Upgrade failed. Check the service logs for details.")
 
-            self._set_upgrade_step(3, "Verifying installation…")
+            self._set_upgrade_step(5, "Verifying installation…")
             mark_update_installed(target_version or get_version())
 
-            self._set_upgrade_step(4, "Stopping service…")
+            self._set_upgrade_step(5, "Stopping service…")
             info(f"Latest version installed. Restarting {APP_NAME} service...")
 
             with self._update_lock:
                 self._restart_requested = True
 
-            self._set_upgrade_step(5, "Restarting…")
+            self._set_upgrade_step(6, "Restarting…")
             self.stop()
             shutdown_callback()
         except Exception as exc:
