@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.12] - 2026-04-17
+
+### Fixed in 1.7.12
+
+- **Scroll-to-top button on Changelog page**: moved the button outside the page section so it is no longer hidden by the section’s `hidden` attribute, and added a fallback `window` scroll listener so the arrow reliably appears when scrolling down.
+- **Full page reload after update**: the dashboard now performs a full browser reload once the service restarts on the new version, ensuring all cached assets, changelog, and version info are refreshed cleanly.
+
 ## [1.7.11] - 2026-04-17
 
 ### Fixed in 1.7.11

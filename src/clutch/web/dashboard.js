@@ -809,10 +809,8 @@
                 const updateInfo = payload.update_info || {};
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
                     showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
-                    // Force-clear the update changelog preview and reload the full changelog
-                    if (changelogRow) changelogRow.hidden = true;
-                    changelogFullLoaded = false;
-                    await refreshJobs();
+                    // Full reload so all cached assets and state refresh cleanly
+                    setTimeout(function () { location.reload(); }, 1200);
                     return;
                 }
             } catch (error) {
@@ -4986,22 +4984,26 @@
         var scrollBtn = document.getElementById('changelog-scroll-top');
         if (!contentEl || !scrollBtn) return;
 
-        contentEl.addEventListener('scroll', function () {
+        function onScroll() {
             var changelogPage = document.getElementById('page-system-changelog');
             if (!changelogPage || changelogPage.hidden) {
                 scrollBtn.classList.remove('visible');
                 return;
             }
-            if (contentEl.scrollTop > 120) {
+            var scrollTop = contentEl.scrollTop || document.documentElement.scrollTop || 0;
+            if (scrollTop > 120) {
                 scrollBtn.classList.add('visible');
             } else {
                 scrollBtn.classList.remove('visible');
             }
-        });
+        }
+
+        contentEl.addEventListener('scroll', onScroll);
+        window.addEventListener('scroll', onScroll);
 
         scrollBtn.addEventListener('click', function () {
-            var contentEl = document.getElementById('content');
-            if (contentEl) contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+            contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     }());
 
