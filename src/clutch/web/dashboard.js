@@ -804,9 +804,14 @@
                 renderMeta(payload);
                 applySummaryToForms(payload);
                 renderWatchers(payload.watchers || []);
-                renderReleaseControl(payload.update_info || {});
-
                 const updateInfo = payload.update_info || {};
+                renderReleaseControl(updateInfo);
+
+                // Keep changelog visible during upgrade until "Install complete" (step 6)
+                if (updateInfo.update_in_progress && updateInfo.update_step < 6 && changelogRow) {
+                    changelogRow.hidden = false;
+                }
+
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
                     showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
                     // Full reload so all cached assets and state refresh cleanly

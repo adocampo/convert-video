@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.14] - 2026-04-17
+
+### Fixed in 1.7.14
+
+- **Changelog preview stays visible during upgrade**: the changelog preview in System > About now remains visible while the update is in progress and smoothly hides once the install completes (step 6), instead of disappearing the moment the upgrade starts.
+- **CSS fix for hidden field rows**: `.field-row[hidden]` now correctly applies `display: none`, fixing the issue where the `display: grid` rule on `.field-row` overrode the HTML `hidden` attribute.
+
 ## [1.7.13] - 2026-04-17
 
 ### Improved in 1.7.13
