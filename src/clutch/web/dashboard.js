@@ -5020,10 +5020,25 @@
     // simulate the full update flow without actually installing anything.
     window.__debugFakeUpgrade = async function () {
         try {
+            // Step 0: show a fake "update available" state with changelog
+            // so we can verify it gets hidden once the upgrade starts.
+            renderReleaseControl({
+                local_version: state.release.local_version,
+                remote_version: '999.0.0',
+                update_available: true,
+                changelog: '## v999.0.0\n- Fake changelog entry for testing\n- This should disappear when the upgrade starts',
+                checked_at: new Date().toISOString(),
+                last_error: '',
+                update_in_progress: false,
+            });
+            showToast('Showing fake update available… upgrade starts in 3 s', 'ok', 0);
+            await delay(3000);
+
+            // Step 1: trigger the fake upgrade on the backend
             var payload = await fetchJson('/debug/fake-upgrade', { method: 'POST' });
             renderReleaseControl(payload.update_info || {
                 local_version: state.release.local_version,
-                remote_version: 'v999.0.0',
+                remote_version: '999.0.0',
                 update_available: true,
                 changelog: '',
                 checked_at: '',
@@ -5031,7 +5046,8 @@
                 update_in_progress: true,
             });
             showToast(payload.message || 'Simulated upgrade started…', 'ok', 0);
-            // Poll for progress updates until done (no restart expected)
+
+            // Step 2: poll for progress updates until done (no restart expected)
             for (var attempt = 0; attempt < 30; attempt++) {
                 await delay(1000);
                 try {
