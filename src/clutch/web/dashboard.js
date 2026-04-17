@@ -5045,22 +5045,24 @@
                 last_error: '',
                 update_in_progress: true,
             });
+            // renderReleaseControl hides changelog when update_in_progress,
+            // but we want it visible until "Install complete" (step 6).
+            if (changelogRow) changelogRow.hidden = false;
             showToast(payload.message || 'Simulated upgrade started…', 'ok', 0);
 
             // Step 2: poll for progress updates until done (no restart expected)
-            var changelogHidden = false;
             for (var attempt = 0; attempt < 30; attempt++) {
                 await delay(1000);
                 try {
                     var cfg = await fetchJson('/config');
                     var info = cfg.update_info || {};
-                    // Hide changelog just before "Install complete" (step 6)
-                    if (!changelogHidden && info.update_step >= 5) {
-                        if (changelogRow) changelogRow.hidden = true;
-                        changelogHidden = true;
-                    }
                     renderMeta(cfg);
                     renderReleaseControl(info);
+                    // renderReleaseControl hides changelog when in_progress;
+                    // override: keep it visible until step 6 ("Install complete")
+                    if (info.update_in_progress && info.update_step < 6 && changelogRow) {
+                        changelogRow.hidden = false;
+                    }
                     if (!info.update_in_progress) {
                         showToast('Fake upgrade finished.', 'ok');
                         return;
