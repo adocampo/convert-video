@@ -1328,6 +1328,11 @@
         }
         closeSidebar();
 
+        // Auto-focus the filter input when navigating to the activity page
+        if (page === 'activity') {
+            requestAnimationFrame(function () { jobsFilterText.focus(); });
+        }
+
         // Scroll to sub-section if specified
         var scrollTarget = getScrollTargetFromHash();
         if (scrollTarget) {
@@ -4667,6 +4672,19 @@
         activateBrowserSelection();
     });
 
+    // Arrow Down from filter input jumps focus to first job row
+    jobsFilterText.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (state.queueJobIds.length) {
+                state.activeQueueJobId = state.queueJobIds[0];
+                updateActiveQueueSelection();
+                scrollActiveQueueJobIntoView();
+                jobsFilterText.blur();
+            }
+        }
+    });
+
     document.addEventListener('keydown', function (event) {
         if (!browserModal.hidden || !confirmModal.hidden || event.altKey || event.ctrlKey || event.metaKey) {
             return;
@@ -4688,7 +4706,13 @@
 
         if (event.key === 'ArrowUp') {
             event.preventDefault();
-            moveQueueSelection(-1);
+            // If on the first row, jump back to the filter input
+            var firstId = state.queueJobIds.length ? state.queueJobIds[0] : '';
+            if (state.activeQueueJobId === firstId) {
+                jobsFilterText.focus();
+            } else {
+                moveQueueSelection(-1);
+            }
             return;
         }
 
@@ -4749,6 +4773,26 @@
             var clearBtn = jobsContainer.querySelector('[data-clear-id="' + state.activeQueueJobId + '"]');
             if (clearBtn && !clearBtn.disabled) {
                 clearBtn.click();
+            }
+            return;
+        }
+
+        if (event.key === 'PageUp') {
+            event.preventDefault();
+            if (state.queueJobIds.length) {
+                state.activeQueueJobId = state.queueJobIds[0];
+                updateActiveQueueSelection();
+                scrollActiveQueueJobIntoView();
+            }
+            return;
+        }
+
+        if (event.key === 'PageDown') {
+            event.preventDefault();
+            if (state.queueJobIds.length) {
+                state.activeQueueJobId = state.queueJobIds[state.queueJobIds.length - 1];
+                updateActiveQueueSelection();
+                scrollActiveQueueJobIntoView();
             }
             return;
         }
