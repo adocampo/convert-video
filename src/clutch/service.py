@@ -97,7 +97,7 @@ class ConversionService:
         self._update_lock = threading.Lock()
         self._upgrade_in_progress = False
         self._upgrade_step = 0
-        self._upgrade_step_total = 6
+        self._upgrade_step_total = 9
         self._upgrade_step_label = ""
         self._restart_requested = False
         self._restart_command = [sys.argv[0], *sys.argv[1:]]
@@ -569,13 +569,18 @@ class ConversionService:
             self._set_upgrade_step(5, "Verifying installation…")
             mark_update_installed(target_version or get_version())
 
-            self._set_upgrade_step(5, "Stopping service…")
+            self._set_upgrade_step(6, "Install complete")
+            import time as _time
+            for countdown in (3, 2, 1):
+                self._set_upgrade_step(6 + (3 - countdown), f"Restarting in {countdown}…")
+                _time.sleep(1)
+
+            self._set_upgrade_step(9, "Restarting…")
             info(f"Latest version installed. Restarting {APP_NAME} service...")
 
             with self._update_lock:
                 self._restart_requested = True
 
-            self._set_upgrade_step(6, "Restarting…")
             self.stop()
             shutdown_callback()
         except Exception as exc:

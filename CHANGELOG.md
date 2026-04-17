@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.13] - 2026-04-17
+
+### Improved in 1.7.13
+
+- **Countdown before service restart**: after the new version is installed, the progress label shows a 3-second countdown ("Restarting in 3…", "2…", "1…") before restarting the service, giving the browser time to reflect the final state.
+- **Changelog preview hidden during update**: the changelog preview in System > About is now hidden as soon as the update starts, instead of lingering throughout the install process.
+
 ## [1.7.12] - 2026-04-17
 
 ### Fixed in 1.7.12

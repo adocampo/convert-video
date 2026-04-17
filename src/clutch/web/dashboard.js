@@ -762,7 +762,7 @@
         // Changelog text
         if (changelogRow && changelogText) {
             var cl = changelogToHtml(nextInfo.changelog);
-            if (cl && nextInfo.update_available) {
+            if (cl && nextInfo.update_available && !nextInfo.update_in_progress) {
                 changelogText.innerHTML = cl;
                 changelogRow.hidden = false;
             } else {
