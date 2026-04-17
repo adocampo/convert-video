@@ -4410,6 +4410,15 @@
         renderJobs(state.lastJobs);
     });
 
+    var jobsFilterClear = document.getElementById('jobs-filter-clear');
+    if (jobsFilterClear) {
+        jobsFilterClear.addEventListener('click', function () {
+            jobsFilterText.value = '';
+            jobsFilterStatus.value = '';
+            renderJobs(state.lastJobs);
+        });
+    }
+
     toggleExpandJobsButton.addEventListener('click', function () {
         var details = jobsContainer.querySelectorAll('.jt-detail-row');
         var anyOpen = false;
@@ -4717,6 +4726,10 @@
 
         if (event.key === 'Delete') {
             event.preventDefault();
+            if (state.selectedJobs.size > 0) {
+                bulkAction('clear');
+                return;
+            }
             if (!state.activeQueueJobId) return;
             var clearBtn = jobsContainer.querySelector('[data-clear-id="' + state.activeQueueJobId + '"]');
             if (clearBtn && !clearBtn.disabled) {

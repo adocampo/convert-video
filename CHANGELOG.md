@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.7] - 2026-04-17
+
+### Added in 1.7.7
+
+- **Filter clear button**: added a "Clear" button inside the filename filter input to reset both the text and status filters in one click (shows × on narrow screens).
+- **Delete key clears selected jobs**: pressing Delete with multiple jobs selected now triggers the bulk clear action instead of only clearing the active row.
+
+### Fixed in 1.7.7
+
+- **Input / select height mismatch**: the filter text input and the status dropdown now share the same fixed height so they align perfectly.
+- **Responsive header layout**: the Expand all / Clear queue / Auto refresh buttons now stack into a full-width row below the ACTIVITY title at tablet widths instead of wrapping awkwardly, with minimal spacing between the title and the action buttons.
+
 ## [1.7.6] - 2026-04-17
 
 ### Fixed in 1.7.6

@@ -1111,11 +1111,99 @@ button:disabled {
     display: flex;
     gap: 10px;
     margin-bottom: 14px;
+    align-items: center;
+}
+
+.jobs-filters input[type="search"],
+.jobs-filters select {
+    height: 42px;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
 .jobs-filters input[type="search"] {
     flex: 1;
     min-width: 0;
+    padding-right: 60px;
+}
+
+.jobs-filters input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    display: none;
+}
+
+.filter-input-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+}
+
+.filter-input-wrap input[type="search"] {
+    width: 100%;
+}
+
+.filter-clear-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    background: var(--neutral-bg);
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+}
+
+.filter-clear-btn:hover {
+    background: var(--ghost-bg);
+    color: var(--text);
+    transform: translateY(-50%);
+}
+
+.filter-clear-icon { display: none; }
+
+@media (max-width: 920px) {
+    .filter-clear-label { display: none; }
+    .filter-clear-icon { display: inline; font-size: 0.82rem; }
+    .jobs-filters input[type="search"] { padding-right: 36px; }
+}
+
+@media (max-width: 1200px) {
+    .jobs-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        margin-bottom: 10px;
+    }
+
+    .jobs-header > h2 {
+        margin-bottom: 4px;
+    }
+
+    .jobs-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 4px;
+    }
+
+    .jobs-header-actions button {
+        width: auto;
+        flex: 1 1 auto;
+    }
+
+    .dropdown-menu {
+        left: 0;
+        right: auto;
+    }
 }
 
 .jobs-filters .custom-select {
@@ -2573,27 +2661,6 @@ body.modal-open {
     .jobs-table col.jt-col-eta,
     .jobs-table col.jt-col-submitted {
         width: 0;
-    }
-
-    .jobs-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .jobs-header-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .jobs-header-actions button {
-        width: auto;
-        flex: 1 1 auto;
-    }
-
-    .dropdown-menu {
-        left: 0;
-        right: auto;
     }
 
     .browser-dialog {
