@@ -843,6 +843,18 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(202, payload)
             return
 
+        if path == "/debug/fake-upgrade":
+            user = self._require_role("admin")
+            if not user:
+                return
+            try:
+                payload = self.server.service.schedule_fake_upgrade()
+            except ValueError as exc:
+                self._send_json(409, {"error": str(exc)})
+                return
+            self._send_json(202, payload)
+            return
+
         if path.startswith("/jobs/") and path.endswith("/retry"):
             user = self._require_role("operator")
             if not user:

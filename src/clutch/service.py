@@ -590,6 +590,52 @@ class ConversionService:
                 self._upgrade_step = 0
                 self._upgrade_step_label = ""
 
+    def schedule_fake_upgrade(self) -> Dict[str, object]:
+        """Simulate the full upgrade flow without installing or restarting."""
+        with self._update_lock:
+            if self._upgrade_in_progress:
+                raise ValueError("A service upgrade is already in progress.")
+            self._upgrade_in_progress = True
+            self._upgrade_step = 0
+            self._upgrade_step_label = "Starting upgrade…"
+
+        thread = threading.Thread(
+            target=self._run_fake_upgrade,
+            daemon=True,
+            name=f"{APP_NAME}-fake-upgrade",
+        )
+        thread.start()
+        return {
+            "message": "Simulated upgrade started (no install, no restart).",
+            "update_info": self.get_update_info(force_check=False),
+        }
+
+    def _run_fake_upgrade(self):
+        import time as _time
+        try:
+            self._set_upgrade_step(1, "Checking legacy packages…")
+            _time.sleep(1)
+            self._set_upgrade_step(2, "Resolving package…")
+            _time.sleep(1.5)
+            self._set_upgrade_step(3, "Installing…")
+            _time.sleep(2)
+            self._set_upgrade_step(4, "Installed v999.0.0")
+            _time.sleep(1)
+            self._set_upgrade_step(5, "Verifying installation…")
+            _time.sleep(0.5)
+            self._set_upgrade_step(6, "Install complete")
+            _time.sleep(0.5)
+            for countdown in (3, 2, 1):
+                self._set_upgrade_step(6 + (3 - countdown), f"Restarting in {countdown}…")
+                _time.sleep(1)
+            self._set_upgrade_step(9, "Restarting…")
+            _time.sleep(1)
+        finally:
+            with self._update_lock:
+                self._upgrade_in_progress = False
+                self._upgrade_step = 0
+                self._upgrade_step_label = ""
+
     def add_watcher(
         self,
         directory: str,
