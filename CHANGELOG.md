@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.8] - 2026-04-17
+
+### Added in 1.7.8
+
+- **Scroll-to-top button on Changelog page**: a floating arrow button appears in the bottom-right corner when scrolling down in System > Changelog, allowing one-click navigation back to the top. The button fades away automatically when already at the top.
+
 ## [1.7.7] - 2026-04-17
 
 ### Added in 1.7.7

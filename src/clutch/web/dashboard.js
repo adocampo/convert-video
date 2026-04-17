@@ -4968,6 +4968,31 @@
         }
     });
 
+    // ── Scroll-to-top button for Changelog page ──
+    (function () {
+        var contentEl = document.getElementById('content');
+        var scrollBtn = document.getElementById('changelog-scroll-top');
+        if (!contentEl || !scrollBtn) return;
+
+        contentEl.addEventListener('scroll', function () {
+            var changelogPage = document.getElementById('page-system-changelog');
+            if (!changelogPage || changelogPage.hidden) {
+                scrollBtn.classList.remove('visible');
+                return;
+            }
+            if (contentEl.scrollTop > 120) {
+                scrollBtn.classList.add('visible');
+            } else {
+                scrollBtn.classList.remove('visible');
+            }
+        });
+
+        scrollBtn.addEventListener('click', function () {
+            var contentEl = document.getElementById('content');
+            if (contentEl) contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }());
+
     navigateTo(getPageFromHash());
     initAuth().then(function () {
         navigateTo(getPageFromHash());

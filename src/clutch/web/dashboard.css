@@ -1823,6 +1823,41 @@ button:disabled {
     margin: 4px 0;
 }
 
+/* ── Scroll-to-top button ── */
+.scroll-to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--card-bg);
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms, background 120ms, color 120ms;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.scroll-to-top.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.scroll-to-top:hover {
+    background: var(--ghost-bg);
+    color: var(--text);
+    transform: none;
+}
+
 /* ── Update progress bar ── */
 .update-row {
     display: flex;
