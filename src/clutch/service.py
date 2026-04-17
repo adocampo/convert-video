@@ -1479,6 +1479,19 @@ class ConversionService:
             return "cancelled", "", "Cancelled from the web UI."
 
         existing_process_id = int(record.get("process_id") or 0) or None
+        if existing_process_id and not is_conversion_process_alive(existing_process_id):
+            info(f"[{job_id[:8]}] Previous HandBrake process {existing_process_id} is no longer running.")
+            if record.get("status") == "paused":
+                self.store.resume(job_id, "Previous process ended. Attempting partial resume.", resume_on_start=False)
+            self.store.set_runtime(
+                job_id,
+                process_id=None,
+                temp_file=str(record.get("temp_file") or ""),
+                log_file=str(record.get("log_file") or ""),
+                final_output_file=str(record.get("final_output_file") or ""),
+                resume_on_start=False,
+            )
+            existing_process_id = None
         if existing_process_id:
             if record.get("status") == "paused" and bool(record.get("resume_on_start")):
                 self.store.resume(job_id, "Resuming paused conversion.", resume_on_start=False)
@@ -1573,6 +1586,19 @@ class ConversionService:
             return "cancelled", "", "Cancelled from the web UI."
 
         existing_process_id = int(record.get("process_id") or 0) or None
+        if existing_process_id and not is_conversion_process_alive(existing_process_id):
+            info(f"[{job_id[:8]}] Previous HandBrake process {existing_process_id} is no longer running.")
+            if record.get("status") == "paused":
+                self.store.resume(job_id, "Previous process ended. Attempting partial resume.", resume_on_start=False)
+            self.store.set_runtime(
+                job_id,
+                process_id=None,
+                temp_file=str(record.get("temp_file") or ""),
+                log_file=str(record.get("log_file") or ""),
+                final_output_file=str(record.get("final_output_file") or ""),
+                resume_on_start=False,
+            )
+            existing_process_id = None
         if existing_process_id:
             if record.get("status") == "paused" and bool(record.get("resume_on_start")):
                 self.store.resume(job_id, "Resuming paused conversion.", resume_on_start=False)

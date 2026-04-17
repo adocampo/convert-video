@@ -2506,8 +2506,8 @@
             let progressLabel = 'Done';
 
             if (job.status === 'queued') progressLabel = 'Waiting';
-            else if (job.status === 'running') progressLabel = etaLabel ? progress.toFixed(1) + '% \u2013 ETA ' + etaLabel : progress.toFixed(1) + '%';
-            else if (job.status === 'paused') progressLabel = progress.toFixed(1) + '% \u2013 Paused';
+            else if (job.status === 'running') progressLabel = progress.toFixed(1) + '%';
+            else if (job.status === 'paused') progressLabel = progress.toFixed(1) + '%';
             else if (job.status === 'cancelling') progressLabel = 'Cancelling\u2026';
             else if (job.status === 'failed') progressLabel = 'Failed';
             else if (job.status === 'cancelled') progressLabel = 'Cancelled';
