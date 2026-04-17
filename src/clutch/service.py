@@ -1245,14 +1245,40 @@ class ConversionService:
 
         record = self.store.get(job_id)
         if not record:
+            debug(f"[{job_id[:8]}] Resume: job not found in store.")
             return None
 
         with self._job_control_lock:
             active_thread_id = self._active_jobs.get(job_id)
 
+        debug(f"[{job_id[:8]}] Resume: active_thread_id={active_thread_id}, status={record.get('status')}, process_id={record.get('process_id')}, temp_file={bool(record.get('temp_file'))}, resume_on_start={record.get('resume_on_start')}")
+
         if active_thread_id is None:
-            if not record_has_recoverable_runtime(record):
-                raise ValueError("Paused job is no longer attached to an active worker.")
+            has_recoverable = record_has_recoverable_runtime(record)
+            debug(f"[{job_id[:8]}] Resume: no active thread, has_recoverable_runtime={has_recoverable}")
+            if not has_recoverable:
+                # Process is dead but there may be a partial temp file we can resume from.
+                # Requeue so the worker picks it up, then restore the temp file metadata.
+                temp_file = str(record.get("temp_file") or "").strip()
+                log_file = str(record.get("log_file") or "")
+                final_output_file = str(record.get("final_output_file") or "")
+                debug(f"[{job_id[:8]}] Resume: requeuing, temp_file_exists={bool(temp_file)}, temp_file='{temp_file}'")
+                self.store.requeue(
+                    job_id,
+                    "Re-queued for partial resume." if temp_file else "Re-queued from scratch.",
+                )
+                if temp_file:
+                    self.store.set_runtime(
+                        job_id,
+                        process_id=None,
+                        temp_file=temp_file,
+                        log_file=log_file,
+                        final_output_file=final_output_file,
+                        resume_on_start=False,
+                    )
+                self._wake_event.set()
+                debug(f"[{job_id[:8]}] Resume: wake event set, returning requeued job.")
+                return self.store.get(job_id)
             # Keep status as "paused" — the worker will set "running" when it picks this up.
             result = self.store.set_resume_on_start(
                 job_id, True,
@@ -1325,6 +1351,7 @@ class ConversionService:
         while not self.stop_event.is_set() and not worker_stop_event.is_set():
             # Schedule gate: wait until conversions are allowed
             if not self.scheduler.is_conversion_allowed():
+                debug(f"Worker {worker_id}: schedule gate blocked, waiting.")
                 self._wake_event.wait(min(self.worker_poll_interval, 5.0))
                 self._wake_event.clear()
                 continue
@@ -1332,8 +1359,12 @@ class ConversionService:
             record = None
             try:
                 record = self._claim_recoverable_job()
+                if record:
+                    debug(f"Worker {worker_id}: claimed recoverable job {str(record['id'])[:8]}, status={record.get('status')}, process_id={record.get('process_id')}")
                 if not record:
                     record = self.store.claim_next()
+                    if record:
+                        debug(f"Worker {worker_id}: claimed queued job {str(record['id'])[:8]}")
                 if not record:
                     self._wake_event.wait(self.worker_poll_interval)
                     self._wake_event.clear()
@@ -1479,6 +1510,7 @@ class ConversionService:
             return "cancelled", "", "Cancelled from the web UI."
 
         existing_process_id = int(record.get("process_id") or 0) or None
+        debug(f"[{job_id[:8]}] _execute_regular_job: existing_process_id={existing_process_id}, status={record.get('status')}, temp_file={bool(record.get('temp_file'))}, resume_on_start={record.get('resume_on_start')}")
         if existing_process_id and not is_conversion_process_alive(existing_process_id):
             info(f"[{job_id[:8]}] Previous HandBrake process {existing_process_id} is no longer running.")
             if record.get("status") == "paused":
@@ -1516,6 +1548,7 @@ class ConversionService:
         resume_partial = ""
         resume_offset = 0.0
         temp_file = str(record.get("temp_file") or "").strip()
+        debug(f"[{job_id[:8]}] Resume-partial check: temp_file='{temp_file}', existing_process_id={existing_process_id}, file_exists={os.path.isfile(temp_file) if temp_file else False}")
         if temp_file and not existing_process_id and os.path.isfile(temp_file):
             try:
                 partial_dur = get_media_duration_seconds(temp_file)

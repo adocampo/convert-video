@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed in 1.7.6
 
 - **Paused job recovery after service restart**: jobs paused during a service stop were failing immediately on restart because the code tried to attach to the dead HandBrake process instead of resuming from the partial encode. The service now detects dead processes and falls through to the resume-partial path correctly.
+- **Manual resume of orphaned paused jobs**: resuming a job whose HandBrake process had died threw an error instead of re-queuing. The job is now re-queued automatically (with partial resume if the temp file still exists, or from scratch otherwise).
 - **Progress label cleanup**: removed redundant status text ("Paused", "ETA") from the PROGRESS column since those are already shown in dedicated STATUS and ETA columns.
 
 ## [1.7.5] - 2026-04-17
