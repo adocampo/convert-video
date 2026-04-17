@@ -808,8 +808,6 @@
 
                 const updateInfo = payload.update_info || {};
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
-                    // Hide changelog preview before reload
-                    if (changelogRow) changelogRow.hidden = true;
                     showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
                     // Full reload so all cached assets and state refresh cleanly
                     setTimeout(function () { location.reload(); }, 1200);
