@@ -5015,4 +5015,38 @@
     }).catch(function () {
         // Auth redirect in progress — do not load dashboard data
     });
+
+    // Debug helper: run __debugFakeUpgrade() in the browser console to
+    // simulate the full update flow without actually installing anything.
+    window.__debugFakeUpgrade = async function () {
+        try {
+            var payload = await fetchJson('/debug/fake-upgrade', { method: 'POST' });
+            renderReleaseControl(payload.update_info || {
+                local_version: state.release.local_version,
+                remote_version: 'v999.0.0',
+                update_available: true,
+                changelog: '',
+                checked_at: '',
+                last_error: '',
+                update_in_progress: true,
+            });
+            showToast(payload.message || 'Simulated upgrade started…', 'ok', 0);
+            // Poll for progress updates until done (no restart expected)
+            for (var attempt = 0; attempt < 30; attempt++) {
+                await delay(1000);
+                try {
+                    var cfg = await fetchJson('/config');
+                    renderMeta(cfg);
+                    renderReleaseControl(cfg.update_info || {});
+                    if (!(cfg.update_info || {}).update_in_progress) {
+                        showToast('Fake upgrade finished.', 'ok');
+                        return;
+                    }
+                } catch (e) { /* server may be briefly unreachable */ }
+            }
+            showToast('Fake upgrade timed out.', 'error');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
 }());
