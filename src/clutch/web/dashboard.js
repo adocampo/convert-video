@@ -4673,6 +4673,7 @@
     });
 
     // Arrow Down from filter input jumps focus to first job row
+    // Arrow Right from filter input jumps focus to clear button
     jobsFilterText.addEventListener('keydown', function (event) {
         if (event.key === 'ArrowDown') {
             event.preventDefault();
@@ -4681,6 +4682,31 @@
                 updateActiveQueueSelection();
                 scrollActiveQueueJobIntoView();
                 jobsFilterText.blur();
+            }
+        }
+        if (event.key === 'ArrowRight') {
+            var pos = jobsFilterText.selectionStart;
+            if (pos === jobsFilterText.value.length) {
+                event.preventDefault();
+                jobsFilterClear.focus();
+            }
+        }
+    });
+
+    // Left Arrow from clear button returns to filter input
+    // Down Arrow from clear button jumps to first job row
+    jobsFilterClear.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            jobsFilterText.focus();
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (state.queueJobIds.length) {
+                state.activeQueueJobId = state.queueJobIds[0];
+                updateActiveQueueSelection();
+                scrollActiveQueueJobIntoView();
+                jobsFilterClear.blur();
             }
         }
     });
