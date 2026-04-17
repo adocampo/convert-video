@@ -13,7 +13,12 @@
             last_error: '',
             update_in_progress: false,
         },
-        expandedJobs: {},
+        expandedJobs: (function () {
+            try {
+                var stored = window.localStorage.getItem('clutch-expanded-jobs');
+                return stored ? JSON.parse(stored) : {};
+            } catch (e) { return {}; }
+        })(),
         activeQueueJobId: '',
         queueJobIds: [],
         lastJobs: [],
@@ -49,6 +54,7 @@
     const tokenStorageKey = 'clutch-token';
     const themeStorageKey = 'clutch-theme';
     const legacyThemeStorageKey = 'convert-video-theme';
+    const expandedJobsStorageKey = 'clutch-expanded-jobs';
 
     const statusPriority = {
         running: 0,
@@ -700,6 +706,9 @@
             checked_at: String(updateInfo.checked_at || ''),
             last_error: String(updateInfo.last_error || ''),
             update_in_progress: Boolean(updateInfo.update_in_progress),
+            update_step: Number(updateInfo.update_step) || 0,
+            update_step_total: Number(updateInfo.update_step_total) || 5,
+            update_step_label: String(updateInfo.update_step_label || ''),
         };
 
         state.release = nextInfo;
@@ -713,7 +722,7 @@
         if (releaseButton && releaseLabel) {
             let label = 'Check for updates';
             if (nextInfo.update_in_progress) {
-                label = 'Updating\u2026';
+                label = nextInfo.update_step_label || 'Updating\u2026';
             } else if (nextInfo.update_available && nextInfo.remote_version) {
                 label = 'Update to v' + nextInfo.remote_version;
             }
@@ -728,6 +737,21 @@
         var updateProgressEl = document.getElementById('update-progress');
         if (updateProgressEl) {
             updateProgressEl.hidden = !nextInfo.update_in_progress;
+            var fill = updateProgressEl.querySelector('.update-progress-fill');
+            if (fill) {
+                if (nextInfo.update_in_progress && nextInfo.update_step > 0) {
+                    var pct = Math.min(100, Math.round((nextInfo.update_step / nextInfo.update_step_total) * 100));
+                    fill.style.animation = 'none';
+                    fill.style.marginLeft = '0';
+                    fill.style.width = pct + '%';
+                    fill.style.transition = 'width 0.6s ease';
+                } else if (nextInfo.update_in_progress) {
+                    fill.style.width = '';
+                    fill.style.marginLeft = '';
+                    fill.style.transition = '';
+                    fill.style.animation = '';
+                }
+            }
         }
 
         // Changelog text
@@ -745,6 +769,22 @@
         if (navSystemBadge) {
             navSystemBadge.hidden = !nextInfo.update_available;
             navSystemBadge.textContent = '!';
+        }
+
+        // Sidebar version dot
+        if (sidebarVersion && nextInfo.local_version) {
+            var existingDot = sidebarVersion.querySelector('.sidebar-version-dot');
+            if (nextInfo.update_available && !existingDot) {
+                var anchor = sidebarVersion.querySelector('a');
+                if (anchor) {
+                    var dotEl = document.createElement('span');
+                    dotEl.className = 'sidebar-version-dot';
+                    dotEl.title = 'Update available: v' + nextInfo.remote_version;
+                    anchor.appendChild(dotEl);
+                }
+            } else if (!nextInfo.update_available && existingDot) {
+                existingDot.remove();
+            }
         }
     }
 
@@ -2216,7 +2256,11 @@
         if (Object.prototype.hasOwnProperty.call(state.expandedJobs, job.id)) {
             return Boolean(state.expandedJobs[job.id]);
         }
-        return job.status === 'running' || job.status === 'paused' || job.status === 'cancelling';
+        return false;
+    }
+
+    function persistExpandedJobs() {
+        try { window.localStorage.setItem(expandedJobsStorageKey, JSON.stringify(state.expandedJobs)); } catch (e) { /* noop */ }
     }
 
     function pruneExpandedJobs(jobs) {
@@ -2229,6 +2273,7 @@
         });
 
         state.expandedJobs = nextExpanded;
+        persistExpandedJobs();
     }
 
     function ensureActiveQueueJob(jobs) {
@@ -2293,6 +2338,7 @@
         var isOpen = !detailRow.classList.contains('jt-detail-hidden');
         detailRow.classList.toggle('jt-detail-hidden', isOpen);
         state.expandedJobs[state.activeQueueJobId] = !isOpen;
+        persistExpandedJobs();
         updateToggleExpandButton();
     }
 
@@ -2417,6 +2463,7 @@
         updateJobsCount(filtered.length, jobs.length);
         if (!filtered.length) {
             state.expandedJobs = {};
+            persistExpandedJobs();
             state.activeQueueJobId = '';
             state.queueJobIds = [];
             state.selectedJobs.clear();
@@ -2598,6 +2645,7 @@
                         var isOpen = !detailRow.classList.contains('jt-detail-hidden');
                         detailRow.classList.toggle('jt-detail-hidden', isOpen);
                         state.expandedJobs[jobId] = !isOpen;
+                        persistExpandedJobs();
                     }
                     updateActiveQueueSelection();
                     updateToggleExpandButton();
@@ -4375,6 +4423,7 @@
             var jobId = row.dataset.detailFor;
             if (jobId) state.expandedJobs[jobId] = !collapse;
         });
+        persistExpandedJobs();
         updateToggleExpandButton();
     });
 
@@ -4626,6 +4675,7 @@
                 if (dr && dr.classList.contains('jt-detail-hidden')) {
                     dr.classList.remove('jt-detail-hidden');
                     state.expandedJobs[state.activeQueueJobId] = true;
+                    persistExpandedJobs();
                     updateToggleExpandButton();
                 }
             }
@@ -4639,6 +4689,7 @@
                 if (dr && !dr.classList.contains('jt-detail-hidden')) {
                     dr.classList.add('jt-detail-hidden');
                     state.expandedJobs[state.activeQueueJobId] = false;
+                    persistExpandedJobs();
                     updateToggleExpandButton();
                 }
             }

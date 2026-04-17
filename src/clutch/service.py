@@ -96,6 +96,9 @@ class ConversionService:
         self._update_monitor_thread: Optional[threading.Thread] = None
         self._update_lock = threading.Lock()
         self._upgrade_in_progress = False
+        self._upgrade_step = 0
+        self._upgrade_step_total = 5
+        self._upgrade_step_label = ""
         self._restart_requested = False
         self._restart_command = [sys.argv[0], *sys.argv[1:]]
         self.scheduler = ScheduleEngine()
@@ -492,6 +495,9 @@ class ConversionService:
             "changelog": str(state.get("changelog") or ""),
             "last_error": str(state.get("last_error") or ""),
             "update_in_progress": self.is_upgrade_in_progress(),
+            "update_step": self._upgrade_step,
+            "update_step_total": self._upgrade_step_total,
+            "update_step_label": self._upgrade_step_label,
         }
 
     def schedule_self_upgrade(self, shutdown_callback: Callable[[], None]) -> Dict[str, object]:
@@ -504,6 +510,8 @@ class ConversionService:
             if self._upgrade_in_progress:
                 raise ValueError("A service upgrade is already in progress.")
             self._upgrade_in_progress = True
+            self._upgrade_step = 0
+            self._upgrade_step_label = "Starting upgrade…"
 
         thread = threading.Thread(
             target=self._run_self_upgrade,
@@ -517,25 +525,39 @@ class ConversionService:
             "update_info": self.get_update_info(force_check=False),
         }
 
+    def _set_upgrade_step(self, step: int, label: str):
+        with self._update_lock:
+            self._upgrade_step = step
+            self._upgrade_step_label = label
+
     def _run_self_upgrade(self, shutdown_callback: Callable[[], None], target_version: str):
         try:
+            self._set_upgrade_step(1, "Checking legacy packages…")
             info(f"Starting self-upgrade to {target_version or 'latest'}")
+
+            self._set_upgrade_step(2, "Downloading and installing…")
             result = install_latest_version()
             if result.returncode != 0:
                 raise RuntimeError("Upgrade failed. Check the service logs for details.")
 
+            self._set_upgrade_step(3, "Verifying installation…")
             mark_update_installed(target_version or get_version())
+
+            self._set_upgrade_step(4, "Stopping service…")
             info(f"Latest version installed. Restarting {APP_NAME} service...")
 
             with self._update_lock:
                 self._restart_requested = True
 
+            self._set_upgrade_step(5, "Restarting…")
             self.stop()
             shutdown_callback()
         except Exception as exc:
             print_error(f"Self-upgrade failed: {exc}")
             with self._update_lock:
                 self._upgrade_in_progress = False
+                self._upgrade_step = 0
+                self._upgrade_step_label = ""
 
     def add_watcher(
         self,

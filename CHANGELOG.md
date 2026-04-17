@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.5] - 2026-04-17
+
+### Added in 1.7.5
+
+- **Step-based update progress**: the progress bar now shows real upgrade steps (downloading, verifying, restarting) instead of an indeterminate animation, with the current step label displayed on the button.
+- **Sidebar version dot on update check**: the update-available dot now appears immediately after checking for updates, without requiring a page reload.
+- **Persistent expanded/collapsed state**: expanded and collapsed job rows are saved to `localStorage` and restored on page reload.
+
+### Changed in 1.7.5
+
+- All jobs are now collapsed by default in the Activity table (previously running, paused and cancelling jobs auto-expanded).
+- Update progress bar animation changed from a pulsing width to a smooth sliding indicator.
+
 ## [1.7.4] - 2026-04-16
 
 ### Added in 1.7.4

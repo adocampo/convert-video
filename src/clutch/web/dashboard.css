@@ -1751,13 +1751,14 @@ button:disabled {
 .update-progress[hidden] { display: none; }
 
 .update-progress-fill {
-    animation: updatePulse 1.8s ease-in-out infinite;
+    width: 40%;
+    animation: updateSlide 1.6s ease-in-out infinite;
 }
 
-@keyframes updatePulse {
-    0%   { width: 15%; }
-    50%  { width: 85%; }
-    100% { width: 15%; }
+@keyframes updateSlide {
+    0%   { margin-left: 0; }
+    50%  { margin-left: 60%; }
+    100% { margin-left: 0; }
 }
 
 body.modal-open {
