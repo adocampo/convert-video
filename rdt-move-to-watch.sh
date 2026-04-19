@@ -49,10 +49,11 @@ classify() {
         return
     fi
 
-    # PACK, serie (case-insensitive), or S01..S99 pattern → series
+    # PACK, serie (case-insensitive), S01..S99, or Cap.NNN pattern → series
     if [[ "$name_upper" =~ PACK ]] \
     || [[ "$name_upper" =~ SERIE ]] \
-    || [[ "$name_upper" =~ S[0-9]{2,} ]]; then
+    || [[ "$name_upper" =~ S[0-9]{2,} ]] \
+    || [[ "$name_upper" =~ CAP\.[0-9]+ ]]; then
         echo "series"
         return
     fi
