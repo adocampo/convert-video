@@ -1010,10 +1010,18 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 else:
                     self._redirect_with_message(error_message=str(exc))
                 return
+            restart_pending = summary.pop("_restart_pending", False)
             if self._is_json_request():
                 self._send_json(200, summary)
             else:
                 self._redirect_with_message(notice="Settings saved.")
+            if restart_pending:
+                import threading as _threading
+                _threading.Thread(
+                    target=self.server.service.request_restart_with_port,
+                    args=(self.server.service.listen_port, self.server.shutdown),
+                    daemon=True,
+                ).start()
             return
 
         if path == "/watchers":

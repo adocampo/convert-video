@@ -287,6 +287,10 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN default_date_format TEXT NOT NULL DEFAULT ''"
                 )
+            if "listen_port" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN listen_port INTEGER NOT NULL DEFAULT 8765"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchers (
@@ -573,7 +577,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -602,6 +606,7 @@ class JobStore:
             "log_level": str(row["log_level"] or "INFO"),
             "log_retention_days": int(row["log_retention_days"] or 30),
             "default_date_format": str(row["default_date_format"] or ""),
+            "listen_port": int(row["listen_port"] or 8765),
         }
 
     def save_service_config(
@@ -614,12 +619,13 @@ class JobStore:
         log_level: str = "INFO",
         log_retention_days: int = 30,
         default_date_format: str = "",
+        listen_port: int = 8765,
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
@@ -628,7 +634,8 @@ class JobStore:
                     schedule_config_json = excluded.schedule_config_json,
                     log_level = excluded.log_level,
                     log_retention_days = excluded.log_retention_days,
-                    default_date_format = excluded.default_date_format
+                    default_date_format = excluded.default_date_format,
+                    listen_port = excluded.listen_port
                 """,
                 (
                     json.dumps(list(allowed_roots)),
@@ -639,6 +646,7 @@ class JobStore:
                     str(log_level),
                     int(log_retention_days),
                     str(default_date_format),
+                    int(listen_port),
                 ),
             )
 

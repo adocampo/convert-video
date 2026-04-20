@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.16] - 2026-04-20
+
+### Added in 1.7.16
+
+- **Configurable listen port from the UI**: the listen port field in Settings > General is now editable. Changing it saves the value persistently and automatically restarts the service on the new port, redirecting the browser.
+
 ## [1.7.15] - 2026-04-20
 
 ### Improved in 1.7.15

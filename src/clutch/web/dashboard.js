@@ -2085,6 +2085,9 @@
         var authEnabledEl = document.getElementById('general-auth-enabled');
         if (authEnabledEl) authEnabledEl.checked = Boolean(summary.auth_enabled);
 
+        var listenPortEl = document.getElementById('general-listen-port');
+        if (listenPortEl) listenPortEl.value = String(summary.listen_port || 8765);
+
         var dateFormatEl = document.getElementById('general-date-format');
         if (dateFormatEl && summary.default_date_format) dateFormatEl.value = summary.default_date_format;
         state.dateFormat = summary.default_date_format || 'YYYY-MM-DD';
@@ -4879,10 +4882,14 @@
         generalSaveBtn.addEventListener('click', async function () {
             var authEl = document.getElementById('general-auth-enabled');
             var dateEl = document.getElementById('general-date-format');
+            var portEl = document.getElementById('general-listen-port');
             var payload = {
                 auth_enabled: authEl ? authEl.checked : undefined,
                 default_date_format: dateEl ? dateEl.value : undefined,
+                listen_port: portEl ? Number(portEl.value) : undefined,
             };
+            var oldPort = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80);
+            var newPort = portEl ? Number(portEl.value) : oldPort;
             generalSaveBtn.disabled = true;
             if (generalSaveStatus) setStatus(generalSaveStatus, '');
             try {
@@ -4891,6 +4898,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                if (newPort !== oldPort) {
+                    showToast('Port changed to ' + newPort + '. Redirecting…', 'ok');
+                    setTimeout(function () {
+                        var url = window.location.protocol + '//' + window.location.hostname + ':' + newPort + window.location.pathname + window.location.hash;
+                        window.location.href = url;
+                    }, 2000);
+                    return;
+                }
                 applySummaryToForms(result);
                 renderMeta(result);
                 if (generalSaveStatus) setStatus(generalSaveStatus, 'Saved', 'ok');
@@ -5030,7 +5045,7 @@
 
     // General settings
     setupIdsDirtyTracking('general-settings', [
-        'general-auth-enabled', 'general-date-format',
+        'general-auth-enabled', 'general-date-format', 'general-listen-port',
     ], document.getElementById('general-settings-save'));
 
     // Log settings

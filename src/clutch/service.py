@@ -134,6 +134,7 @@ class ConversionService:
             self.log_level = "INFO"
             self.log_retention_days = 30
             self.default_date_format = ""
+            self.listen_port = 8765
             schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
             self.scheduler.update_config(schedule_cfg)
             self.store.save_service_config(
@@ -145,6 +146,7 @@ class ConversionService:
                 self.log_level,
                 self.log_retention_days,
                 self.default_date_format,
+                self.listen_port,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -162,6 +164,7 @@ class ConversionService:
             self.log_level = str(persisted_config.get("log_level") or "INFO")
             self.log_retention_days = int(persisted_config.get("log_retention_days") or 30)
             self.default_date_format = str(persisted_config.get("default_date_format") or "")
+            self.listen_port = int(persisted_config.get("listen_port") or 8765)
             schedule_raw = persisted_config.get("schedule_config") or {}
             self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
 
@@ -485,6 +488,29 @@ class ConversionService:
     def get_restart_command(self) -> List[str]:
         with self._update_lock:
             return list(self._restart_command)
+
+    def request_restart_with_port(self, new_port: int, shutdown_callback):
+        """Schedule a service restart with the updated listen port."""
+        cmd = list(self._restart_command)
+        # Replace or append --listen-port in the restart command
+        found = False
+        for i, arg in enumerate(cmd):
+            if arg == "--listen-port" and i + 1 < len(cmd):
+                cmd[i + 1] = str(new_port)
+                found = True
+                break
+            if arg.startswith("--listen-port="):
+                cmd[i] = f"--listen-port={new_port}"
+                found = True
+                break
+        if not found:
+            cmd.extend(["--listen-port", str(new_port)])
+        with self._update_lock:
+            self._restart_command = cmd
+            self._restart_requested = True
+        info(f"Port changed to {new_port}. Restarting service...")
+        self.stop()
+        shutdown_callback()
 
     def get_update_info(self, *, force_check: bool = False) -> Dict[str, object]:
         state = get_update_state(force=force_check, quiet=True)
@@ -858,6 +884,17 @@ class ConversionService:
             if fmt in ("", "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"):
                 self.default_date_format = fmt
 
+        # Update listen port if present in payload
+        port_changed = False
+        if "listen_port" in payload:
+            try:
+                new_port = int(payload.get("listen_port") or 8765)
+                if 1 <= new_port <= 65535 and new_port != self.listen_port:
+                    self.listen_port = new_port
+                    port_changed = True
+            except (TypeError, ValueError):
+                pass
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
@@ -867,6 +904,7 @@ class ConversionService:
             self.log_level,
             self.log_retention_days,
             self.default_date_format,
+            self.listen_port,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -874,7 +912,13 @@ class ConversionService:
         # Apply log level change at runtime
         set_log_level(self.log_level)
 
-        return self.get_service_summary()
+        summary = self.get_service_summary()
+
+        # If port changed, schedule a service restart with the new port
+        if port_changed:
+            summary["_restart_pending"] = True
+
+        return summary
 
     def _validate_path(
         self,
@@ -1289,6 +1333,7 @@ class ConversionService:
             "log_retention_days": self.log_retention_days,
             "auth_enabled": self.auth.is_auth_enabled(),
             "default_date_format": self.default_date_format,
+            "listen_port": self.listen_port,
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:
@@ -1854,8 +1899,12 @@ def run_service(
     service.start()
     service.start_watchers()
 
-    server = ConversionHTTPServer((bind_host, port), ServiceRequestHandler, service)
-    info(f"Service listening on http://{bind_host}:{port}")
+    # Use persisted port if available (UI may have changed it)
+    effective_port = service.listen_port if service.has_persisted_configuration() else port
+    service.listen_port = effective_port
+
+    server = ConversionHTTPServer((bind_host, effective_port), ServiceRequestHandler, service)
+    info(f"Service listening on http://{bind_host}:{effective_port}")
     info(f"Job database: {os.path.abspath(db_path)}")
     try:
         server.serve_forever()

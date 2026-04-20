@@ -658,9 +658,9 @@
                     <div class="field-row">
                         <label class="field-row-label">Listen port</label>
                         <div class="field-row-control">
-                            <input id="general-listen-port" type="number" disabled
-                                title="Change via CLI --port flag. Requires restart.">
-                            <p class="field-row-help">Configured via CLI flag. Requires service restart to change.</p>
+                            <input id="general-listen-port" type="number" min="1" max="65535"
+                                title="Port the service listens on. Changing this will restart the service.">
+                            <p class="field-row-help">Changing the port will restart the service automatically.</p>
                         </div>
                     </div>
                     <div class="field-row">
