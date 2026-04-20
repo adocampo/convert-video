@@ -7,6 +7,7 @@
     <title>clutch service</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/assets/dashboard.css">
+    <script src="/assets/i18n.js"></script>
 </head>
 
 <body>
@@ -14,14 +15,14 @@
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
             <img class="sidebar-logo" src="/assets/clutch.png" alt="Clutch logo">
-            <span class="sidebar-title">Clutch</span>
+            <span class="sidebar-title" data-i18n="nav.brand">Clutch</span>
         </div>
         <ul class="sidebar-nav">
             <li><a class="sidebar-link" href="#activity" data-page="activity" data-label="Activity">
                     <svg class="sidebar-icon" viewBox="0 0 24 24">
                         <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
                     </svg>
-                    <span class="sidebar-label">Activity</span>
+                    <span class="sidebar-label" data-i18n="nav.activity">Activity</span>
                     <span class="sidebar-badge" id="nav-activity-badge" hidden></span>
                 </a></li>
             <li><a class="sidebar-link" href="#jobs" data-page="jobs" data-label="Jobs">
@@ -32,21 +33,21 @@
                         <line x1="16" y1="17" x2="8" y2="17"></line>
                         <line x1="10" y1="9" x2="8" y2="9"></line>
                     </svg>
-                    <span class="sidebar-label">Jobs</span>
+                    <span class="sidebar-label" data-i18n="nav.jobs">Jobs</span>
                 </a></li>
             <li><a class="sidebar-link" href="#watchers" data-page="watchers" data-label="Watchers">
                     <svg class="sidebar-icon" viewBox="0 0 24 24">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
                     </svg>
-                    <span class="sidebar-label">Watchers</span>
+                    <span class="sidebar-label" data-i18n="nav.watchers">Watchers</span>
                 </a></li>
             <li><a class="sidebar-link" href="#schedule" data-page="schedule" data-label="Schedule">
                     <svg class="sidebar-icon" viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
-                    <span class="sidebar-label">Schedule</span>
+                    <span class="sidebar-label" data-i18n="nav.schedule">Schedule</span>
                 </a></li>
 
             <!-- Settings group (admin only) -->
@@ -58,35 +59,39 @@
                         </path>
                         <circle cx="12" cy="12" r="3"></circle>
                     </svg>
-                    <span class="sidebar-label">Settings</span>
+                    <span class="sidebar-label" data-i18n="nav.settings">Settings</span>
                     <svg class="sidebar-chevron" viewBox="0 0 24 24">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </button>
                 <ul class="sidebar-sub">
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/general" data-page="settings/general">
-                            <span class="sidebar-label">General</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.general">General</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/media" data-page="settings/media">
-                            <span class="sidebar-label">Media Defaults</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.media">Media Defaults</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/smtp" data-page="settings/smtp">
-                            <span class="sidebar-label">SMTP</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.smtp">SMTP</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/notifications"
                             data-page="settings/notifications">
-                            <span class="sidebar-label">Notifications</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.notifications">Notifications</span></a>
+                    </li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/logs" data-page="settings/logs">
-                            <span class="sidebar-label">Logs</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.logs">Logs</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/user" data-page="settings/user">
-                            <span class="sidebar-label">User</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.settings.user">User</span></a></li>
                 </ul>
                 <!-- Flyout for collapsed sidebar -->
                 <div class="sidebar-flyout">
-                    <div class="sidebar-flyout-title">Settings</div>
-                    <a href="#settings/general" data-page="settings/general">General</a>
-                    <a href="#settings/media" data-page="settings/media">Media Defaults</a>
-                    <a href="#settings/smtp" data-page="settings/smtp">SMTP</a>
-                    <a href="#settings/notifications" data-page="settings/notifications">Notifications</a>
-                    <a href="#settings/logs" data-page="settings/logs">Logs</a>
-                    <a href="#settings/user" data-page="settings/user">User</a>
+                    <div class="sidebar-flyout-title" data-i18n="nav.settings">Settings</div>
+                    <a href="#settings/general" data-page="settings/general"
+                        data-i18n="nav.settings.general">General</a>
+                    <a href="#settings/media" data-page="settings/media" data-i18n="nav.settings.media">Media
+                        Defaults</a>
+                    <a href="#settings/smtp" data-page="settings/smtp" data-i18n="nav.settings.smtp">SMTP</a>
+                    <a href="#settings/notifications" data-page="settings/notifications"
+                        data-i18n="nav.settings.notifications">Notifications</a>
+                    <a href="#settings/logs" data-page="settings/logs" data-i18n="nav.settings.logs">Logs</a>
+                    <a href="#settings/user" data-page="settings/user" data-i18n="nav.settings.user">User</a>
                 </div>
             </li>
 
@@ -98,7 +103,7 @@
                         <line x1="8" y1="21" x2="16" y2="21"></line>
                         <line x1="12" y1="17" x2="12" y2="21"></line>
                     </svg>
-                    <span class="sidebar-label">System</span>
+                    <span class="sidebar-label" data-i18n="nav.system">System</span>
                     <span class="sidebar-badge" id="nav-system-badge" hidden></span>
                     <svg class="sidebar-chevron" viewBox="0 0 24 24">
                         <polyline points="6 9 12 15 18 9"></polyline>
@@ -106,31 +111,32 @@
                 </button>
                 <ul class="sidebar-sub">
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/users" data-page="system/users">
-                            <span class="sidebar-label">Users</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.system.users">Users</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/logs" data-page="system/logs">
-                            <span class="sidebar-label">Logs</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.system.logs">Logs</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/tasks" data-page="system/tasks">
-                            <span class="sidebar-label">Tasks</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.system.tasks">Tasks</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/changelog" data-page="system/changelog">
-                            <span class="sidebar-label">Changelog</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.system.changelog">Changelog</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#system/about" data-page="system/about">
-                            <span class="sidebar-label">About</span></a></li>
+                            <span class="sidebar-label" data-i18n="nav.system.about">About</span></a></li>
                 </ul>
                 <!-- Flyout for collapsed sidebar -->
                 <div class="sidebar-flyout">
-                    <div class="sidebar-flyout-title">System</div>
-                    <a href="#system/users" data-page="system/users">Users</a>
-                    <a href="#system/logs" data-page="system/logs">Logs</a>
-                    <a href="#system/tasks" data-page="system/tasks">Tasks</a>
-                    <a href="#system/changelog" data-page="system/changelog">Changelog</a>
-                    <a href="#system/about" data-page="system/about">About</a>
+                    <div class="sidebar-flyout-title" data-i18n="nav.system">System</div>
+                    <a href="#system/users" data-page="system/users" data-i18n="nav.system.users">Users</a>
+                    <a href="#system/logs" data-page="system/logs" data-i18n="nav.system.logs">Logs</a>
+                    <a href="#system/tasks" data-page="system/tasks" data-i18n="nav.system.tasks">Tasks</a>
+                    <a href="#system/changelog" data-page="system/changelog"
+                        data-i18n="nav.system.changelog">Changelog</a>
+                    <a href="#system/about" data-page="system/about" data-i18n="nav.system.about">About</a>
                 </div>
             </li>
         </ul>
         <div class="sidebar-footer">
             <div class="sidebar-user" id="sidebar-user" hidden>
                 <div class="sidebar-user-info-row" id="sidebar-user-toggle" role="button" tabindex="0"
-                    title="User menu">
+                    data-i18n-title="nav.user_menu_title" title="User menu">
                     <span class="user-avatar user-avatar-sm" id="sidebar-avatar"></span>
                     <div class="sidebar-user-info">
                         <span class="sidebar-user-name" id="sidebar-user-name"></span>
@@ -146,7 +152,7 @@
                             </path>
                             <circle cx="12" cy="12" r="3"></circle>
                         </svg>
-                        <span>Settings</span>
+                        <span data-i18n="nav.user_settings">Settings</span>
                     </a>
                     <button class="sidebar-user-popup-item" type="button" id="sidebar-sign-out-btn">
                         <svg viewBox="0 0 24 24">
@@ -154,7 +160,7 @@
                             <polyline points="16 17 21 12 16 7"></polyline>
                             <line x1="21" y1="12" x2="9" y2="12"></line>
                         </svg>
-                        <span>Sign out</span>
+                        <span data-i18n="nav.sign_out">Sign out</span>
                     </button>
                 </div>
             </div>
@@ -165,14 +171,15 @@
 
     <!-- ── Mobile top bar ── -->
     <header class="topbar" id="topbar">
-        <button class="topbar-hamburger" type="button" id="sidebar-toggle" aria-label="Toggle navigation">
+        <button class="topbar-hamburger" type="button" id="sidebar-toggle" data-i18n-title="nav.toggle_navigation"
+            aria-label="Toggle navigation">
             <svg viewBox="0 0 24 24">
                 <line x1="3" y1="6" x2="21" y2="6"></line>
                 <line x1="3" y1="12" x2="21" y2="12"></line>
                 <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
         </button>
-        <span class="topbar-title">Clutch</span>
+        <span class="topbar-title" data-i18n="nav.brand">Clutch</span>
     </header>
 
     <!-- ── Main content area ── -->
@@ -182,30 +189,41 @@
         <section class="page" id="page-activity" data-page="activity">
             <div class="page-inner">
                 <div class="jobs-header">
-                    <h2>Activity</h2>
+                    <h2 data-i18n="activity.title">Activity</h2>
                     <div class="bulk-actions" id="bulk-actions">
                         <span class="bulk-actions-count" id="bulk-actions-count">0 selected</span>
                         <button class="ghost" type="button" id="bulk-cancel"
-                            title="Cancel selected jobs">Cancel</button>
-                        <button class="ghost" type="button" id="bulk-retry" title="Retry selected jobs">Retry</button>
-                        <button class="ghost" type="button" id="bulk-clear" title="Remove selected jobs">Clear</button>
-                        <button class="ghost" type="button" id="bulk-deselect" title="Deselect all">Deselect
+                            data-i18n-title="activity.bulk_cancel_title" title="Cancel selected jobs"
+                            data-i18n="activity.bulk_cancel">Cancel</button>
+                        <button class="ghost" type="button" id="bulk-retry" data-i18n-title="activity.bulk_retry_title"
+                            title="Retry selected jobs" data-i18n="activity.bulk_retry">Retry</button>
+                        <button class="ghost" type="button" id="bulk-clear" data-i18n-title="activity.bulk_clear_title"
+                            title="Remove selected jobs" data-i18n="activity.bulk_clear">Clear</button>
+                        <button class="ghost" type="button" id="bulk-deselect"
+                            data-i18n="activity.bulk_deselect">Deselect
                             all</button>
                     </div>
                     <div class="jobs-header-actions">
                         <button class="ghost" type="button" id="toggle-expand-jobs"
-                            title="Expand or collapse all job details.">Collapse all</button>
+                            data-i18n-title="activity.expand_collapse_title" title="Expand or collapse all job details."
+                            data-i18n="activity.collapse_all">Collapse all</button>
                         <div class="dropdown" id="clear-jobs-dropdown">
                             <button class="ghost" type="button" id="clear-jobs"
-                                title="Remove jobs from the queue list.">Clear queue &#x25BE;</button>
+                                data-i18n-title="activity.clear_queue_title" title="Remove jobs from the queue list.">
+                                <span data-i18n="activity.clear_queue">Clear queue</span> &#x25BE;</button>
                             <div class="dropdown-menu" hidden>
                                 <button type="button" data-clear-mode="finished"
-                                    title="Remove succeeded, failed, cancelled and skipped jobs.">Clear
+                                    data-i18n-title="activity.clear_finished_title"
+                                    title="Remove succeeded, failed, cancelled and skipped jobs."
+                                    data-i18n="activity.clear_finished">Clear
                                     finished</button>
-                                <button type="button" data-clear-mode="queued" title="Remove queued jobs only.">Clear
+                                <button type="button" data-clear-mode="queued"
+                                    data-i18n-title="activity.clear_queued_title" title="Remove queued jobs only."
+                                    data-i18n="activity.clear_queued">Clear
                                     queued</button>
-                                <button type="button" data-clear-mode="all"
-                                    title="Remove everything except running, paused and cancelling jobs.">Clear
+                                <button type="button" data-clear-mode="all" data-i18n-title="activity.clear_all_title"
+                                    title="Remove everything except running, paused and cancelling jobs."
+                                    data-i18n="activity.clear_all">Clear
                                     all</button>
                             </div>
                         </div>
@@ -215,21 +233,24 @@
                 </div>
                 <div class="jobs-filters">
                     <div class="filter-input-wrap">
-                        <input id="jobs-filter-text" type="search" placeholder="Filter by filename"
+                        <input id="jobs-filter-text" type="search" data-i18n-placeholder="activity.filter_placeholder"
+                            placeholder="Filter by filename" data-i18n-title="activity.filter_title"
                             title="Type to filter the queue by filename.">
-                        <button class="filter-clear-btn" type="button" id="jobs-filter-clear" title="Clear filter"><span
-                                class="filter-clear-label">Clear</span><span
+                        <button class="filter-clear-btn" type="button" id="jobs-filter-clear"
+                            data-i18n-title="activity.filter_clear_title" title="Clear filter"><span
+                                class="filter-clear-label" data-i18n="activity.filter_clear">Clear</span><span
                                 class="filter-clear-icon">&times;</span></button>
                     </div>
-                    <select id="jobs-filter-status" title="Filter the queue by job status.">
-                        <option value="">All statuses</option>
-                        <option value="running">Running</option>
-                        <option value="paused">Paused</option>
-                        <option value="queued">Queued</option>
-                        <option value="failed">Failed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="skipped">Skipped</option>
-                        <option value="succeeded">Succeeded</option>
+                    <select id="jobs-filter-status" data-i18n-title="activity.status_filter_title"
+                        title="Filter the queue by job status.">
+                        <option value="" data-i18n="activity.status_all">All statuses</option>
+                        <option value="running" data-i18n="activity.status_running">Running</option>
+                        <option value="paused" data-i18n="activity.status_paused">Paused</option>
+                        <option value="queued" data-i18n="activity.status_queued">Queued</option>
+                        <option value="failed" data-i18n="activity.status_failed">Failed</option>
+                        <option value="cancelled" data-i18n="activity.status_cancelled">Cancelled</option>
+                        <option value="skipped" data-i18n="activity.status_skipped">Skipped</option>
+                        <option value="succeeded" data-i18n="activity.status_succeeded">Succeeded</option>
                     </select>
                     <span class="jobs-count" id="jobs-count"></span>
                 </div>
@@ -240,84 +261,102 @@
         <!-- ── Jobs page (New Job form) ── -->
         <section class="page" id="page-jobs" data-page="jobs" hidden>
             <div class="page-inner page-narrow">
-                <h2>New Job</h2>
+                <h2 data-i18n="jobs.title">New Job</h2>
                 <form id="job-form" method="post" action="/jobs">
 
                     <div class="field-row">
-                        <label class="field-row-label">Source path</label>
+                        <label class="field-row-label" data-i18n="jobs.source_label">Source path</label>
                         <div class="field-row-control">
-                            <input id="input-file" name="input_file" placeholder="Choose a file or folder on the source"
+                            <input id="input-file" name="input_file" data-i18n-placeholder="jobs.source_placeholder"
+                                placeholder="Choose a file or folder on the source" data-i18n-title="jobs.source_title"
                                 title="Source file or folder to convert." readonly required>
                             <input id="input-kind" name="input_kind" type="hidden" value="file">
                             <div class="actions">
                                 <button class="secondary" type="button" id="browse-input-file"
-                                    title="Browse the source and pick a single file.">Choose file</button>
+                                    data-i18n-title="jobs.choose_file_title"
+                                    title="Browse the source and pick a single file."
+                                    data-i18n="jobs.choose_file">Choose file</button>
                                 <button class="secondary" type="button" id="browse-input-directory"
-                                    title="Browse the source and pick a folder.">Choose folder</button>
+                                    data-i18n-title="jobs.choose_folder_title"
+                                    title="Browse the source and pick a folder." data-i18n="jobs.choose_folder">Choose
+                                    folder</button>
                                 <button class="ghost" type="button" id="clear-input-file"
-                                    title="Clear the current source selection.">Clear</button>
+                                    data-i18n-title="jobs.clear_source_title"
+                                    title="Clear the current source selection." data-i18n="jobs.clear">Clear</button>
                                 <label class="toggle-inline" id="recursive-toggle-inline" hidden
                                     title="Include files from subdirectories.">
                                     <span class="toggle-switch">
                                         <input id="input-recursive" type="checkbox" name="recursive">
                                         <span class="toggle-slider"></span>
                                     </span>
-                                    <span class="toggle-inline-label">Include subdirectories</span>
+                                    <span class="toggle-inline-label" data-i18n="jobs.include_subdirectories">Include
+                                        subdirectories</span>
                                 </label>
                             </div>
-                            <p class="small picker-help" id="input-selection-hint">Choose a single file or a
-                                folder on the source.</p>
+                            <p class="small picker-help" id="input-selection-hint" data-i18n="jobs.hint_choose">Choose a
+                                single file or a
+                                folder on the source. Folders support glob filtering.</p>
                         </div>
                     </div>
 
                     <div class="field-row" id="filter-pattern-row" hidden>
-                        <label class="field-row-label">Filter</label>
+                        <label class="field-row-label" data-i18n="jobs.filter_label">Filter</label>
                         <div class="field-row-control">
                             <input id="input-filter-pattern" name="filter_pattern" type="text"
-                                placeholder="e.g. *T6xC[2-3]* or season01"
+                                data-i18n-placeholder="jobs.filter_placeholder"
+                                placeholder="e.g. *T6xC[2-3]* or season01" data-i18n-title="jobs.filter_title"
                                 title="Only convert files matching this pattern. Supports glob wildcards and character ranges.">
-                            <p class="field-row-help">Glob: <code>*</code> any text, <code>?</code> single char,
+                            <p class="field-row-help" data-i18n="jobs.filter_help">Glob: <code>*</code> any text,
+                                <code>?</code> single char,
                                 <code>[2-5]</code> range, <code>[abc]</code> set. Plain text = substring match.
                             </p>
                         </div>
                     </div>
 
                     <div class="field-row" id="filter-preview-row" hidden>
-                        <label class="field-row-label">Matches</label>
+                        <label class="field-row-label" data-i18n="jobs.matches_label">Matches</label>
                         <div class="field-row-control">
                             <div id="filter-preview" class="filter-preview"></div>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Destination directory</label>
+                        <label class="field-row-label" data-i18n="jobs.dest_label">Destination directory</label>
                         <div class="field-row-control">
                             <div class="path-row">
                                 <div class="path-picker">
                                     <input id="output-dir" name="output_dir"
+                                        data-i18n-placeholder="jobs.dest_placeholder"
                                         placeholder="Leave empty to write next to source"
+                                        data-i18n-title="jobs.dest_title"
                                         title="Destination directory for converted files." readonly>
                                     <div class="actions">
                                         <button class="secondary" type="button" id="browse-output-dir"
-                                            title="Browse and choose a destination directory.">Choose folder</button>
+                                            data-i18n-title="jobs.dest_choose_folder_title"
+                                            title="Browse and choose a destination directory."
+                                            data-i18n="jobs.dest_choose_folder">Choose folder</button>
                                         <button class="ghost" type="button" id="clear-output-dir"
-                                            title="Clear the destination directory.">Clear</button>
+                                            data-i18n-title="jobs.dest_clear_title"
+                                            title="Clear the destination directory."
+                                            data-i18n="jobs.dest_clear">Clear</button>
                                     </div>
                                 </div>
-                                <label class="check check-inline"
+                                <label class="check check-inline" data-i18n-title="jobs.create_dir_if_missing_title"
                                     title="Create the destination directory if it does not exist."><input
-                                        type="checkbox" name="create_directory">Create directory if missing</label>
+                                        type="checkbox" name="create_directory"><span
+                                        data-i18n="jobs.create_dir_if_missing">Create directory if
+                                        missing</span></label>
                             </div>
                         </div>
                     </div>
 
                     <fieldset class="options-section">
-                        <legend>Options</legend>
+                        <legend data-i18n="jobs.options_legend">Options</legend>
 
                         <div class="field-row">
-                            <label class="field-row-label">Codec</label>
+                            <label class="field-row-label" data-i18n="jobs.codec_label">Codec</label>
                             <div class="field-row-control">
-                                <select name="codec" title="Encoder profile.">
+                                <select name="codec" data-i18n-title="jobs.codec_title" title="Encoder profile.">
                                     <option value="nvenc_h265">nvenc_h265</option>
                                     <option value="nvenc_h264">nvenc_h264</option>
                                     <option value="av1">av1</option>
@@ -327,54 +366,61 @@
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Speed</label>
+                            <label class="field-row-label" data-i18n="jobs.speed_label">Speed</label>
                             <div class="field-row-control">
-                                <select name="encode_speed" title="Encoding preset.">
-                                    <option value="normal">normal</option>
-                                    <option value="slow">slow</option>
-                                    <option value="fast">fast</option>
+                                <select name="encode_speed" data-i18n-title="jobs.speed_title" title="Encoding preset.">
+                                    <option value="normal" data-i18n="speed.normal">normal</option>
+                                    <option value="slow" data-i18n="speed.slow">slow</option>
+                                    <option value="fast" data-i18n="speed.fast">fast</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Audio passthrough</label>
+                            <label class="field-row-label" data-i18n="jobs.audio_passthrough_label">Audio
+                                passthrough</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Keep original audio tracks."><input
-                                        type="checkbox" name="audio_passthrough">Keep original audio tracks</label>
+                                <label class="check check-inline" data-i18n-title="jobs.audio_passthrough_title"
+                                    title="Keep original audio tracks."><input type="checkbox"
+                                        name="audio_passthrough"><span data-i18n="jobs.audio_passthrough_check">Keep
+                                        original audio tracks</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Delete source</label>
+                            <label class="field-row-label" data-i18n="jobs.delete_source_label">Delete source</label>
                             <div class="field-row-control">
-                                <label class="check check-inline"
+                                <label class="check check-inline" data-i18n-title="jobs.delete_source_title"
                                     title="Delete source after successful conversion."><input type="checkbox"
-                                        name="delete_source">Delete source file on success</label>
+                                        name="delete_source"><span data-i18n="jobs.delete_source_check">Delete source
+                                        file on success</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Force conversion</label>
+                            <label class="field-row-label" data-i18n="jobs.force_label">Force conversion</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Queue even if already converted."><input
-                                        type="checkbox" name="force">Convert even if already encoded</label>
+                                <label class="check check-inline" data-i18n-title="jobs.force_title"
+                                    title="Queue even if already converted."><input type="checkbox" name="force"><span
+                                        data-i18n="jobs.force_check">Convert even if already encoded</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Verbose output</label>
+                            <label class="field-row-label" data-i18n="jobs.verbose_label">Verbose output</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Verbose HandBrake output."><input
-                                        type="checkbox" name="verbose">Show detailed HandBrake output</label>
+                                <label class="check check-inline" data-i18n-title="jobs.verbose_title"
+                                    title="Verbose HandBrake output."><input type="checkbox" name="verbose"><span
+                                        data-i18n="jobs.verbose_check">Show detailed HandBrake output</span></label>
                             </div>
                         </div>
                     </fieldset>
 
                     <div class="actions actions-centered">
-                        <button class="primary" type="submit" id="submit-button"
-                            title="Add the current source to the queue.">Queue job</button>
-                        <button class="secondary" type="button" id="refresh-button" title="Refresh the queue.">Refresh
+                        <button class="primary" type="submit" id="submit-button" data-i18n-title="jobs.submit_title"
+                            title="Add the current source to the queue." data-i18n="jobs.submit">Queue job</button>
+                        <button class="secondary" type="button" id="refresh-button" data-i18n-title="jobs.refresh_title"
+                            title="Refresh the queue." data-i18n="jobs.refresh">Refresh
                             jobs</button>
                     </div>
                     <div class="status-line" id="form-status"></div>
@@ -385,85 +431,104 @@
         <!-- ── Watchers page ── -->
         <section class="page" id="page-watchers" data-page="watchers" hidden>
             <div class="page-inner page-narrow">
-                <h2>Watchers</h2>
+                <h2 data-i18n="watchers.title">Watchers</h2>
                 <form id="watcher-form" method="post" action="/watchers">
 
                     <div class="field-row">
-                        <label class="field-row-label">Source directory</label>
+                        <label class="field-row-label" data-i18n="watchers.source_label">Source directory</label>
                         <div class="field-row-control">
                             <div class="path-picker">
                                 <input id="watcher-directory" name="directory"
-                                    placeholder="Choose a directory on the source" title="Source directory to monitor."
+                                    data-i18n-placeholder="watchers.source_placeholder"
+                                    placeholder="Choose a directory on the source"
+                                    data-i18n-title="watchers.source_title" title="Source directory to monitor."
                                     readonly required>
                                 <div class="actions">
                                     <button class="secondary" type="button" id="browse-watcher-directory"
-                                        title="Browse and choose a directory to watch.">Choose folder</button>
+                                        data-i18n-title="watchers.choose_folder_title"
+                                        title="Browse and choose a directory to watch."
+                                        data-i18n="watchers.choose_folder">Choose folder</button>
                                     <button class="ghost" type="button" id="clear-watcher-directory"
-                                        title="Clear the current watcher directory.">Clear</button>
+                                        data-i18n-title="watchers.clear_title"
+                                        title="Clear the current watcher directory."
+                                        data-i18n="watchers.clear">Clear</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Poll interval</label>
+                        <label class="field-row-label" data-i18n="watchers.poll_label">Poll interval</label>
                         <div class="field-row-control">
                             <input name="poll_interval" type="number" min="1" step="1" value="5"
-                                title="Seconds between scans for new files.">
-                            <p class="field-row-help">Seconds between scans for new files.</p>
+                                data-i18n-title="watchers.poll_title" title="Seconds between scans for new files.">
+                            <p class="field-row-help" data-i18n="watchers.poll_help">Seconds between scans for new
+                                files.</p>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Settle time</label>
+                        <label class="field-row-label" data-i18n="watchers.settle_label">Settle time</label>
                         <div class="field-row-control">
                             <input name="settle_time" type="number" min="1" step="1" value="30"
+                                data-i18n-title="watchers.settle_title"
                                 title="Seconds a file must stay unchanged before queuing.">
-                            <p class="field-row-help">Seconds a file must stay unchanged before queuing.</p>
+                            <p class="field-row-help" data-i18n="watchers.settle_help">Seconds a file must stay
+                                unchanged before queuing.</p>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Recursive watch</label>
+                        <label class="field-row-label" data-i18n="watchers.recursive_label">Recursive watch</label>
                         <div class="field-row-control">
-                            <label class="check check-inline" title="Monitor subdirectories too."><input type="checkbox"
-                                    name="recursive">Monitor subdirectories</label>
+                            <label class="check check-inline" data-i18n-title="watchers.recursive_title"
+                                title="Monitor subdirectories too."><input type="checkbox" name="recursive"><span
+                                    data-i18n="watchers.recursive_check">Monitor subdirectories</span></label>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Delete source</label>
+                        <label class="field-row-label" data-i18n="watchers.delete_source_label">Delete source</label>
                         <div class="field-row-control">
-                            <label class="check check-inline" title="Delete source after successful conversion."><input
-                                    type="checkbox" name="delete_source">Delete source on success</label>
+                            <label class="check check-inline" data-i18n-title="watchers.delete_source_title"
+                                title="Delete source after successful conversion."><input type="checkbox"
+                                    name="delete_source"><span data-i18n="watchers.delete_source_check">Delete source on
+                                    success</span></label>
                         </div>
                     </div>
 
                     <fieldset class="options-section" id="watcher-overrides">
-                        <legend>Conversion overrides</legend>
+                        <legend data-i18n="watchers.overrides_legend">Conversion overrides</legend>
 
                         <div class="field-row">
-                            <label class="field-row-label">Output directory</label>
+                            <label class="field-row-label" data-i18n="watchers.output_dir_label">Output
+                                directory</label>
                             <div class="field-row-control">
                                 <div class="path-picker">
                                     <input id="watcher-output-dir" name="output_dir"
+                                        data-i18n-placeholder="watchers.output_dir_placeholder"
                                         placeholder="Leave empty to use default"
+                                        data-i18n-title="watchers.output_dir_title"
                                         title="Override the output directory for this watcher." readonly>
                                     <div class="actions">
                                         <button class="secondary" type="button" id="browse-watcher-output-dir"
-                                            title="Browse and choose an output directory.">Choose folder</button>
+                                            data-i18n-title="watchers.output_choose_title"
+                                            title="Browse and choose an output directory."
+                                            data-i18n="watchers.choose_folder">Choose folder</button>
                                         <button class="ghost" type="button" id="clear-watcher-output-dir"
-                                            title="Clear the override.">Clear</button>
+                                            data-i18n-title="watchers.output_clear_title" title="Clear the override."
+                                            data-i18n="watchers.clear">Clear</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Codec</label>
+                            <label class="field-row-label" data-i18n="watchers.codec_label">Codec</label>
                             <div class="field-row-control">
-                                <select name="codec" title="Override the encoder for this watcher.">
-                                    <option value="">Use default</option>
+                                <select name="codec" data-i18n-title="watchers.codec_title"
+                                    title="Override the encoder for this watcher.">
+                                    <option value="" data-i18n="watchers.codec_default">Use default</option>
                                     <option value="nvenc_h265">nvenc_h265</option>
                                     <option value="nvenc_h264">nvenc_h264</option>
                                     <option value="av1">av1</option>
@@ -473,40 +538,48 @@
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Encode speed</label>
+                            <label class="field-row-label" data-i18n="watchers.speed_label">Encode speed</label>
                             <div class="field-row-control">
-                                <select name="encode_speed" title="Override the encoding preset.">
-                                    <option value="">Use default</option>
-                                    <option value="normal">normal</option>
-                                    <option value="slow">slow</option>
-                                    <option value="fast">fast</option>
+                                <select name="encode_speed" data-i18n-title="watchers.speed_title"
+                                    title="Override the encoding preset.">
+                                    <option value="" data-i18n="watchers.speed_default">Use default</option>
+                                    <option value="normal" data-i18n="speed.normal">normal</option>
+                                    <option value="slow" data-i18n="speed.slow">slow</option>
+                                    <option value="fast" data-i18n="speed.fast">fast</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Audio passthrough</label>
+                            <label class="field-row-label" data-i18n="watchers.audio_passthrough_label">Audio
+                                passthrough</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Override audio passthrough."><input
-                                        type="checkbox" name="audio_passthrough" id="watcher-audio-passthrough">Audio
-                                    passthrough</label>
+                                <label class="check check-inline" title="Override audio passthrough."
+                                    data-i18n-title="watchers.audio_passthrough_title"><input type="checkbox"
+                                        name="audio_passthrough" id="watcher-audio-passthrough"><span
+                                        data-i18n="watchers.audio_passthrough_check">Audio
+                                        passthrough</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Force re-encode</label>
+                            <label class="field-row-label" data-i18n="watchers.force_label">Force re-encode</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Override force re-encode."><input
-                                        type="checkbox" name="force" id="watcher-force">Force re-encode</label>
+                                <label class="check check-inline" title="Override force re-encode."
+                                    data-i18n-title="watchers.force_title"><input type="checkbox" name="force"
+                                        id="watcher-force"><span data-i18n="watchers.force_check">Force
+                                        re-encode</span></label>
                             </div>
                         </div>
                     </fieldset>
 
                     <div class="actions actions-centered">
                         <button class="secondary" type="submit" id="watcher-button"
-                            title="Start monitoring this directory.">Add watcher</button>
+                            data-i18n-title="watchers.submit_title" title="Start monitoring this directory."
+                            data-i18n="watchers.submit_add">Add watcher</button>
                         <button class="ghost" type="button" id="cancel-edit-watcher"
-                            title="Cancel editing and reset the form." hidden>Cancel</button>
+                            data-i18n-title="watchers.cancel_edit_title" title="Cancel editing and reset the form."
+                            data-i18n="watchers.cancel_edit" hidden>Cancel</button>
                     </div>
                     <div class="status-line" id="watcher-status"></div>
                 </form>
@@ -517,119 +590,141 @@
         <!-- ── Schedule page ── -->
         <section class="page" id="page-schedule" data-page="schedule" hidden>
             <div class="page-inner page-narrow">
-                <h2>Schedule</h2>
+                <h2 data-i18n="schedule.title">Schedule</h2>
                 <div class="schedule-status-bar" id="schedule-status-bar"></div>
 
                 <fieldset class="options-section">
-                    <legend>General</legend>
+                    <legend data-i18n="schedule.general_legend">General</legend>
 
                     <div class="field-row">
-                        <label class="field-row-label">Enable schedule</label>
+                        <label class="field-row-label" data-i18n="schedule.enabled_label">Enable schedule</label>
                         <div class="field-row-control">
-                            <label class="check check-inline" title="Enable the conversion schedule."><input
-                                    id="schedule-enabled" type="checkbox">Enable schedule</label>
+                            <label class="check check-inline" title="Enable the conversion schedule."
+                                data-i18n-title="schedule.enabled_title"><input id="schedule-enabled"
+                                    type="checkbox"><span data-i18n="schedule.enabled_check">Enable
+                                    schedule</span></label>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Schedule mode</label>
+                        <label class="field-row-label" data-i18n="schedule.mode_label">Schedule mode</label>
                         <div class="field-row-control">
-                            <select id="schedule-mode" title="Use manual time windows, electricity prices, or both.">
-                                <option value="manual">Manual only</option>
-                                <option value="price">Price only</option>
-                                <option value="both">Manual + Price</option>
+                            <select id="schedule-mode" title="Use manual time windows, electricity prices, or both."
+                                data-i18n-title="schedule.mode_title">
+                                <option value="manual" data-i18n="schedule.mode_manual">Manual only</option>
+                                <option value="price" data-i18n="schedule.mode_price">Price only</option>
+                                <option value="both" data-i18n="schedule.mode_both">Manual + Price</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Priority</label>
+                        <label class="field-row-label" data-i18n="schedule.priority_label">Priority</label>
                         <div class="field-row-control">
-                            <select id="schedule-priority" title="How manual and price schedules interact.">
-                                <option value="both_must_allow">Both must allow</option>
-                                <option value="manual_first">Manual overrides price</option>
-                                <option value="price_first">Price overrides manual</option>
+                            <select id="schedule-priority" title="How manual and price schedules interact."
+                                data-i18n-title="schedule.priority_title">
+                                <option value="both_must_allow" data-i18n="schedule.priority_both">Both must allow
+                                </option>
+                                <option value="manual_first" data-i18n="schedule.priority_manual_first">Manual overrides
+                                    price</option>
+                                <option value="price_first" data-i18n="schedule.priority_price_first">Price overrides
+                                    manual</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">When blocked</label>
+                        <label class="field-row-label" data-i18n="schedule.blocked_label">When blocked</label>
                         <div class="field-row-control">
                             <select id="schedule-pause-behavior"
-                                title="What happens when the schedule blocks conversions.">
-                                <option value="block_new">Block new jobs only</option>
-                                <option value="pause_running">Pause running jobs</option>
+                                title="What happens when the schedule blocks conversions."
+                                data-i18n-title="schedule.blocked_title">
+                                <option value="block_new" data-i18n="schedule.blocked_block_new">Block new jobs only
+                                </option>
+                                <option value="pause_running" data-i18n="schedule.blocked_pause_running">Pause running
+                                    jobs</option>
                             </select>
                         </div>
                     </div>
                 </fieldset>
 
                 <fieldset class="options-section" id="schedule-manual-section">
-                    <legend>Manual Time Windows</legend>
+                    <legend data-i18n="schedule.manual_legend">Manual Time Windows</legend>
                     <div id="schedule-rules-list" class="schedule-rules-list"></div>
                     <div class="actions actions-centered">
-                        <button class="secondary" type="button" id="add-schedule-rule"
-                            title="Add a time window rule.">Add rule</button>
+                        <button class="secondary" type="button" id="add-schedule-rule" title="Add a time window rule."
+                            data-i18n-title="schedule.add_rule_title" data-i18n="schedule.add_rule">Add rule</button>
                     </div>
                 </fieldset>
 
                 <fieldset class="options-section" id="schedule-price-section">
-                    <legend>Electricity Price</legend>
+                    <legend data-i18n="schedule.price_legend">Electricity Price</legend>
 
                     <div class="field-row">
-                        <label class="field-row-label">Provider</label>
+                        <label class="field-row-label" data-i18n="schedule.provider_label">Provider</label>
                         <div class="field-row-control">
-                            <select id="price-provider" title="Source for electricity spot prices.">
-                                <option value="">Disabled</option>
-                                <option value="ree_pvpc">REE PVPC Spain (free, no key)</option>
-                                <option value="energy_charts">Energy-Charts (free, no key)</option>
-                                <option value="entsoe">ENTSO-E (requires API key)</option>
+                            <select id="price-provider" title="Source for electricity spot prices."
+                                data-i18n-title="schedule.provider_title">
+                                <option value="" data-i18n="schedule.provider_disabled">Disabled</option>
+                                <option value="ree_pvpc" data-i18n="schedule.provider_ree">REE PVPC Spain (free, no key)
+                                </option>
+                                <option value="energy_charts" data-i18n="schedule.provider_energy_charts">Energy-Charts
+                                    (free, no key)</option>
+                                <option value="entsoe" data-i18n="schedule.provider_entsoe">ENTSO-E (requires API key)
+                                </option>
                             </select>
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Bidding zone</label>
+                        <label class="field-row-label" data-i18n="schedule.zone_label">Bidding zone</label>
                         <div class="field-row-control">
-                            <select id="price-bidding-zone" title="European electricity bidding zone.">
-                                <option value="">Select zone</option>
+                            <select id="price-bidding-zone" title="European electricity bidding zone."
+                                data-i18n-title="schedule.zone_title">
+                                <option value="" data-i18n="schedule.zone_default">Select zone</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="field-row" id="entsoe-key-label" hidden>
-                        <label class="field-row-label">ENTSO-E API key</label>
+                        <label class="field-row-label" data-i18n="schedule.entsoe_key_label">ENTSO-E API key</label>
                         <div class="field-row-control">
                             <input id="price-entsoe-key" type="password"
                                 placeholder="Security token from transparency.entsoe.eu"
-                                title="Your personal ENTSO-E API security token.">
+                                data-i18n-placeholder="schedule.entsoe_key_placeholder"
+                                title="Your personal ENTSO-E API security token."
+                                data-i18n-title="schedule.entsoe_key_title">
                         </div>
                     </div>
 
                     <div class="field-row">
-                        <label class="field-row-label">Price strategy</label>
+                        <label class="field-row-label" data-i18n="schedule.strategy_label">Price strategy</label>
                         <div class="field-row-control">
-                            <select id="price-strategy" title="How to decide when prices are acceptable.">
-                                <option value="threshold">Maximum price threshold</option>
-                                <option value="cheapest_n">Cheapest N hours of the day</option>
+                            <select id="price-strategy" title="How to decide when prices are acceptable."
+                                data-i18n-title="schedule.strategy_title">
+                                <option value="threshold" data-i18n="schedule.strategy_threshold">Maximum price
+                                    threshold</option>
+                                <option value="cheapest_n" data-i18n="schedule.strategy_cheapest">Cheapest N hours of
+                                    the day</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="field-row" id="price-threshold-label">
-                        <label class="field-row-label">Max price (EUR/kWh)</label>
+                        <label class="field-row-label" data-i18n="schedule.threshold_label">Max price (EUR/kWh)</label>
                         <div class="field-row-control">
                             <input id="price-threshold" type="number" min="0" step="0.0001" value="0.0000"
-                                title="Conversions pause when price exceeds this value.">
+                                title="Conversions pause when price exceeds this value."
+                                data-i18n-title="schedule.threshold_title">
                         </div>
                     </div>
 
                     <div class="field-row" id="price-cheapest-label" hidden>
-                        <label class="field-row-label">Cheapest hours</label>
+                        <label class="field-row-label" data-i18n="schedule.cheapest_label">Cheapest hours</label>
                         <div class="field-row-control">
                             <input id="price-cheapest-hours" type="number" min="1" max="24" step="1" value="8"
-                                title="Only convert during the N cheapest hours of the day.">
+                                title="Only convert during the N cheapest hours of the day."
+                                data-i18n-title="schedule.cheapest_title">
                         </div>
                     </div>
 
@@ -640,7 +735,9 @@
                 </fieldset>
 
                 <div class="actions actions-centered">
-                    <button class="primary" type="button" id="save-schedule-button" title="Save schedule settings.">Save
+                    <button class="primary" type="button" id="save-schedule-button"
+                        data-i18n-title="schedule.save_title" title="Save schedule settings."
+                        data-i18n="schedule.save">Save
                         schedule</button>
                 </div>
                 <div class="status-line" id="schedule-status"></div>
@@ -652,54 +749,64 @@
         <!-- Settings > General -->
         <section class="page" id="page-settings-general" data-page="settings/general" hidden>
             <div class="page-inner page-narrow">
-                <h2>General Settings</h2>
+                <h2 data-i18n="settings.general.title">General Settings</h2>
                 <fieldset class="options-section">
-                    <legend>Application</legend>
+                    <legend data-i18n="settings.general.app_legend">Application</legend>
                     <div class="field-row">
-                        <label class="field-row-label">Listen port</label>
+                        <label class="field-row-label" data-i18n="settings.general.port_label">Listen port</label>
                         <div class="field-row-control">
                             <input id="general-listen-port" type="number" min="1" max="65535"
+                                data-i18n-title="settings.general.port_title"
                                 title="Port the service listens on. Changing this will restart the service.">
-                            <p class="field-row-help">Changing the port will restart the service automatically.</p>
+                            <p class="field-row-help" data-i18n="settings.general.port_help">Changing the port will
+                                restart the service automatically.</p>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Authentication</label>
+                        <label class="field-row-label" data-i18n="settings.general.auth_label">Authentication</label>
                         <div class="field-row-control">
                             <label class="toggle-switch">
                                 <input type="checkbox" id="general-auth-enabled">
                                 <span class="toggle-slider"></span>
                             </label>
-                            <p class="field-row-help">Enable or disable authentication for the dashboard.</p>
+                            <p class="field-row-help" data-i18n="settings.general.auth_help">Enable or disable
+                                authentication for the dashboard.</p>
                         </div>
                     </div>
                 </fieldset>
                 <fieldset class="options-section">
-                    <legend>Global Defaults</legend>
+                    <legend data-i18n="settings.general.defaults_legend">Global Defaults</legend>
                     <div class="field-row">
-                        <label class="field-row-label">Theme</label>
+                        <label class="field-row-label" data-i18n="settings.general.theme_label">Theme</label>
                         <div class="field-row-control">
-                            <select id="theme-select" title="Choose the default dashboard colour theme.">
-                                <option value="light">Light</option>
-                                <option value="dark">Dark</option>
+                            <select id="theme-select" data-i18n-title="settings.general.theme_title"
+                                title="Choose the default dashboard colour theme.">
+                                <option value="light" data-i18n="settings.general.theme_light">Light</option>
+                                <option value="dark" data-i18n="settings.general.theme_dark">Dark</option>
                             </select>
-                            <p class="field-row-help">Default theme for new users. Users can override in their profile.
+                            <p class="field-row-help" data-i18n="settings.general.theme_help">Default theme for new
+                                users. Users can override in their profile.
                             </p>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Language</label>
+                        <label class="field-row-label" data-i18n="settings.general.language_label">Language</label>
                         <div class="field-row-control">
-                            <select id="general-language" disabled title="More languages coming soon.">
+                            <select id="general-language" data-i18n-title="settings.general.language_title"
+                                title="Dashboard display language.">
                                 <option value="en">English</option>
+                                <option value="es">Español</option>
                             </select>
-                            <p class="field-row-help">Default language. More translations coming soon.</p>
+                            <p class="field-row-help" data-i18n="settings.general.language_help">Display language for
+                                the dashboard.</p>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Date format</label>
+                        <label class="field-row-label" data-i18n="settings.general.date_format_label">Date
+                            format</label>
                         <div class="field-row-control">
-                            <select id="general-date-format" title="Date display format.">
+                            <select id="general-date-format" data-i18n-title="settings.general.date_format_title"
+                                title="Date display format.">
                                 <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                                 <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -708,7 +815,8 @@
                     </div>
                 </fieldset>
                 <div class="actions actions-centered">
-                    <button id="general-settings-save" class="primary" type="button">Save</button>
+                    <button id="general-settings-save" class="primary" type="button"
+                        data-i18n="settings.general.save">Save</button>
                 </div>
                 <div class="status-line" id="general-settings-status"></div>
             </div>
@@ -717,19 +825,23 @@
         <!-- Settings > Media Defaults -->
         <section class="page" id="page-settings-media" data-page="settings/media" hidden>
             <div class="page-inner page-narrow">
-                <h2>Media Defaults</h2>
+                <h2 data-i18n="settings.media.title">Media Defaults</h2>
                 <fieldset class="options-section">
-                    <legend>Service Configuration</legend>
+                    <legend data-i18n="settings.media.legend">Service Configuration</legend>
                     <form id="settings-form" method="post" action="/config">
 
                         <div class="field-row">
-                            <label class="field-row-label">Allowed roots</label>
+                            <label class="field-row-label" data-i18n="settings.media.allowed_roots_label">Allowed
+                                roots</label>
                             <div class="field-row-control">
                                 <div class="picker-block">
                                     <div class="picker-block-header">
-                                        <p class="field-row-help">Directories the service can access.</p>
+                                        <p class="field-row-help" data-i18n="settings.media.allowed_roots_help">
+                                            Directories the service can access.</p>
                                         <button class="secondary" type="button" id="add-allowed-root"
-                                            title="Add a source directory.">Add allowed root</button>
+                                            data-i18n-title="settings.media.add_allowed_root_title"
+                                            title="Add a source directory."
+                                            data-i18n="settings.media.add_allowed_root">Add allowed root</button>
                                     </div>
                                     <textarea name="allowed_roots" hidden></textarea>
                                     <div id="allowed-roots-list" class="list-block"></div>
@@ -738,43 +850,57 @@
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Parallel workers</label>
+                            <label class="field-row-label" data-i18n="settings.media.workers_label">Parallel
+                                workers</label>
                             <div class="field-row-control">
                                 <input name="worker_count" type="number" min="1" step="1" value="1"
+                                    data-i18n-title="settings.media.workers_title"
                                     title="Number of conversion workers.">
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">NVENC GPU devices</label>
+                            <label class="field-row-label" data-i18n="settings.media.gpu_label">NVENC GPU
+                                devices</label>
                             <div class="field-row-control">
-                                <input name="gpu_devices" placeholder="Leave empty for automatic selection"
+                                <input name="gpu_devices" data-i18n-placeholder="settings.media.gpu_placeholder"
+                                    placeholder="Leave empty for automatic selection"
+                                    data-i18n-title="settings.media.gpu_title"
                                     title="Comma-separated NVIDIA GPU indices.">
-                                <p class="field-row-help">Comma-separated NVIDIA GPU indices for NVENC jobs.</p>
+                                <p class="field-row-help" data-i18n="settings.media.gpu_help">Comma-separated NVIDIA GPU
+                                    indices for NVENC jobs.</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Default destination</label>
+                            <label class="field-row-label" data-i18n="settings.media.dest_label">Default
+                                destination</label>
                             <div class="field-row-control">
                                 <div class="path-picker">
                                     <input id="default-output-dir" name="default_output_dir"
+                                        data-i18n-placeholder="settings.media.dest_placeholder"
                                         placeholder="Leave empty to write next to source"
+                                        data-i18n-title="settings.media.dest_title"
                                         title="Default destination directory." readonly>
                                     <div class="actions">
                                         <button class="secondary" type="button" id="browse-default-output-dir"
-                                            title="Browse and choose a default destination.">Choose folder</button>
+                                            data-i18n-title="settings.media.dest_choose_title"
+                                            title="Browse and choose a default destination."
+                                            data-i18n="settings.media.dest_choose_folder">Choose folder</button>
                                         <button class="ghost" type="button" id="clear-default-output-dir"
-                                            title="Clear the default destination.">Clear</button>
+                                            data-i18n-title="settings.media.dest_clear_title"
+                                            title="Clear the default destination."
+                                            data-i18n="settings.media.dest_clear">Clear</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Default codec</label>
+                            <label class="field-row-label" data-i18n="settings.media.codec_label">Default codec</label>
                             <div class="field-row-control">
-                                <select name="default_codec" title="Default encoder for new jobs.">
+                                <select name="default_codec" data-i18n-title="settings.media.codec_title"
+                                    title="Default encoder for new jobs.">
                                     <option value="nvenc_h265">nvenc_h265</option>
                                     <option value="nvenc_h264">nvenc_h264</option>
                                     <option value="av1">av1</option>
@@ -784,54 +910,66 @@
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Default speed</label>
+                            <label class="field-row-label" data-i18n="settings.media.speed_label">Default speed</label>
                             <div class="field-row-control">
-                                <select name="default_encode_speed" title="Default encoding preset.">
-                                    <option value="normal">normal</option>
-                                    <option value="slow">slow</option>
-                                    <option value="fast">fast</option>
+                                <select name="default_encode_speed" data-i18n-title="settings.media.speed_title"
+                                    title="Default encoding preset.">
+                                    <option value="normal" data-i18n="speed.normal">normal</option>
+                                    <option value="slow" data-i18n="speed.slow">slow</option>
+                                    <option value="fast" data-i18n="speed.fast">fast</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Audio passthrough</label>
+                            <label class="field-row-label" data-i18n="settings.media.audio_label">Audio
+                                passthrough</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Copy audio tracks without re-encoding."><input
-                                        type="checkbox" name="default_audio_passthrough">Don't re-encode audio
-                                    tracks</label>
+                                <label class="check check-inline" data-i18n-title="settings.media.audio_title"
+                                    title="Copy audio tracks without re-encoding."><input type="checkbox"
+                                        name="default_audio_passthrough"><span
+                                        data-i18n="settings.media.audio_check">Don't re-encode audio
+                                        tracks</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Delete source</label>
+                            <label class="field-row-label" data-i18n="settings.media.delete_label">Delete source</label>
                             <div class="field-row-control">
-                                <label class="check check-inline"
+                                <label class="check check-inline" data-i18n-title="settings.media.delete_title"
                                     title="Remove the original file after a successful conversion."><input
-                                        type="checkbox" name="default_delete_source">Delete source file on
-                                    success</label>
+                                        type="checkbox" name="default_delete_source"><span
+                                        data-i18n="settings.media.delete_check">Delete source file on
+                                        success</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Force conversion</label>
+                            <label class="field-row-label" data-i18n="settings.media.force_label">Force
+                                conversion</label>
                             <div class="field-row-control">
-                                <label class="check check-inline"
+                                <label class="check check-inline" data-i18n-title="settings.media.force_title"
                                     title="Convert even if the file already matches the target codec."><input
-                                        type="checkbox" name="default_force">Convert even if already encoded</label>
+                                        type="checkbox" name="default_force"><span
+                                        data-i18n="settings.media.force_check">Convert even if already
+                                        encoded</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label">Verbose mode</label>
+                            <label class="field-row-label" data-i18n="settings.media.verbose_label">Verbose mode</label>
                             <div class="field-row-control">
-                                <label class="check check-inline" title="Show detailed FFmpeg output in logs."><input
-                                        type="checkbox" name="default_verbose">Show detailed encoder output</label>
+                                <label class="check check-inline" data-i18n-title="settings.media.verbose_title"
+                                    title="Show detailed FFmpeg output in logs."><input type="checkbox"
+                                        name="default_verbose"><span data-i18n="settings.media.verbose_check">Show
+                                        detailed encoder output</span></label>
                             </div>
                         </div>
 
                         <div class="actions actions-centered">
-                            <button class="primary" type="submit" id="settings-button" title="Save settings.">Save
+                            <button class="primary" type="submit" id="settings-button"
+                                data-i18n-title="settings.media.save_title" title="Save settings."
+                                data-i18n="settings.media.save">Save
                                 settings</button>
                         </div>
                         <div class="status-line" id="settings-status"></div>
@@ -843,52 +981,66 @@
         <!-- Settings > SMTP -->
         <section class="page" id="page-settings-smtp" data-page="settings/smtp" hidden>
             <div class="page-inner page-narrow">
-                <h2>SMTP Settings</h2>
+                <h2 data-i18n="settings.smtp.title">SMTP Settings</h2>
                 <fieldset class="options-section">
-                    <legend>Mail Server</legend>
+                    <legend data-i18n="settings.smtp.legend">Mail Server</legend>
                     <form id="smtp-form">
                         <div class="field-row">
-                            <label class="field-row-label" for="smtp-host">Host</label>
+                            <label class="field-row-label" for="smtp-host"
+                                data-i18n="settings.smtp.host_label">Host</label>
                             <div class="field-row-control">
-                                <input type="text" id="smtp-host" name="host" placeholder="smtp.example.com">
+                                <input type="text" id="smtp-host" name="host"
+                                    data-i18n-placeholder="settings.smtp.host_placeholder"
+                                    placeholder="smtp.example.com">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="smtp-port">Port</label>
+                            <label class="field-row-label" for="smtp-port"
+                                data-i18n="settings.smtp.port_label">Port</label>
                             <div class="field-row-control">
                                 <input type="number" id="smtp-port" name="port" value="587" min="1" max="65535">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="smtp-username">Username</label>
+                            <label class="field-row-label" for="smtp-username"
+                                data-i18n="settings.smtp.username_label">Username</label>
                             <div class="field-row-control">
-                                <input type="text" id="smtp-username" name="username" placeholder="user@example.com">
+                                <input type="text" id="smtp-username" name="username"
+                                    data-i18n-placeholder="settings.smtp.username_placeholder"
+                                    placeholder="user@example.com">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="smtp-password">Password</label>
+                            <label class="field-row-label" for="smtp-password"
+                                data-i18n="settings.smtp.password_label">Password</label>
                             <div class="field-row-control">
                                 <input type="password" id="smtp-password" name="password" autocomplete="off">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label">TLS</label>
+                            <label class="field-row-label" data-i18n="settings.smtp.tls_label">TLS</label>
                             <div class="field-row-control">
                                 <label class="check check-inline"><input type="checkbox" id="smtp-tls" name="use_tls"
-                                        checked>Use STARTTLS</label>
-                                <p class="field-row-help">Port 465 uses implicit SSL automatically. STARTTLS applies to
+                                        checked><span data-i18n="settings.smtp.tls_check">Use STARTTLS</span></label>
+                                <p class="field-row-help" data-i18n="settings.smtp.tls_help">Port 465 uses implicit SSL
+                                    automatically. STARTTLS applies to
                                     port 587 and others.</p>
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="smtp-from">From address</label>
+                            <label class="field-row-label" for="smtp-from" data-i18n="settings.smtp.from_label">From
+                                address</label>
                             <div class="field-row-control">
-                                <input type="text" id="smtp-from" name="from_address" placeholder="noreply@example.com">
+                                <input type="text" id="smtp-from" name="from_address"
+                                    data-i18n-placeholder="settings.smtp.from_placeholder"
+                                    placeholder="noreply@example.com">
                             </div>
                         </div>
                         <div class="actions actions-centered">
-                            <button class="primary" type="submit">Save SMTP settings</button>
-                            <button class="secondary" type="button" id="smtp-test-btn">Test connection</button>
+                            <button class="primary" type="submit" data-i18n="settings.smtp.save">Save SMTP
+                                settings</button>
+                            <button class="secondary" type="button" id="smtp-test-btn"
+                                data-i18n="settings.smtp.test">Test connection</button>
                         </div>
                         <div class="status-line" id="smtp-status"></div>
                     </form>
@@ -899,88 +1051,116 @@
         <!-- Settings > Notifications -->
         <section class="page" id="page-settings-notifications" data-page="settings/notifications" hidden>
             <div class="page-inner page-narrow">
-                <h2>Notifications</h2>
+                <h2 data-i18n="settings.notifications.title">Notifications</h2>
                 <fieldset class="options-section">
-                    <legend>Notification Channels</legend>
-                    <p class="field-row-help" style="margin-bottom:1rem">
+                    <legend data-i18n="settings.notifications.channels_legend">Notification Channels</legend>
+                    <p class="field-row-help" style="margin-bottom:1rem"
+                        data-i18n="settings.notifications.channels_help">
                         Configure where Clutch sends notifications when jobs finish. You can add multiple Telegram bots
                         or webhook endpoints.
                     </p>
                     <div id="notif-channels-list"></div>
                     <div class="actions actions-centered" style="margin-top:1rem">
-                        <button type="button" class="secondary" id="notif-add-telegram">+ Telegram</button>
-                        <button type="button" class="secondary" id="notif-add-webhook">+ Webhook</button>
+                        <button type="button" class="secondary" id="notif-add-telegram"
+                            data-i18n="settings.notifications.add_telegram">+ Telegram</button>
+                        <button type="button" class="secondary" id="notif-add-webhook"
+                            data-i18n="settings.notifications.add_webhook">+ Webhook</button>
                     </div>
                 </fieldset>
                 <fieldset class="options-section" id="notif-editor" hidden>
-                    <legend id="notif-editor-legend">New Channel</legend>
+                    <legend id="notif-editor-legend" data-i18n="settings.notifications.editor_legend">New Channel
+                    </legend>
                     <form id="notif-form">
                         <input type="hidden" id="notif-id" name="id">
                         <input type="hidden" id="notif-type" name="type">
                         <div class="field-row">
-                            <label class="field-row-label" for="notif-name">Name</label>
+                            <label class="field-row-label" for="notif-name"
+                                data-i18n="settings.notifications.name_label">Name</label>
                             <div class="field-row-control">
-                                <input type="text" id="notif-name" name="name" placeholder="My Bot">
+                                <input type="text" id="notif-name" name="name"
+                                    data-i18n-placeholder="settings.notifications.name_placeholder"
+                                    placeholder="My Bot">
                             </div>
                         </div>
                         <!-- Telegram fields -->
                         <div class="field-row notif-field-telegram">
-                            <label class="field-row-label" for="notif-bot-token">Bot Token</label>
+                            <label class="field-row-label" for="notif-bot-token"
+                                data-i18n="settings.notifications.bot_token_label">Bot Token</label>
                             <div class="field-row-control">
-                                <input type="text" id="notif-bot-token" name="bot_token" placeholder="123456:ABC-DEF..."
-                                    autocomplete="off">
+                                <input type="text" id="notif-bot-token" name="bot_token"
+                                    data-i18n-placeholder="settings.notifications.bot_token_placeholder"
+                                    placeholder="123456:ABC-DEF..." autocomplete="off">
                                 <p class="field-row-help">Create a bot via <a href="https://t.me/BotFather"
                                         target="_blank" rel="noopener">@BotFather</a> and paste the token here.</p>
                             </div>
                         </div>
                         <div class="field-row notif-field-telegram">
-                            <label class="field-row-label" for="notif-chat-id">Chat ID</label>
+                            <label class="field-row-label" for="notif-chat-id"
+                                data-i18n="settings.notifications.chat_id_label">Chat ID</label>
                             <div class="field-row-control">
-                                <input type="text" id="notif-chat-id" name="chat_id" placeholder="-1001234567890">
-                                <p class="field-row-help">The chat, group, or channel ID where messages will be sent.
+                                <input type="text" id="notif-chat-id" name="chat_id"
+                                    data-i18n-placeholder="settings.notifications.chat_id_placeholder"
+                                    placeholder="-1001234567890">
+                                <p class="field-row-help" data-i18n="settings.notifications.chat_id_help">The chat,
+                                    group, or channel ID where messages will be sent.
                                 </p>
                             </div>
                         </div>
                         <!-- Webhook fields -->
                         <div class="field-row notif-field-webhook">
-                            <label class="field-row-label" for="notif-webhook-url">URL</label>
+                            <label class="field-row-label" for="notif-webhook-url"
+                                data-i18n="settings.notifications.url_label">URL</label>
                             <div class="field-row-control">
                                 <input type="url" id="notif-webhook-url" name="url"
+                                    data-i18n-placeholder="settings.notifications.url_placeholder"
                                     placeholder="https://example.com/webhook">
                             </div>
                         </div>
                         <div class="field-row notif-field-webhook">
-                            <label class="field-row-label" for="notif-webhook-headers">Headers</label>
+                            <label class="field-row-label" for="notif-webhook-headers"
+                                data-i18n="settings.notifications.headers_label">Headers</label>
                             <div class="field-row-control">
                                 <textarea id="notif-webhook-headers" name="headers" rows="3"
+                                    data-i18n-placeholder="settings.notifications.headers_placeholder"
                                     placeholder='{"Authorization": "Bearer ..."}'></textarea>
-                                <p class="field-row-help">Optional JSON object with custom HTTP headers.</p>
+                                <p class="field-row-help" data-i18n="settings.notifications.headers_help">Optional JSON
+                                    object with custom HTTP headers.</p>
                             </div>
                         </div>
                         <!-- Events -->
                         <div class="field-row">
-                            <label class="field-row-label">Events</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.notifications.events_label">Events</label>
                             <div class="field-row-control notif-events-grid">
                                 <label class="check check-inline"><input type="checkbox" name="events"
-                                        value="job_succeeded" checked> Job succeeded</label>
+                                        value="job_succeeded" checked> <span
+                                        data-i18n="settings.notifications.event_succeeded">Job succeeded</span></label>
                                 <label class="check check-inline"><input type="checkbox" name="events"
-                                        value="job_failed" checked> Job failed</label>
+                                        value="job_failed" checked> <span
+                                        data-i18n="settings.notifications.event_failed">Job failed</span></label>
                                 <label class="check check-inline"><input type="checkbox" name="events"
-                                        value="job_cancelled"> Job cancelled</label>
+                                        value="job_cancelled"> <span
+                                        data-i18n="settings.notifications.event_cancelled">Job cancelled</span></label>
                             </div>
                         </div>
                         <!-- Enabled -->
                         <div class="field-row">
-                            <label class="field-row-label">Enabled</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.notifications.enabled_label">Enabled</label>
                             <div class="field-row-control">
                                 <label class="check check-inline"><input type="checkbox" id="notif-enabled"
-                                        name="enabled" checked> Send notifications</label>
+                                        name="enabled" checked> <span
+                                        data-i18n="settings.notifications.enabled_check">Send
+                                        notifications</span></label>
                             </div>
                         </div>
                         <div class="actions actions-centered">
-                            <button class="primary" type="submit">Save Channel</button>
-                            <button class="secondary" type="button" id="notif-test-btn">Test</button>
-                            <button class="ghost" type="button" id="notif-cancel-btn">Cancel</button>
+                            <button class="primary" type="submit" data-i18n="settings.notifications.save_channel">Save
+                                Channel</button>
+                            <button class="secondary" type="button" id="notif-test-btn"
+                                data-i18n="settings.notifications.test">Test</button>
+                            <button class="ghost" type="button" id="notif-cancel-btn"
+                                data-i18n="settings.notifications.cancel">Cancel</button>
                         </div>
                         <div class="status-line" id="notif-status"></div>
                     </form>
@@ -991,11 +1171,11 @@
         <!-- Settings > User -->
         <section class="page" id="page-settings-user" data-page="settings/user" hidden>
             <div class="page-inner page-narrow">
-                <h2>User Settings</h2>
+                <h2 data-i18n="settings.user.title">User Settings</h2>
                 <fieldset class="options-section">
-                    <legend>Profile</legend>
+                    <legend data-i18n="settings.user.profile_legend">Profile</legend>
                     <div class="field-row">
-                        <label class="field-row-label">Avatar</label>
+                        <label class="field-row-label" data-i18n="settings.user.avatar_label">Avatar</label>
                         <div class="field-row-control">
                             <span class="user-avatar user-avatar-lg" id="user-settings-avatar"></span>
                             <p class="field-row-help">Powered by <a href="https://gravatar.com" target="_blank"
@@ -1003,41 +1183,45 @@
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Username</label>
+                        <label class="field-row-label" data-i18n="settings.user.username_label">Username</label>
                         <div class="field-row-control">
                             <input id="user-settings-username" type="text" disabled>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Email</label>
+                        <label class="field-row-label" data-i18n="settings.user.email_label">Email</label>
                         <div class="field-row-control">
                             <input id="user-settings-email" type="email" disabled>
-                            <p class="field-row-help">Managed by an administrator.</p>
+                            <p class="field-row-help" data-i18n="settings.user.email_help">Managed by an administrator.
+                            </p>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Role</label>
+                        <label class="field-row-label" data-i18n="settings.user.role_label">Role</label>
                         <div class="field-row-control">
                             <span class="chip" id="user-settings-role">&mdash;</span>
                         </div>
                     </div>
                 </fieldset>
                 <fieldset class="options-section">
-                    <legend>Preferences</legend>
+                    <legend data-i18n="settings.user.prefs_legend">Preferences</legend>
                     <div class="field-row">
-                        <label class="field-row-label" for="user-settings-theme">Theme</label>
+                        <label class="field-row-label" for="user-settings-theme"
+                            data-i18n="settings.user.theme_label">Theme</label>
                         <div class="field-row-control">
                             <select id="user-settings-theme">
-                                <option value="light">Light</option>
-                                <option value="dark">Dark</option>
+                                <option value="light" data-i18n="settings.user.theme_light">Light</option>
+                                <option value="dark" data-i18n="settings.user.theme_dark">Dark</option>
                             </select>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label" for="user-settings-date-format">Date format</label>
+                        <label class="field-row-label" for="user-settings-date-format"
+                            data-i18n="settings.user.date_format_label">Date format</label>
                         <div class="field-row-control">
-                            <select id="user-settings-date-format" title="Date display format for your account.">
-                                <option value="">Default (server)</option>
+                            <select id="user-settings-date-format" data-i18n-title="settings.user.date_format_title"
+                                title="Date display format for your account.">
+                                <option value="" data-i18n="settings.user.date_format_default">Default (server)</option>
                                 <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                                 <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -1045,49 +1229,57 @@
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label" for="user-settings-language">Language</label>
+                        <label class="field-row-label" for="user-settings-language"
+                            data-i18n="settings.user.language_label">Language</label>
                         <div class="field-row-control">
-                            <select id="user-settings-language" disabled title="More languages coming soon.">
+                            <select id="user-settings-language" data-i18n-title="settings.user.language_title"
+                                title="Dashboard display language.">
                                 <option value="en">English</option>
+                                <option value="es">Español</option>
                             </select>
                         </div>
                     </div>
                 </fieldset>
                 <fieldset class="options-section">
-                    <legend>Change Password</legend>
+                    <legend data-i18n="settings.user.password_legend">Change Password</legend>
                     <form id="change-password-form" autocomplete="off">
                         <div class="field-row">
-                            <label class="field-row-label" for="cp-old">Current password</label>
+                            <label class="field-row-label" for="cp-old"
+                                data-i18n="settings.user.old_password_label">Current password</label>
                             <div class="field-row-control">
                                 <input type="password" id="cp-old" name="old_password" required
                                     autocomplete="current-password">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="cp-new">New password</label>
+                            <label class="field-row-label" for="cp-new" data-i18n="settings.user.new_password_label">New
+                                password</label>
                             <div class="field-row-control">
                                 <input type="password" id="cp-new" name="new_password" required minlength="8"
                                     autocomplete="new-password">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="cp-confirm">Confirm new password</label>
+                            <label class="field-row-label" for="cp-confirm"
+                                data-i18n="settings.user.confirm_password_label">Confirm new password</label>
                             <div class="field-row-control">
                                 <input type="password" id="cp-confirm" name="confirm_password" required minlength="8"
                                     autocomplete="new-password">
                             </div>
                         </div>
                         <div class="actions">
-                            <button class="primary" type="submit">Change password</button>
+                            <button class="primary" type="submit" data-i18n="settings.user.change_password">Change
+                                password</button>
                         </div>
                         <div class="status-line" id="change-password-status"></div>
                     </form>
                 </fieldset>
                 <fieldset class="options-section">
-                    <legend>Personal API Tokens</legend>
+                    <legend data-i18n="settings.user.tokens_legend">Personal API Tokens</legend>
                     <div id="user-tokens-list"></div>
                     <div class="actions actions-centered" style="margin-top:1rem">
-                        <button class="secondary" type="button" id="user-create-token-btn">Create token</button>
+                        <button class="secondary" type="button" id="user-create-token-btn"
+                            data-i18n="settings.user.create_token">Create token</button>
                     </div>
                     <div class="status-line" id="user-tokens-status"></div>
                 </fieldset>
@@ -1097,13 +1289,14 @@
         <!-- Settings > Logs Config -->
         <section class="page" id="page-settings-logs" data-page="settings/logs" hidden>
             <div class="page-inner page-narrow">
-                <h2>Log Settings</h2>
+                <h2 data-i18n="settings.logs.title">Log Settings</h2>
                 <fieldset class="options-section">
-                    <legend>Logging Configuration</legend>
+                    <legend data-i18n="settings.logs.legend">Logging Configuration</legend>
                     <div class="field-row">
-                        <label class="field-row-label">Log level</label>
+                        <label class="field-row-label" data-i18n="settings.logs.level_label">Log level</label>
                         <div class="field-row-control">
-                            <select id="settings-log-level" title="Minimum severity level to record.">
+                            <select id="settings-log-level" data-i18n-title="settings.logs.level_title"
+                                title="Minimum severity level to record.">
                                 <option value="DEBUG">DEBUG</option>
                                 <option value="INFO" selected>INFO</option>
                                 <option value="WARNING">WARNING</option>
@@ -1112,15 +1305,20 @@
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Retention (days)</label>
+                        <label class="field-row-label" data-i18n="settings.logs.retention_label">Retention
+                            (days)</label>
                         <div class="field-row-control">
                             <input id="settings-log-retention" type="number" min="1" max="365" value="30"
+                                data-i18n-title="settings.logs.retention_title"
                                 title="Number of days to keep log files before automatic deletion.">
-                            <p class="field-row-help">Log files older than this are automatically deleted.</p>
+                            <p class="field-row-help" data-i18n="settings.logs.retention_help">Log files older than this
+                                are automatically deleted.</p>
                         </div>
                     </div>
                     <div class="actions actions-centered">
-                        <button class="primary" type="button" id="save-log-settings" title="Save log settings.">Save log
+                        <button class="primary" type="button" id="save-log-settings"
+                            data-i18n-title="settings.logs.save_title" title="Save log settings."
+                            data-i18n="settings.logs.save">Save log
                             settings</button>
                     </div>
                     <div class="status-line" id="log-settings-status"></div>
@@ -1133,69 +1331,79 @@
         <!-- System > Users -->
         <section class="page" id="page-system-users" data-page="system/users" hidden>
             <div class="page-inner page-narrow">
-                <h2>Users</h2>
+                <h2 data-i18n="system.users.title">Users</h2>
 
                 <fieldset class="options-section">
-                    <legend>Accounts</legend>
+                    <legend data-i18n="system.users.accounts_legend">Accounts</legend>
                     <div id="users-list"></div>
                     <div class="actions actions-centered" style="margin-top:1rem">
-                        <button class="secondary" type="button" id="add-user-btn">Add user</button>
+                        <button class="secondary" type="button" id="add-user-btn" data-i18n="system.users.add_user">Add
+                            user</button>
                     </div>
                 </fieldset>
 
                 <fieldset class="options-section" id="user-form-section" hidden>
-                    <legend id="user-form-legend">New User</legend>
+                    <legend id="user-form-legend" data-i18n="system.users.form_legend_new">New User</legend>
                     <form id="user-form" autocomplete="off">
                         <input type="hidden" id="user-form-id" value="">
                         <div class="field-row">
-                            <label class="field-row-label" for="user-form-username">Username</label>
+                            <label class="field-row-label" for="user-form-username"
+                                data-i18n="system.users.username_label">Username</label>
                             <div class="field-row-control">
                                 <input type="text" id="user-form-username" name="username" required minlength="3"
                                     maxlength="64">
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="user-form-email">Email</label>
+                            <label class="field-row-label" for="user-form-email"
+                                data-i18n="system.users.email_label">Email</label>
                             <div class="field-row-control">
                                 <input type="email" id="user-form-email" name="email" required>
                             </div>
                         </div>
                         <div class="field-row" id="user-form-password-row">
-                            <label class="field-row-label" for="user-form-password">Password</label>
+                            <label class="field-row-label" for="user-form-password"
+                                data-i18n="system.users.password_label">Password</label>
                             <div class="field-row-control">
                                 <input type="password" id="user-form-password" name="password" minlength="8"
                                     autocomplete="new-password">
-                                <p class="field-row-help">Min 8 chars, upper + lower + digit + special.</p>
+                                <p class="field-row-help" data-i18n="system.users.password_help">Min 8 chars, upper +
+                                    lower + digit + special.</p>
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" for="user-form-role">Role</label>
+                            <label class="field-row-label" for="user-form-role"
+                                data-i18n="system.users.role_label">Role</label>
                             <div class="field-row-control">
                                 <select id="user-form-role" name="role">
-                                    <option value="admin">Admin</option>
-                                    <option value="operator">Operator</option>
-                                    <option value="viewer">Viewer</option>
+                                    <option value="admin" data-i18n="system.users.role_admin">Admin</option>
+                                    <option value="operator" data-i18n="system.users.role_operator">Operator</option>
+                                    <option value="viewer" data-i18n="system.users.role_viewer">Viewer</option>
                                 </select>
                             </div>
                         </div>
                         <div class="field-row" id="user-form-set-password-row" hidden>
-                            <label class="field-row-label" for="user-form-set-password">Set password</label>
+                            <label class="field-row-label" for="user-form-set-password"
+                                data-i18n="system.users.set_password_label">Set password</label>
                             <div class="field-row-control">
                                 <input type="password" id="user-form-set-password" name="set_password" minlength="8"
                                     autocomplete="new-password">
-                                <p class="field-row-help">Admin: set a new password without knowing the current one.</p>
+                                <p class="field-row-help" data-i18n="system.users.set_password_help">Admin: set a new
+                                    password without knowing the current one.</p>
                             </div>
                         </div>
                         <div class="actions actions-centered">
-                            <button class="primary" type="submit" id="user-form-submit">Create</button>
-                            <button class="ghost" type="button" id="user-form-cancel">Cancel</button>
+                            <button class="primary" type="submit" id="user-form-submit"
+                                data-i18n="system.users.create">Create</button>
+                            <button class="ghost" type="button" id="user-form-cancel"
+                                data-i18n="system.users.cancel">Cancel</button>
                         </div>
                         <div class="status-line" id="user-form-status"></div>
                     </form>
                 </fieldset>
 
                 <fieldset class="options-section">
-                    <legend>All API Tokens</legend>
+                    <legend data-i18n="system.users.tokens_legend">All API Tokens</legend>
                     <div id="admin-tokens-list"></div>
                     <div class="status-line" id="admin-tokens-status"></div>
                 </fieldset>
@@ -1205,46 +1413,56 @@
         <!-- System > Logs -->
         <section class="page" id="page-system-logs" data-page="system/logs" hidden>
             <div class="page-inner">
-                <h2>Logs</h2>
+                <h2 data-i18n="system.logs.title">Logs</h2>
                 <div class="log-tabs">
-                    <button type="button" class="log-tab" data-log-tab="viewer">Log Viewer</button>
-                    <button type="button" class="log-tab active" data-log-tab="files">Log Files</button>
+                    <button type="button" class="log-tab" data-log-tab="viewer" data-i18n="system.logs.tab_viewer">Log
+                        Viewer</button>
+                    <button type="button" class="log-tab active" data-log-tab="files"
+                        data-i18n="system.logs.tab_files">Log Files</button>
                 </div>
                 <div class="log-viewer" id="log-tab-viewer" hidden style="display:none">
                     <div class="log-toolbar">
                         <select id="log-level-filter" title="Filter by log level">
-                            <option value="">All levels</option>
-                            <option value="DEBUG">DEBUG</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
-                            <option value="CRITICAL">CRITICAL</option>
+                            <option value="" data-i18n="system.logs.level_all">All levels</option>
+                            <option value="DEBUG" data-i18n="system.logs.level_debug">DEBUG</option>
+                            <option value="INFO" data-i18n="system.logs.level_info">INFO</option>
+                            <option value="WARNING" data-i18n="system.logs.level_warning">WARNING</option>
+                            <option value="ERROR" data-i18n="system.logs.level_error">ERROR</option>
+                            <option value="CRITICAL" data-i18n="system.logs.level_critical">CRITICAL</option>
                         </select>
-                        <input type="text" id="log-search" placeholder="Search logs…"
+                        <input type="text" id="log-search" data-i18n-placeholder="system.logs.search_placeholder"
+                            placeholder="Search logs…" data-i18n-title="system.logs.search_title"
                             title="Filter log entries by text">
-                        <select id="log-file-select" title="Select log file">
-                            <option value="">Current</option>
+                        <select id="log-file-select" data-i18n-title="system.logs.file_select_title"
+                            title="Select log file">
+                            <option value="" data-i18n="system.logs.file_current">Current</option>
                         </select>
                         <button type="button" id="log-refresh" class="secondary" title="Refresh">&#x21bb;</button>
-                        <label class="log-auto-toggle" title="Auto-refresh every 5 seconds">
-                            <input type="checkbox" id="log-auto-refresh" checked> Auto
+                        <label class="log-auto-toggle" data-i18n-title="system.logs.auto_title"
+                            title="Auto-refresh every 5 seconds">
+                            <input type="checkbox" id="log-auto-refresh" checked> <span
+                                data-i18n="system.logs.auto_label">Auto</span>
                         </label>
                     </div>
                     <div class="log-entries" id="log-entries">
-                        <div class="empty">Loading logs…</div>
+                        <div class="empty" data-i18n="system.logs.loading">Loading logs…</div>
                     </div>
                     <div class="log-pagination" id="log-pagination"></div>
                 </div>
                 <div id="log-tab-files">
                     <div class="log-info-banner">
-                        Log files are stored in <strong>~/.local/state/clutch/logs/</strong>.<br>
-                        The log level and retention can be changed in <a href="#settings/logs">Settings &gt; Logs</a>.
+                        <span data-i18n-html="system.logs.stored_in">Log files are stored in
+                            <strong>~/.local/state/clutch/logs/</strong>.</span><br>
+                        <span data-i18n-html="system.logs.stored_in_hint">The log level and retention can be changed in
+                            <a href="#settings/logs">Settings &gt; Logs</a>.</span>
                     </div>
                     <div class="log-toolbar">
-                        <button type="button" id="log-files-refresh" class="secondary" title="Refresh">&#x21bb;
-                            Refresh</button>
+                        <button type="button" id="log-files-refresh" class="secondary"
+                            data-i18n-title="system.logs.refresh_title" title="Refresh">&#x21bb;
+                            <span data-i18n="system.logs.refresh">Refresh</span></button>
                         <button type="button" id="log-files-clear" class="danger"
-                            title="Delete all rotated log files">Clear old logs</button>
+                            data-i18n-title="system.logs.clear_old_title" title="Delete all rotated log files"
+                            data-i18n="system.logs.clear_old">Clear old logs</button>
                     </div>
                     <div id="log-files-table-wrap"></div>
                 </div>
@@ -1254,18 +1472,20 @@
         <!-- System > Tasks -->
         <section class="page" id="page-system-tasks" data-page="system/tasks" hidden>
             <div class="page-inner">
-                <h2>Tasks</h2>
+                <h2 data-i18n="system.tasks.title">Tasks</h2>
                 <div class="log-toolbar" id="tasks-toolbar">
-                    <select id="tasks-status-filter" title="Filter by status">
-                        <option value="">All statuses</option>
-                        <option value="succeeded">Succeeded</option>
-                        <option value="failed">Failed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="skipped">Skipped</option>
-                        <option value="running">Running</option>
-                        <option value="queued">Queued</option>
+                    <select id="tasks-status-filter" data-i18n-title="system.tasks.filter_title"
+                        title="Filter by status">
+                        <option value="" data-i18n="system.tasks.status_all">All statuses</option>
+                        <option value="succeeded" data-i18n="system.tasks.status_succeeded">Succeeded</option>
+                        <option value="failed" data-i18n="system.tasks.status_failed">Failed</option>
+                        <option value="cancelled" data-i18n="system.tasks.status_cancelled">Cancelled</option>
+                        <option value="skipped" data-i18n="system.tasks.status_skipped">Skipped</option>
+                        <option value="running" data-i18n="system.tasks.status_running">Running</option>
+                        <option value="queued" data-i18n="system.tasks.status_queued">Queued</option>
                     </select>
-                    <input type="text" id="tasks-search" placeholder="Search tasks…"
+                    <input type="text" id="tasks-search" data-i18n-placeholder="system.tasks.search_placeholder"
+                        placeholder="Search tasks…" data-i18n-title="system.tasks.search_title"
                         title="Filter by filename or message">
                     <button type="button" id="tasks-refresh" class="secondary" title="Refresh">&#x21bb;</button>
                 </div>
@@ -1277,42 +1497,45 @@
         <!-- System > Changelog -->
         <section class="page" id="page-system-changelog" data-page="system/changelog" hidden>
             <div class="page-inner page-narrow">
-                <h2>Changelog</h2>
+                <h2 data-i18n="system.changelog.title">Changelog</h2>
                 <div class="changelog-full" id="changelog-full-container">
-                    <div class="empty">Loading changelog…</div>
+                    <div class="empty" data-i18n="system.changelog.loading">Loading changelog…</div>
                 </div>
             </div>
         </section>
 
-        <button class="scroll-to-top" id="changelog-scroll-top" type="button" title="Scroll to top">&#x2191;</button>
+        <button class="scroll-to-top" id="changelog-scroll-top" type="button"
+            data-i18n-title="system.changelog.scroll_top_title" title="Scroll to top">&#x2191;</button>
 
         <!-- System > About -->
         <section class="page" id="page-system-about" data-page="system/about" hidden>
             <div class="page-inner page-narrow">
-                <h2>About</h2>
+                <h2 data-i18n="system.about.title">About</h2>
 
                 <fieldset class="options-section">
-                    <legend>System Monitor</legend>
+                    <legend data-i18n="system.about.sysmon_legend">System Monitor</legend>
                     <div id="sysmon-container" class="sysmon-container">
-                        <div class="empty">Loading…</div>
+                        <div class="empty" data-i18n="system.about.sysmon_loading">Loading…</div>
                     </div>
                 </fieldset>
 
                 <fieldset class="options-section" id="about-version-section">
-                    <legend>Version</legend>
+                    <legend data-i18n="system.about.version_legend">Version</legend>
                     <div class="field-row">
-                        <label class="field-row-label">Version</label>
+                        <label class="field-row-label" data-i18n="system.about.version_label">Version</label>
                         <div class="field-row-control">
                             <span id="about-version" class="about-version">—</span>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label">Updates</label>
+                        <label class="field-row-label" data-i18n="system.about.updates_label">Updates</label>
                         <div class="field-row-control">
                             <div class="update-row">
                                 <button class="secondary" type="button" id="release-check"
-                                    aria-label="Check for new versions" title="Check for new versions">
-                                    <span id="release-label">Check for updates</span>
+                                    aria-label="Check for new versions"
+                                    data-i18n-title="system.about.check_updates_title" title="Check for new versions">
+                                    <span id="release-label" data-i18n="system.about.check_updates">Check for
+                                        updates</span>
                                 </button>
                                 <div class="update-progress" id="update-progress" hidden>
                                     <div class="progress-track">
@@ -1323,7 +1546,7 @@
                         </div>
                     </div>
                     <div class="field-row" id="changelog-row" hidden>
-                        <label class="field-row-label">Changelog</label>
+                        <label class="field-row-label" data-i18n="system.about.changelog_label">Changelog</label>
                         <div class="field-row-control">
                             <div class="changelog-text" id="changelog-text"></div>
                         </div>
@@ -1344,28 +1567,33 @@
         <div class="browser-backdrop" data-close-browser></div>
         <div class="browser-dialog" role="dialog" aria-modal="true" aria-labelledby="path-browser-title">
             <div class="browser-header">
-                <h3 id="path-browser-title">File Browser</h3>
-                <button class="browser-close" type="button" id="close-browser" title="Close the file browser."
-                    aria-label="Close">&times;</button>
+                <h3 id="path-browser-title" data-i18n="browser.title">File Browser</h3>
+                <button class="browser-close" type="button" id="close-browser" data-i18n-title="browser.close_title"
+                    title="Close the file browser." aria-label="Close">&times;</button>
             </div>
             <div class="browser-body">
                 <div class="browser-toolbar">
-                    <input id="browser-current-path" placeholder="Start typing or select a path below"
+                    <input id="browser-current-path" data-i18n-placeholder="browser.path_placeholder"
+                        placeholder="Start typing or select a path below" data-i18n-title="browser.path_title"
                         title="Current folder.">
                     <div class="browser-toolbar-actions">
-                        <button class="ghost" type="button" id="browser-up" title="Go to parent folder.">Up</button>
-                        <label class="check browser-check" title="Show hidden files."><input id="browser-show-hidden"
-                                type="checkbox">Hidden</label>
+                        <button class="ghost" type="button" id="browser-up" data-i18n-title="browser.up_title"
+                            title="Go to parent folder." data-i18n="browser.up">Up</button>
+                        <label class="check browser-check" data-i18n-title="browser.hidden_title"
+                            title="Show hidden files."><input id="browser-show-hidden" type="checkbox"><span
+                                data-i18n="browser.hidden_label">Hidden</span></label>
                     </div>
                 </div>
-                <input id="browser-filter" type="search" placeholder="Filter current directory" title="Filter by name.">
+                <input id="browser-filter" type="search" data-i18n-placeholder="browser.filter_placeholder"
+                    placeholder="Filter current directory" data-i18n-title="browser.filter_title"
+                    title="Filter by name.">
                 <div class="status-line" id="browser-status"></div>
                 <div class="browser-table-wrap">
                     <table class="browser-table">
                         <thead>
                             <tr>
                                 <th class="browser-th-icon"></th>
-                                <th>Name</th>
+                                <th data-i18n="browser.column_name">Name</th>
                             </tr>
                         </thead>
                         <tbody id="browser-list"></tbody>
@@ -1380,12 +1608,13 @@
                         <input id="browser-recursive" type="checkbox">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-inline-label">Include subdirectories</span>
+                    <span class="toggle-inline-label" data-i18n="browser.include_subdirectories">Include
+                        subdirectories</span>
                 </label>
                 <div class="browser-footer-actions">
-                    <button class="ghost" type="button" data-close-browser>Cancel</button>
-                    <button class="primary" type="button" id="browser-select-current" title="Use this path."
-                        hidden>Ok</button>
+                    <button class="ghost" type="button" data-close-browser data-i18n="browser.cancel">Cancel</button>
+                    <button class="primary" type="button" id="browser-select-current" data-i18n-title="browser.ok_title"
+                        title="Use this path." data-i18n="browser.ok" hidden>Ok</button>
                 </div>
             </div>
         </div>

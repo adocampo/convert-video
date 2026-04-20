@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>clutch — setup</title>
+    <title data-i18n="setup.page_title">clutch — setup</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <style>
         :root {
@@ -204,41 +204,48 @@
 <body>
     <div class="setup-card">
         <img class="setup-logo" src="/assets/clutch.png" alt="Clutch logo">
-        <h1 class="setup-title">Welcome to Clutch</h1>
-        <p class="setup-subtitle">Create the first admin account to secure your service, or skip to run without
+        <h1 class="setup-title" data-i18n="setup.title">Welcome to Clutch</h1>
+        <p class="setup-subtitle" data-i18n="setup.subtitle">Create the first admin account to secure your service, or
+            skip to run without
             authentication.</p>
 
         <div class="error-message" id="error-message"></div>
 
         <form id="setup-form" autocomplete="off">
-            <label for="username">Username</label>
+            <label for="username" data-i18n="setup.username_label">Username</label>
             <input type="text" id="username" name="username" required minlength="3" maxlength="64"
-                autocomplete="username" placeholder="admin">
+                autocomplete="username" data-i18n-placeholder="setup.username_placeholder" placeholder="admin">
 
-            <label for="email">Email</label>
+            <label for="email" data-i18n="setup.email_label">Email</label>
             <input type="email" id="email" name="email" required maxlength="254" autocomplete="email"
-                placeholder="you@example.com">
+                data-i18n-placeholder="setup.email_placeholder" placeholder="you@example.com">
 
-            <label for="password">Password</label>
+            <label for="password" data-i18n="setup.password_label">Password</label>
             <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password"
-                placeholder="••••••••">
-            <p class="password-hint">Minimum 8 characters with uppercase, lowercase, digit, and a special character.
+                data-i18n-placeholder="setup.password_placeholder" placeholder="••••••••">
+            <p class="password-hint" data-i18n="setup.password_hint">Minimum 8 characters with uppercase, lowercase,
+                digit, and a special character.
             </p>
 
-            <label for="confirm-password">Confirm password</label>
+            <label for="confirm-password" data-i18n="setup.confirm_label">Confirm password</label>
             <input type="password" id="confirm-password" name="confirm_password" required minlength="8"
-                autocomplete="new-password" placeholder="••••••••">
+                autocomplete="new-password" data-i18n-placeholder="setup.confirm_placeholder" placeholder="••••••••">
 
-            <button class="btn-primary" type="submit" id="submit-btn">Create admin account</button>
+            <button class="btn-primary" type="submit" id="submit-btn" data-i18n="setup.submit">Create admin
+                account</button>
         </form>
 
-        <div class="setup-divider">or</div>
+        <div class="setup-divider" data-i18n="setup.divider">or</div>
 
-        <button class="btn-ghost" type="button" id="skip-btn">Skip — run without authentication</button>
+        <button class="btn-ghost" type="button" id="skip-btn" data-i18n="setup.skip">Skip — run without
+            authentication</button>
     </div>
 
+    <script src="/assets/i18n.js"></script>
     <script>
         (function () {
+            var i18nReady = i18n.init();
+
             var form = document.getElementById('setup-form');
             var errorEl = document.getElementById('error-message');
             var skipBtn = document.getElementById('skip-btn');
@@ -257,7 +264,7 @@
             function setLoading(loading) {
                 submitBtn.disabled = loading;
                 skipBtn.disabled = loading;
-                submitBtn.textContent = loading ? 'Creating…' : 'Create admin account';
+                submitBtn.textContent = loading ? i18n.t('setup.submit_loading') : i18n.t('setup.submit');
             }
 
             form.addEventListener('submit', function (e) {
@@ -268,7 +275,7 @@
                 var confirm = document.getElementById('confirm-password').value;
 
                 if (password !== confirm) {
-                    showError('Passwords do not match.');
+                    showError(i18n.t('setup.passwords_mismatch'));
                     return;
                 }
 
@@ -286,7 +293,7 @@
                     .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
                     .then(function (result) {
                         if (!result.ok) {
-                            showError(result.data.error || 'Setup failed.');
+                            showError(result.data.error || i18n.t('setup.error_fallback'));
                             setLoading(false);
                             return;
                         }
@@ -296,7 +303,7 @@
                         window.location.href = '/';
                     })
                     .catch(function (err) {
-                        showError('Network error: ' + err.message);
+                        showError(i18n.t('setup.network_error', { detail: err.message }));
                         setLoading(false);
                     });
             });
@@ -313,19 +320,35 @@
                     .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
                     .then(function (result) {
                         if (!result.ok) {
-                            showError(result.data.error || 'Skip failed.');
+                            showError(result.data.error || i18n.t('setup.skip_error_fallback'));
                             setLoading(false);
                             return;
                         }
                         window.location.href = '/';
                     })
                     .catch(function (err) {
-                        showError('Network error: ' + err.message);
+                        showError(i18n.t('setup.network_error', { detail: err.message }));
                         setLoading(false);
                     });
             });
-        })();
-    </script>
-</body>
 
-</html>
+            // ── Custom validation messages (translated) ──
+            function setFieldValidity(input) {
+                input.setCustomValidity('');
+                if (input.validity.valueMissing) {
+                    input.setCustomValidity(i18n.t('validation.required'));
+                } else if (input.validity.tooShort) {
+                    input.setCustomValidity(i18n.t('validation.min_length', { min: input.minLength }));
+                } else if (input.validity.typeMismatch && input.type === 'email') {
+                    input.setCustomValidity(i18n.t('validation.email'));
+                }
+            }
+
+            var validatedInputs = document.querySelectorAll('input[required]');
+            i18nReady.then(function () {
+                validatedInputs.forEach(setFieldValidity);
+            });
+            validatedInputs.forEach(function (input) {
+                input.addEventListener('input', function () { setFieldValidity(input); });
+            });
+        })();

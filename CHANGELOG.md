@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.17] - 2026-04-20
+
+### Improved in 1.7.17
+
+- **Full i18n for the web UI**: dashboard, login, and setup pages are now fully internationalised with English and Spanish translations. Language defaults to the browser's language (fallback: English).
+- **Theme follows OS preference**: the dashboard now detects the operating system's colour scheme (light/dark) and uses it as the default. Fallback when undetectable: dark.
+- **Translated form validation tooltips**: browser-native validation messages ("Please fill out this field.") are now shown in the active language instead of the browser's UI language.
+- **Password reset link fix**: the reset-password email link no longer loses the token when redirecting through `/login`.
+
 ## [1.7.16] - 2026-04-20
 
 ### Added in 1.7.16

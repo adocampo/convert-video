@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>clutch — login</title>
+    <title data-i18n="login.page_title">clutch — login</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <style>
         :root {
@@ -215,63 +215,73 @@
 
         <!-- ── Login view ── -->
         <div id="view-login">
-            <h1 class="login-title">Sign in</h1>
+            <h1 class="login-title" data-i18n="login.title">Sign in</h1>
             <div class="error-message" id="login-error"></div>
             <form id="login-form" autocomplete="on">
-                <label for="login-username">Username</label>
+                <label for="login-username" data-i18n="login.username_label">Username</label>
                 <input type="text" id="login-username" name="username" required autocomplete="username"
-                    placeholder="Username">
+                    data-i18n-placeholder="login.username_placeholder" placeholder="Username">
 
-                <label for="login-password">Password</label>
+                <label for="login-password" data-i18n="login.password_label">Password</label>
                 <input type="password" id="login-password" name="password" required autocomplete="current-password"
-                    placeholder="Password">
+                    data-i18n-placeholder="login.password_placeholder" placeholder="Password">
 
-                <button class="btn-primary" type="submit" id="login-btn">Sign in</button>
+                <button class="btn-primary" type="submit" id="login-btn" data-i18n="login.submit">Sign in</button>
             </form>
-            <a class="forgot-link" id="show-forgot">Forgot password?</a>
+            <a class="forgot-link" id="show-forgot" data-i18n="login.forgot_link">Forgot password?</a>
         </div>
 
         <!-- ── Forgot password view ── -->
         <div id="view-forgot" class="view-hidden">
-            <h1 class="login-title">Reset password</h1>
+            <h1 class="login-title" data-i18n="login.forgot.title">Reset password</h1>
             <div class="error-message" id="forgot-error"></div>
             <div class="success-message" id="forgot-success"></div>
             <form id="forgot-form">
-                <label for="forgot-email">Email address</label>
-                <input type="email" id="forgot-email" name="email" required placeholder="you@example.com">
+                <label for="forgot-email" data-i18n="login.forgot.email_label">Email address</label>
+                <input type="email" id="forgot-email" name="email" required
+                    data-i18n-placeholder="login.forgot.email_placeholder" placeholder="you@example.com">
 
-                <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
+                <button class="btn-primary" type="submit" id="forgot-btn" data-i18n="login.forgot.submit">Send reset
+                    link</button>
             </form>
-            <a class="back-link" id="show-login-from-forgot">Back to sign in</a>
+            <a class="back-link" id="show-login-from-forgot" data-i18n="login.forgot.back">Back to sign in</a>
         </div>
 
         <!-- ── Reset password view (arrived via link) ── -->
         <div id="view-reset" class="view-hidden">
-            <h1 class="login-title">Set new password</h1>
+            <h1 class="login-title" data-i18n="login.reset.title">Set new password</h1>
             <div class="error-message" id="reset-error"></div>
             <div class="success-message" id="reset-success"></div>
             <form id="reset-form">
-                <label for="reset-password">New password</label>
+                <label for="reset-password" data-i18n="login.reset.password_label">New password</label>
                 <input type="password" id="reset-password" name="new_password" required minlength="8"
-                    autocomplete="new-password" placeholder="••••••••">
-                <p class="password-hint">Min 8 chars, uppercase, lowercase, digit, special character.</p>
+                    autocomplete="new-password" data-i18n-placeholder="login.reset.password_placeholder"
+                    placeholder="••••••••">
+                <p class="password-hint" data-i18n="login.reset.password_hint">Min 8 chars, uppercase, lowercase, digit,
+                    special character.</p>
 
-                <label for="reset-confirm">Confirm new password</label>
+                <label for="reset-confirm" data-i18n="login.reset.confirm_label">Confirm new password</label>
                 <input type="password" id="reset-confirm" name="confirm_password" required minlength="8"
-                    autocomplete="new-password" placeholder="••••••••">
+                    autocomplete="new-password" data-i18n-placeholder="login.reset.confirm_placeholder"
+                    placeholder="••••••••">
 
-                <button class="btn-primary" type="submit" id="reset-btn">Reset password</button>
+                <button class="btn-primary" type="submit" id="reset-btn" data-i18n="login.reset.submit">Reset
+                    password</button>
             </form>
-            <a class="back-link" id="show-login-from-reset">Back to sign in</a>
+            <a class="back-link" id="show-login-from-reset" data-i18n="login.reset.back">Back to sign in</a>
         </div>
     </div>
 
+    <script src="/assets/i18n.js"></script>
     <script>
         (function () {
             // If auth is disabled, redirect to dashboard immediately
             fetch('/auth/status').then(function (r) { return r.json(); }).then(function (d) {
                 if (!d.auth_enabled) window.location.replace('/');
             }).catch(function () { /* ignore */ });
+
+            // Initialize i18n
+            var i18nReady = i18n.init();
 
             var viewLogin = document.getElementById('view-login');
             var viewForgot = document.getElementById('view-forgot');
@@ -312,7 +322,7 @@
                 e.preventDefault();
                 hideMsg(loginError);
                 loginBtn.disabled = true;
-                loginBtn.textContent = 'Signing in…';
+                loginBtn.textContent = i18n.t('login.submit_loading');
 
                 fetch('/auth/login', {
                     method: 'POST',
@@ -325,9 +335,9 @@
                     .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
                     .then(function (r) {
                         if (!r.ok) {
-                            showMsg(loginError, r.data.error || 'Login failed.');
+                            showMsg(loginError, r.data.error || i18n.t('login.error_fallback'));
                             loginBtn.disabled = false;
-                            loginBtn.textContent = 'Sign in';
+                            loginBtn.textContent = i18n.t('login.submit');
                             return;
                         }
                         if (r.data.token) {
@@ -336,9 +346,9 @@
                         window.location.href = '/';
                     })
                     .catch(function (err) {
-                        showMsg(loginError, 'Network error: ' + err.message);
+                        showMsg(loginError, i18n.t('login.network_error', { detail: err.message }));
                         loginBtn.disabled = false;
-                        loginBtn.textContent = 'Sign in';
+                        loginBtn.textContent = i18n.t('login.submit');
                     });
             });
 
@@ -367,7 +377,7 @@
                 hideMsg(forgotError);
                 hideMsg(forgotSuccess);
                 forgotBtn.disabled = true;
-                forgotBtn.textContent = 'Sending…';
+                forgotBtn.textContent = i18n.t('login.forgot.submit_loading');
 
                 fetch('/auth/password-reset', {
                     method: 'POST',
@@ -379,17 +389,17 @@
                     .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
                     .then(function (r) {
                         forgotBtn.disabled = false;
-                        forgotBtn.textContent = 'Send reset link';
+                        forgotBtn.textContent = i18n.t('login.forgot.submit');
                         if (!r.ok) {
-                            showMsg(forgotError, r.data.error || 'Request failed.');
+                            showMsg(forgotError, r.data.error || i18n.t('login.forgot.error_fallback'));
                             return;
                         }
-                        showMsg(forgotSuccess, r.data.message || 'Check your email for a reset link.');
+                        showMsg(forgotSuccess, i18n.t('login.forgot.success_fallback'));
                     })
                     .catch(function (err) {
-                        showMsg(forgotError, 'Network error: ' + err.message);
+                        showMsg(forgotError, i18n.t('login.network_error', { detail: err.message }));
                         forgotBtn.disabled = false;
-                        forgotBtn.textContent = 'Send reset link';
+                        forgotBtn.textContent = i18n.t('login.forgot.submit');
                     });
             });
 
@@ -407,12 +417,12 @@
                 var pwd = document.getElementById('reset-password').value;
                 var confirm = document.getElementById('reset-confirm').value;
                 if (pwd !== confirm) {
-                    showMsg(resetError, 'Passwords do not match.');
+                    showMsg(resetError, i18n.t('login.reset.passwords_mismatch'));
                     return;
                 }
 
                 resetBtn.disabled = true;
-                resetBtn.textContent = 'Resetting…';
+                resetBtn.textContent = i18n.t('login.reset.submit_loading');
 
                 fetch('/auth/password-reset/confirm', {
                     method: 'POST',
@@ -422,21 +432,41 @@
                     .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
                     .then(function (r) {
                         resetBtn.disabled = false;
-                        resetBtn.textContent = 'Reset password';
+                        resetBtn.textContent = i18n.t('login.reset.submit');
                         if (!r.ok) {
-                            showMsg(resetError, r.data.error || 'Reset failed.');
+                            showMsg(resetError, r.data.error || i18n.t('login.reset.error_fallback'));
                             return;
                         }
-                        showMsg(resetSuccess, r.data.message || 'Password reset. Redirecting…');
+                        showMsg(resetSuccess, i18n.t('login.reset.success'));
                         setTimeout(function () {
                             window.location.href = '/login';
                         }, 1500);
                     })
                     .catch(function (err) {
-                        showMsg(resetError, 'Network error: ' + err.message);
+                        showMsg(resetError, i18n.t('login.network_error', { detail: err.message }));
                         resetBtn.disabled = false;
-                        resetBtn.textContent = 'Reset password';
+                        resetBtn.textContent = i18n.t('login.reset.submit');
                     });
+            });
+
+            // ── Custom validation messages (translated) ──
+            function setFieldValidity(input) {
+                input.setCustomValidity('');
+                if (input.validity.valueMissing) {
+                    input.setCustomValidity(i18n.t('validation.required'));
+                } else if (input.validity.tooShort) {
+                    input.setCustomValidity(i18n.t('validation.min_length', { min: input.minLength }));
+                } else if (input.validity.typeMismatch && input.type === 'email') {
+                    input.setCustomValidity(i18n.t('validation.email'));
+                }
+            }
+
+            var validatedInputs = document.querySelectorAll('#view-login input[required], #view-forgot input[required], #view-reset input[required]');
+            i18nReady.then(function () {
+                validatedInputs.forEach(setFieldValidity);
+            });
+            validatedInputs.forEach(function (input) {
+                input.addEventListener('input', function () { setFieldValidity(input); });
             });
         })();
     </script>

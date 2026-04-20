@@ -2,7 +2,7 @@
     const state = {
         autoRefresh: true,
         timerId: null,
-        theme: 'light',
+        theme: 'dark',
         allowedRoots: [],
         release: {
             local_version: '',
@@ -279,7 +279,7 @@
         if (media.container) gen.push(media.container);
         if (media.duration) gen.push(media.duration);
         if (media.bitrate) gen.push(media.bitrate);
-        if (gen.length) lines.push(`<div class="media-row"><span class="media-label">General</span> ${escapeHtml(gen.join(' · '))}</div>`);
+        if (gen.length) lines.push(`<div class="media-row"><span class="media-label">${i18n.t('media.general')}</span> ${escapeHtml(gen.join(' · '))}</div>`);
         // Video tracks
         if (media.video && media.video.length) {
             media.video.forEach(function (v) {
@@ -289,7 +289,7 @@
                 if (v.fps) parts.push(v.fps + ' fps');
                 if (v.bitrate) parts.push(v.bitrate);
                 if (v.bit_depth) parts.push(v.bit_depth + '-bit');
-                lines.push(`<div class="media-row"><span class="media-label">Video</span> ${escapeHtml(parts.join(' · '))}</div>`);
+                lines.push(`<div class="media-row"><span class="media-label">${i18n.t('media.video')}</span> ${escapeHtml(parts.join(' · '))}</div>`);
             });
         }
         // Audio tracks
@@ -301,7 +301,7 @@
                 if (a.bitrate) parts.push(a.bitrate);
                 if (a.lang) parts.push(a.lang);
                 if (a.title) parts.push(a.title);
-                lines.push(`<div class="media-row"><span class="media-label">Audio</span> ${escapeHtml(parts.join(' · '))}</div>`);
+                lines.push(`<div class="media-row"><span class="media-label">${i18n.t('media.audio')}</span> ${escapeHtml(parts.join(' · '))}</div>`);
             });
         }
         // Subtitle tracks
@@ -311,8 +311,8 @@
                 if (s.codec) parts.push(s.codec);
                 if (s.lang) parts.push(s.lang);
                 if (s.title) parts.push(s.title);
-                if (s.forced) parts.push('forced');
-                lines.push(`<div class="media-row"><span class="media-label">Subtitle</span> ${escapeHtml(parts.join(' · '))}</div>`);
+                if (s.forced) parts.push(i18n.t('media.forced'));
+                lines.push(`<div class="media-row"><span class="media-label">${i18n.t('media.subtitle')}</span> ${escapeHtml(parts.join(' · '))}</div>`);
             });
         }
         if (!lines.length) return '';
@@ -600,24 +600,25 @@
         if (storedTheme) {
             return storedTheme;
         }
-        if (systemThemeQuery && systemThemeQuery.matches) {
-            return 'dark';
+        if (window.matchMedia) {
+            if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
         }
-        return 'light';
+        return 'dark';
     }
 
     function getAutoRefreshTitle() {
         if (state.autoRefresh) {
-            return 'Automatic queue refresh is on. The dashboard reloads the queue every 2 seconds. Click to pause it.';
+            return i18n.t('activity.auto_refresh_title_on');
         }
-        return 'Automatic queue refresh is off. Click to resume queue refresh every 2 seconds.';
+        return i18n.t('activity.auto_refresh_title_off');
     }
 
     function updateAutoRefreshButton() {
         if (!toggleAutoRefreshButton) {
             return;
         }
-        toggleAutoRefreshButton.textContent = `Auto refresh: ${state.autoRefresh ? 'on' : 'off'}`;
+        toggleAutoRefreshButton.textContent = state.autoRefresh ? i18n.t('activity.auto_refresh_on') : i18n.t('activity.auto_refresh_off');
         toggleAutoRefreshButton.setAttribute('title', getAutoRefreshTitle());
         toggleAutoRefreshButton.setAttribute('aria-label', getAutoRefreshTitle());
     }
@@ -682,19 +683,19 @@
 
     function buildReleaseTooltip(updateInfo) {
         if (updateInfo.update_in_progress) {
-            return 'Installing the latest clutch release and restarting the service.';
+            return i18n.t('release.installing_tooltip');
         }
 
         if (updateInfo.update_available) {
-            const heading = `New version available: ${updateInfo.local_version} -> ${updateInfo.remote_version}`;
+            const heading = i18n.t('release.update_available_tooltip', { local: updateInfo.local_version, remote: updateInfo.remote_version });
             const changelog = markdownToPlainText(updateInfo.changelog);
             return changelog ? `${heading}\n\n${changelog}` : heading;
         }
 
         const checkedAt = formatIsoTimestamp(updateInfo.checked_at);
         return checkedAt
-            ? `Check whether new versions are available. Last checked: ${checkedAt}.`
-            : 'Check whether new versions are available.';
+            ? i18n.t('release.check_tooltip_date', { date: checkedAt })
+            : i18n.t('release.check_tooltip');
     }
 
     function renderReleaseControl(updateInfo) {
@@ -725,11 +726,11 @@
 
         // Update button
         if (releaseButton && releaseLabel) {
-            let label = 'Check for updates';
+            let label = i18n.t('release.check_for_updates');
             if (nextInfo.update_in_progress) {
-                label = nextInfo.update_step_label || 'Updating\u2026';
+                label = nextInfo.update_step_label || i18n.t('release.updating');
             } else if (nextInfo.update_available && nextInfo.remote_version) {
-                label = 'Update to v' + nextInfo.remote_version;
+                label = i18n.t('release.update_to', { version: nextInfo.remote_version });
             }
 
             releaseLabel.textContent = label;
@@ -784,7 +785,7 @@
                 if (anchor) {
                     var dotEl = document.createElement('span');
                     dotEl.className = 'sidebar-version-dot';
-                    dotEl.title = 'Update available: v' + nextInfo.remote_version;
+                    dotEl.title = i18n.t('release.update_available_dot', { version: nextInfo.remote_version });
                     anchor.appendChild(dotEl);
                 }
             } else if (!nextInfo.update_available && existingDot) {
@@ -813,7 +814,7 @@
                 }
 
                 if (!updateInfo.update_in_progress && (!targetVersion || updateInfo.local_version === targetVersion)) {
-                    showToast(`Service restarted on clutch ${updateInfo.local_version || targetVersion}.`, 'ok');
+                    showToast(i18n.t('toast.service_restarted', { version: updateInfo.local_version || targetVersion }), 'ok');
                     // Full reload so all cached assets and state refresh cleanly
                     setTimeout(function () { location.reload(); }, 1200);
                     return;
@@ -824,7 +825,7 @@
         }
 
         showToast(
-            lastError || 'The service is restarting. Reload the page in a few seconds if it does not reconnect automatically.',
+            lastError || i18n.t('toast.service_restarting'),
             'error', 0
         );
     }
@@ -954,7 +955,7 @@
             state.auth.user = null;
             try { localStorage.removeItem(tokenStorageKey); } catch (ignored) { /* noop */ }
             window.location.replace('/login');
-            throw new Error('Session expired.');
+            throw new Error(i18n.t('auth.session_expired'));
         }
 
         const payload = await response.json().catch(function () {
@@ -1005,17 +1006,17 @@
         }
 
         if (!path) {
-            inputSelectionHint.textContent = 'Choose a single file or a folder on the source. Folders support glob filtering.';
+            inputSelectionHint.textContent = i18n.t('jobs.hint_choose');
             return;
         }
 
         if (nextKind === 'directory') {
-            inputSelectionHint.textContent = 'Selected source folder. Use the filter below to narrow files by pattern.';
+            inputSelectionHint.textContent = i18n.t('jobs.hint_folder');
             if (path) scheduleFilterPreview();
             return;
         }
 
-        inputSelectionHint.textContent = 'Selected source file. Only this item will be queued.';
+        inputSelectionHint.textContent = i18n.t('jobs.hint_file');
     }
 
     function clearInputSelection() {
@@ -1091,8 +1092,8 @@
         watcherDirectoryField.setAttribute(
             'title',
             path
-                ? `Selected source watch directory: ${path}`
-                : 'Source directory to monitor for new files.'
+                ? i18n.t('watchers.selected_source_dir', { path: path })
+                : i18n.t('watchers.source_dir_tooltip')
         );
     }
 
@@ -1120,7 +1121,7 @@
         watcherForm.elements.audio_passthrough.checked = false;
         watcherForm.elements.force.checked = false;
         syncAllCustomSelects();
-        watcherButton.textContent = 'Add watcher';
+        watcherButton.textContent = i18n.t('watchers.add_watcher');
         cancelEditWatcherButton.hidden = true;
         // Re-enable Edit/Remove buttons
         Array.prototype.forEach.call(
@@ -1138,17 +1139,17 @@
         syncAllowedRootsField();
 
         if (!state.allowedRoots.length) {
-            allowedRootsList.innerHTML = '<div class="empty">No allowed source roots configured. Add one to restrict what the service can access.</div>';
+            allowedRootsList.innerHTML = '<div class="empty">' + i18n.t('settings.allowed_roots_empty') + '</div>';
             return;
         }
 
         allowedRootsList.innerHTML = state.allowedRoots.map(function (root, index) {
             return `
                 <div class="list-item">
-                    <div class="job-name">Allowed source root ${index + 1}</div>
+                    <div class="job-name">${i18n.t('settings.allowed_root_n', { n: index + 1 })}</div>
                     <div class="path-code" title="${escapeHtml(root)}">${escapeHtml(root)}</div>
                     <div class="actions">
-                        <button class="ghost" type="button" data-remove-allowed-root="${index}" title="Remove this allowed source root from the service settings.">Remove</button>
+                        <button class="ghost" type="button" data-remove-allowed-root="${index}" title="${i18n.t('settings.remove_root_tooltip')}">${i18n.t('common.remove')}</button>
                     </div>
                 </div>`;
         }).join('');
@@ -1164,7 +1165,7 @@
                     state.allowedRoots.splice(index, 1);
                     renderAllowedRoots();
                     if (settingsButton) settingsButton.disabled = false;
-                    setStatus(settingsStatus, 'Allowed source root removed. Save settings to apply.', 'ok');
+                    setStatus(settingsStatus, i18n.t('toast.allowed_root_removed'), 'ok');
                 });
             }
         );
@@ -1181,13 +1182,13 @@
             return;
         }
         if (state.allowedRoots.indexOf(normalized) !== -1) {
-            setStatus(settingsStatus, 'Allowed source root already present.', 'ok');
+            setStatus(settingsStatus, i18n.t('toast.allowed_root_exists'), 'ok');
             return;
         }
         state.allowedRoots = state.allowedRoots.concat([normalized]);
         renderAllowedRoots();
         if (settingsButton) settingsButton.disabled = false;
-        setStatus(settingsStatus, 'Allowed source root added. Save settings to apply.', 'ok');
+        setStatus(settingsStatus, i18n.t('toast.allowed_root_added'), 'ok');
     }
 
     function setBrowserStatus(message, kind) {
@@ -1363,7 +1364,7 @@
 
     /* ── Schedule UI ── */
 
-    var DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var DAY_LABELS = [i18n.t('schedule.day_mon'), i18n.t('schedule.day_tue'), i18n.t('schedule.day_wed'), i18n.t('schedule.day_thu'), i18n.t('schedule.day_fri'), i18n.t('schedule.day_sat'), i18n.t('schedule.day_sun')];
     var DAY_VALUES = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
     function makeDefaultRule() {
@@ -1373,7 +1374,7 @@
     function renderScheduleRules() {
         var rules = state.scheduleRules;
         if (!rules.length) {
-            scheduleRulesList.innerHTML = '<div class="empty">No rules defined. Add a rule below.</div>';
+            scheduleRulesList.innerHTML = '<div class="empty">' + i18n.t('schedule.no_rules') + '</div>';
             return;
         }
 
@@ -1388,13 +1389,13 @@
             return '<div class="schedule-rule" data-rule-index="' + index + '">'
                 + '<div class="schedule-rule-fields">'
                 + '<div class="checks checks-inline">' + dayChecks + '</div>'
-                + '<label><span>From</span><input type="time" value="' + escapeHtml(rule.start || '00:00') + '" data-rule="' + index + '" data-field="start"></label>'
-                + '<label><span>To</span><input type="time" value="' + escapeHtml(rule.end || '07:00') + '" data-rule="' + index + '" data-field="end"></label>'
-                + '<label><span>Action</span><select data-rule="' + index + '" data-field="action">'
-                + '<option value="allow"' + (rule.action === 'allow' ? ' selected' : '') + '>Allow</option>'
-                + '<option value="block"' + (rule.action === 'block' ? ' selected' : '') + '>Block</option>'
+                + '<label><span>' + i18n.t('schedule.from') + '</span><input type="time" value="' + escapeHtml(rule.start || '00:00') + '" data-rule="' + index + '" data-field="start"></label>'
+                + '<label><span>' + i18n.t('schedule.to') + '</span><input type="time" value="' + escapeHtml(rule.end || '07:00') + '" data-rule="' + index + '" data-field="end"></label>'
+                + '<label><span>' + i18n.t('schedule.action') + '</span><select data-rule="' + index + '" data-field="action">'
+                + '<option value="allow"' + (rule.action === 'allow' ? ' selected' : '') + '>' + i18n.t('schedule.action_allow') + '</option>'
+                + '<option value="block"' + (rule.action === 'block' ? ' selected' : '') + '>' + i18n.t('schedule.action_block') + '</option>'
                 + '</select></label>'
-                + '<button class="ghost" type="button" data-remove-rule="' + index + '" title="Remove this rule.">&times;</button>'
+                + '<button class="ghost" type="button" data-remove-rule="' + index + '" title="' + escapeHtml(i18n.t('schedule.remove_rule_title')) + '">&times;</button>'
                 + '</div></div>';
         }).join('');
 
@@ -1506,7 +1507,7 @@
             var label = String(hour).length < 2 ? '0' + hour : String(hour);
             var pKwh = (p.price / 1000);
             return '<div class="' + cls + '" style="height:' + height.toFixed(1) + '%" title="'
-                + label + ':00 — ' + pKwh.toFixed(5) + ' EUR/kWh">'
+                + label + ':00 — ' + pKwh.toFixed(5) + ' ' + i18n.t('schedule.price_unit') + '">'
                 + '<span class="price-bar-label">' + label + '</span></div>';
         }).join('');
 
@@ -1543,16 +1544,16 @@
                 }
             }
             ranges.push((rStart < 10 ? '0' : '') + rStart + ':00–' + ((rEnd + 1) % 24 < 10 ? '0' : '') + ((rEnd + 1) % 24) + ':00');
-            cheapestRange = ' · Cheapest ' + cheapestCount + 'h: ' + ranges.join(', ');
+            cheapestRange = i18n.t('schedule.cheapest_range', {count: cheapestCount}) + ranges.join(', ');
         }
 
         var isRee = priceProvider.value === 'ree_pvpc';
-        var priceLabel = isRee ? 'PVPC' : 'spot';
-        var summary = 'Today\'s ' + priceLabel + ' prices — ' + prices.length + 'h loaded';
+        var priceLabel = isRee ? i18n.t('schedule.price_pvpc') : i18n.t('schedule.price_spot');
+        var summary = i18n.t('schedule.price_summary', {label: priceLabel, count: prices.length});
         if (currentPrice != null) {
-            summary += ' · Now: ' + (currentPrice / 1000).toFixed(5) + ' EUR/kWh';
+            summary += ' · ' + i18n.t('schedule.price_now') + ': ' + (currentPrice / 1000).toFixed(5) + ' ' + i18n.t('schedule.price_unit');
         }
-        if (sorted.length) summary += ' · Min: ' + (sorted[0].price / 1000).toFixed(5) + ' · Max: ' + (sorted[sorted.length - 1].price / 1000).toFixed(5);
+        if (sorted.length) summary += ' · ' + i18n.t('schedule.price_min') + ': ' + (sorted[0].price / 1000).toFixed(5) + ' · ' + i18n.t('schedule.price_max') + ': ' + (sorted[sorted.length - 1].price / 1000).toFixed(5);
         summary += cheapestRange;
         priceChartLabel.textContent = summary;
     }
@@ -1568,10 +1569,10 @@
         scheduleStatusBar.hidden = false;
         var allowed = status.allowed !== false;
         scheduleStatusBar.className = 'schedule-status-bar ' + (allowed ? 'schedule-allowed' : 'schedule-blocked');
-        var label = allowed ? 'Conversions allowed' : 'Conversions blocked';
+        var label = allowed ? i18n.t('schedule.conversions_allowed') : i18n.t('schedule.conversions_blocked');
         if (status.reason) label += ' — ' + status.reason;
         if (status.current_price != null) {
-            label += ' (current: ' + (Number(status.current_price) / 1000).toFixed(5) + ' EUR/kWh)';
+            label += ' ' + i18n.t('schedule.status_current_price', {price: (Number(status.current_price) / 1000).toFixed(5)});
         }
         scheduleStatusBar.textContent = label;
     }
@@ -1580,7 +1581,7 @@
         if (!zones || !zones.length) return;
         state.biddingZones = zones;
         var current = priceBiddingZone.value;
-        var options = '<option value="">Select zone</option>';
+        var options = '<option value="">' + i18n.t('schedule.zone_select') + '</option>';
         zones.forEach(function (zone) {
             var code = zone.code || '';
             var label = zone.label || code;
@@ -1644,7 +1645,7 @@
 
     async function saveSchedule() {
         saveScheduleButton.disabled = true;
-        setStatus(scheduleStatusEl, 'Saving schedule...');
+        setStatus(scheduleStatusEl, i18n.t('toast.saving_schedule'));
 
         try {
             await fetchJson('/config', {
@@ -1652,7 +1653,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ schedule_config: collectScheduleConfig() }),
             });
-            setStatus(scheduleStatusEl, 'Schedule saved.', 'ok');
+            setStatus(scheduleStatusEl, i18n.t('toast.schedule_saved'), 'ok');
             resetDirtyTracker('schedule');
             await Promise.all([refreshSummary(), refreshJobs()]);
         } catch (error) {
@@ -1698,27 +1699,27 @@
     function selectBrowserPath(path) {
         if (state.browser.target === 'input_file') {
             setInputSelection(path, 'file');
-            setFormStatus('Source file selected.', 'ok');
+            setFormStatus(i18n.t('toast.source_file_selected'), 'ok');
         } else if (state.browser.target === 'input_directory') {
             if (browserRecursiveField) inputRecursiveField.checked = browserRecursiveField.checked;
             setInputSelection(path, 'directory');
-            setFormStatus('Source folder selected.', 'ok');
+            setFormStatus(i18n.t('toast.source_folder_selected'), 'ok');
         } else if (state.browser.target === 'allowed_root') {
             addAllowedRoot(path);
         } else if (state.browser.target === 'watcher_directory') {
             setWatcherDirectory(path);
-            setStatus(watcherStatus, 'Source watch directory selected.', 'ok');
+            setStatus(watcherStatus, i18n.t('toast.watcher_source_selected'), 'ok');
         } else if (state.browser.target === 'watcher_output_directory') {
             setWatcherOutputDir(path);
-            setStatus(watcherStatus, 'Watcher output directory selected.', 'ok');
+            setStatus(watcherStatus, i18n.t('toast.watcher_output_selected'), 'ok');
         } else if (state.browser.target === 'output_directory') {
             outputDirField.value = path;
             outputDirField.dispatchEvent(new Event('change', { bubbles: true }));
-            setFormStatus('Destination folder selected.', 'ok');
+            setFormStatus(i18n.t('toast.dest_folder_selected'), 'ok');
         } else if (state.browser.target === 'default_output_directory') {
             defaultOutputDirField.value = path;
             defaultOutputDirField.dispatchEvent(new Event('change', { bubbles: true }));
-            setStatus(settingsStatus, 'Default destination folder selected.', 'ok');
+            setStatus(settingsStatus, i18n.t('toast.default_dest_selected'), 'ok');
         }
         closePathBrowser();
     }
@@ -1791,13 +1792,13 @@
 
         if (!state.browser.entries.length) {
             state.browser.activeEntryIndex = -1;
-            browserList.innerHTML = '<tr><td colspan="2" class="empty">No items in this directory.</td></tr>';
+            browserList.innerHTML = '<tr><td colspan="2" class="empty">' + i18n.t('browser.no_items') + '</td></tr>';
             return;
         }
 
         if (!entries.length) {
             state.browser.activeEntryIndex = -1;
-            browserList.innerHTML = '<tr><td colspan="2" class="empty">No entries match the current filter.</td></tr>';
+            browserList.innerHTML = '<tr><td colspan="2" class="empty">' + i18n.t('browser.no_entries') + '</td></tr>';
             return;
         }
 
@@ -1936,7 +1937,7 @@
         if (sidebarVersion && state.release.local_version) {
             var vText = 'v' + state.release.local_version;
             var dot = state.release.update_available
-                ? '<span class="sidebar-version-dot" title="Update available: v' + escapeHtml(state.release.remote_version) + '"></span>'
+                ? '<span class="sidebar-version-dot" title="' + escapeHtml(i18n.t('release.update_available_dot', { version: state.release.remote_version })) + '"></span>'
                 : '';
             sidebarVersion.innerHTML = '<a href="#system/about:about-version-section">' + escapeHtml(vText) + dot + '</a>';
             sidebarVersion.querySelector('a').addEventListener('click', function (e) {
@@ -2105,17 +2106,17 @@
 
     function renderWatchers(watchers) {
         if (!watchers.length) {
-            watchersContainer.innerHTML = '<div class="empty">No watchers configured.</div>';
+            watchersContainer.innerHTML = '<div class="empty">' + i18n.t('watchers.no_watchers') + '</div>';
             return;
         }
 
         var rows = watchers.map(function (watcher) {
             var overrides = [];
-            if (watcher.output_dir) overrides.push('output: ' + escapeHtml(watcher.output_dir));
-            if (watcher.codec) overrides.push('codec: ' + escapeHtml(watcher.codec));
-            if (watcher.encode_speed) overrides.push('speed: ' + escapeHtml(watcher.encode_speed));
-            if (watcher.audio_passthrough === true) overrides.push('audio passthrough');
-            if (watcher.force === true) overrides.push('force');
+            if (watcher.output_dir) overrides.push(i18n.t('watchers.override_output', {value: escapeHtml(watcher.output_dir)}));
+            if (watcher.codec) overrides.push(i18n.t('watchers.override_codec', {value: escapeHtml(watcher.codec)}));
+            if (watcher.encode_speed) overrides.push(i18n.t('watchers.override_speed', {value: escapeHtml(watcher.encode_speed)}));
+            if (watcher.audio_passthrough === true) overrides.push(i18n.t('watchers.override_audio'));
+            if (watcher.force === true) overrides.push(i18n.t('watchers.override_force'));
             var overridesCell = overrides.length
                 ? `<span class="watcher-overrides">${overrides.join(' | ')}</span>`
                 : '<span class="watcher-details">—</span>';
@@ -2123,18 +2124,18 @@
             var disabledAttr = isEditing ? ' disabled' : '';
             return `<tr>
                         <td><span class="watcher-dir" title="${escapeHtml(watcher.directory)}">${escapeHtml(watcher.directory)}</span></td>
-                        <td class="watcher-details">recursive: ${escapeHtml(String(watcher.recursive))} | poll: ${escapeHtml(String(watcher.poll_interval))}s | settle: ${escapeHtml(String(watcher.settle_time))}s | delete src: ${escapeHtml(String(Boolean(watcher.delete_source)))}</td>
+                        <td class="watcher-details">${escapeHtml(i18n.t('watchers.detail_line', {recursive: String(watcher.recursive), poll: String(watcher.poll_interval), settle: String(watcher.settle_time), delete_src: String(Boolean(watcher.delete_source))}))}</td>
                         <td>${overridesCell}</td>
                         <td class="watcher-actions">
-                            <button class="inline-button-warn" type="button" data-edit-watcher="${watcher.id}" title="Edit this watcher's settings."${disabledAttr}>Edit</button>
-                            <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="Stop monitoring this source directory."${disabledAttr}>Remove</button>
+                            <button class="inline-button-warn" type="button" data-edit-watcher="${watcher.id}" title="${escapeHtml(i18n.t('watchers.edit_title'))}"${disabledAttr}>${i18n.t('common.edit')}</button>
+                            <button class="inline-button" type="button" data-remove-watcher="${watcher.id}" title="${escapeHtml(i18n.t('watchers.remove_title'))}"${disabledAttr}>${i18n.t('common.remove')}</button>
                         </td>
                     </tr>`;
         }).join('');
 
         watchersContainer.innerHTML =
-            '<div class="watcher-section-header">Current watched directories</div>' +
-            '<table class="watcher-table"><thead><tr><th>Directory</th><th>Settings</th><th>Overrides</th><th></th></tr></thead><tbody>' +
+            '<div class="watcher-section-header">' + i18n.t('watchers.section_header') + '</div>' +
+            '<table class="watcher-table"><thead><tr><th>' + i18n.t('watchers.col_directory') + '</th><th>' + i18n.t('watchers.col_settings') + '</th><th>' + i18n.t('watchers.col_overrides') + '</th><th></th></tr></thead><tbody>' +
             rows + '</tbody></table>';
 
         Array.prototype.forEach.call(
@@ -2155,7 +2156,7 @@
                     watcherForm.elements.audio_passthrough.checked = Boolean(watcher.audio_passthrough);
                     watcherForm.elements.force.checked = Boolean(watcher.force);
                     syncAllCustomSelects();
-                    watcherButton.textContent = 'Update watcher';
+                    watcherButton.textContent = i18n.t('watchers.update_watcher');
                     cancelEditWatcherButton.hidden = false;
                     scrollAndHighlight(watcherForm);
                     // Disable all Edit/Remove buttons while editing
@@ -2174,15 +2175,15 @@
                     var watcher = watchers.find(function (w) { return w.id === button.dataset.removeWatcher; });
                     var dirName = watcher ? watcher.directory : 'this watcher';
                     var confirmed = await showConfirm({
-                        title: 'Remove watcher',
-                        message: 'Stop monitoring "' + dirName + '"? This will permanently remove this watcher configuration.',
-                        ok: 'Remove',
+                        title: i18n.t('confirm.remove_watcher_title'),
+                        message: i18n.t('confirm.remove_watcher_message', { directory: dirName }),
+                        ok: i18n.t('confirm.remove_watcher_ok'),
                     });
                     if (!confirmed) return;
                     button.disabled = true;
                     try {
                         await fetchJson(`/watchers/${button.dataset.removeWatcher}`, { method: 'DELETE' });
-                        setStatus(watcherStatus, 'Watcher removed.', 'ok');
+                        setStatus(watcherStatus, i18n.t('toast.watcher_removed'), 'ok');
                         await refreshSummary();
                     } catch (error) {
                         setStatus(watcherStatus, error.message, 'error');
@@ -2369,9 +2370,9 @@
         if (!total) {
             jobsCount.textContent = '';
         } else if (filtered === total) {
-            jobsCount.textContent = `${total} jobs`;
+            jobsCount.textContent = i18n.t('activity.jobs_total', { total: total });
         } else {
-            jobsCount.textContent = `${filtered} / ${total} jobs`;
+            jobsCount.textContent = i18n.t('activity.jobs_filtered', { filtered: filtered, total: total });
         }
     }
 
@@ -2381,7 +2382,7 @@
         Array.prototype.forEach.call(details, function (row) {
             if (!row.classList.contains('jt-detail-hidden')) anyOpen = true;
         });
-        toggleExpandJobsButton.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+        toggleExpandJobsButton.textContent = anyOpen ? i18n.t('activity.collapse_all') : i18n.t('activity.expand_all');
     }
 
     function buildSortIndicator(col) {
@@ -2403,7 +2404,7 @@
         var count = state.selectedJobs.size;
         if (bulkActionsBar) {
             bulkActionsBar.style.visibility = count === 0 ? 'hidden' : 'visible';
-            bulkActionsCount.textContent = count + ' selected';
+            bulkActionsCount.textContent = i18n.t('activity.bulk_count', { count: count });
         }
         // Update select-all checkbox state
         var selectAllCb = jobsContainer.querySelector('#jt-select-all');
@@ -2449,8 +2450,8 @@
 
         var actionLabel = { cancel: 'Cancel', retry: 'Retry', clear: 'Remove' }[action] || action;
         var confirmed = await showConfirm({
-            title: actionLabel + ' ' + ids.length + ' job' + (ids.length > 1 ? 's' : ''),
-            message: actionLabel + ' ' + ids.length + ' selected job' + (ids.length > 1 ? 's' : '') + '?',
+            title: i18n.t('confirm.bulk_action_title', { action: actionLabel, count: ids.length }),
+            message: i18n.t('confirm.bulk_action_message', { action: actionLabel, count: ids.length }),
             ok: actionLabel,
         });
         if (!confirmed) return;
@@ -2492,8 +2493,8 @@
             state.selectedJobs.clear();
             updateBulkActionsBar();
             jobsContainer.innerHTML = jobs.length
-                ? '<div class="empty">No jobs match the current filter.</div>'
-                : '<div class="empty">No jobs yet.</div>';
+                ? '<div class="empty">' + i18n.t('activity.no_jobs_filter') + '</div>'
+                : '<div class="empty">' + i18n.t('activity.no_jobs_yet') + '</div>';
             updateToggleExpandButton();
             return;
         }
@@ -2506,17 +2507,17 @@
         ensureActiveQueueJob(sortedJobs);
 
         var headerCols = [
-            { key: 'name', label: 'Name' },
-            { key: 'status', label: 'Status' },
-            { key: 'progress', label: 'Progress' },
-            { key: 'codec', label: 'Codec' },
-            { key: 'size', label: 'Size' },
-            { key: 'eta', label: 'ETA' },
-            { key: 'submitted', label: 'Submitted' },
+            { key: 'name', label: i18n.t('table.name') },
+            { key: 'status', label: i18n.t('table.status') },
+            { key: 'progress', label: i18n.t('table.progress') },
+            { key: 'codec', label: i18n.t('table.codec') },
+            { key: 'size', label: i18n.t('table.size') },
+            { key: 'eta', label: i18n.t('table.eta') },
+            { key: 'submitted', label: i18n.t('table.submitted') },
         ];
 
         var thead = '<thead><tr>'
-            + '<th class="jt-select-cell"><input type="checkbox" id="jt-select-all" title="Select all visible jobs"></th>'
+            + '<th class="jt-select-cell"><input type="checkbox" id="jt-select-all" title="' + escapeHtml(i18n.t('activity.select_all')) + '"></th>'
             + headerCols.map(function (c) {
             var cls = state.jobSortColumn === c.key ? ' class="jt-sorted"' : '';
             return '<th' + cls + ' data-sort-col="' + c.key + '">' + c.label + buildSortIndicator(c.key) + '</th>';
@@ -2526,15 +2527,15 @@
             const rawProgress = Number(job.progress_percent == null ? 0 : job.progress_percent);
             const progress = Number.isFinite(rawProgress) ? Math.max(0, Math.min(rawProgress, 100)) : 0;
             const etaLabel = extractEtaLabel(job.message);
-            let progressLabel = 'Done';
+            let progressLabel = i18n.t('job_progress.done');
 
-            if (job.status === 'queued') progressLabel = 'Waiting';
+            if (job.status === 'queued') progressLabel = i18n.t('job_progress.waiting');
             else if (job.status === 'running') progressLabel = progress.toFixed(1) + '%';
             else if (job.status === 'paused') progressLabel = progress.toFixed(1) + '%';
-            else if (job.status === 'cancelling') progressLabel = 'Cancelling\u2026';
-            else if (job.status === 'failed') progressLabel = 'Failed';
-            else if (job.status === 'cancelled') progressLabel = 'Cancelled';
-            else if (job.status === 'skipped') progressLabel = 'Skipped';
+            else if (job.status === 'cancelling') progressLabel = i18n.t('job_progress.cancelling');
+            else if (job.status === 'failed') progressLabel = i18n.t('job_progress.failed');
+            else if (job.status === 'cancelled') progressLabel = i18n.t('job_progress.cancelled');
+            else if (job.status === 'skipped') progressLabel = i18n.t('job_progress.skipped');
             else if (progress > 0) progressLabel = progress.toFixed(1) + '%';
 
             const submitted = formatIsoTimestamp(job.submitted_at) || job.submitted_display || '';
@@ -2544,21 +2545,21 @@
 
             // Action buttons
             const pauseButton = job.status === 'running'
-                ? '<button class="inline-button-warn" type="button" data-pause-id="' + job.id + '" title="Pause">Pause</button>'
+                ? '<button class="inline-button-warn" type="button" data-pause-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.pause')) + '">' + i18n.t('job_action.pause') + '</button>'
                 : job.status === 'paused'
-                    ? '<button class="inline-button-warn" type="button" data-resume-id="' + job.id + '" title="Resume">Resume</button>'
+                    ? '<button class="inline-button-warn" type="button" data-resume-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.resume')) + '">' + i18n.t('job_action.resume') + '</button>'
                     : '';
             const cancelButton = (job.status === 'queued' || job.status === 'running' || job.status === 'paused')
-                ? '<button class="inline-button" type="button" data-cancel-id="' + job.id + '" title="Cancel">Cancel</button>'
+                ? '<button class="inline-button" type="button" data-cancel-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.cancel')) + '">' + i18n.t('job_action.cancel') + '</button>'
                 : '';
             const moveNextButton = job.status === 'queued'
-                ? '<button class="inline-button-warn" type="button" data-move-next-id="' + job.id + '" title="Convert next">Next</button>'
+                ? '<button class="inline-button-warn" type="button" data-move-next-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.convert_next')) + '">' + i18n.t('job_action.next') + '</button>'
                 : '';
             const retryButton = (job.status === 'failed' || job.status === 'cancelled')
-                ? '<button class="inline-button-warn" type="button" data-retry-id="' + job.id + '" title="Retry">Retry</button>'
+                ? '<button class="inline-button-warn" type="button" data-retry-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.retry')) + '">' + i18n.t('job_action.retry') + '</button>'
                 : '';
             const clearButton = (job.status !== 'running' && job.status !== 'paused' && job.status !== 'cancelling')
-                ? '<button class="inline-button" type="button" data-clear-id="' + job.id + '" title="Remove from queue">Clear</button>'
+                ? '<button class="inline-button" type="button" data-clear-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.clear_title')) + '">' + i18n.t('job_action.clear') + '</button>'
                 : '';
 
             var actionBtns = [moveNextButton, pauseButton, cancelButton, retryButton, clearButton].filter(Boolean).join(' ');
@@ -2568,7 +2569,7 @@
             var mainRow = '<tr class="jt-row' + activeClass + '" data-job-id="' + job.id + '">'
                 + '<td class="jt-select-cell"><input type="checkbox" class="jt-select-cb" data-select-job="' + job.id + '"' + isChecked + '></td>'
                 + '<td class="jt-name" title="' + escapeHtml(basename(job.input_file)) + '">' + escapeHtml(basename(job.input_file)) + '</td>'
-                + '<td><span class="badge badge-sm ' + escapeHtml(job.status) + '">' + escapeHtml(job.status) + '</span></td>'
+                + '<td><span class="badge badge-sm ' + escapeHtml(job.status) + '">' + escapeHtml(i18n.t('job_status.' + job.status)) + '</span></td>'
                 + '<td class="jt-progress"><div class="progress-track"><div class="progress-fill progress-fill-' + escapeHtml(job.status) + '" style="width:' + progress.toFixed(1) + '%"></div></div><span class="jt-progress-label">' + escapeHtml(progressLabel) + '</span></td>'
                 + '<td class="jt-codec">' + escapeHtml(job.codec || '') + ' / ' + escapeHtml(job.encode_speed || '') + '</td>'
                 + '<td class="jt-size">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</td>'
@@ -2581,25 +2582,25 @@
             var elapsed = formatElapsed(job.started_at, job.finished_at);
 
             var srcCol = '<div class="jt-detail-col">'
-                + '<div class="jt-detail-col-title">Source</div>'
-                + '<div class="job-detail"><div class="job-detail-label">Size</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</div></div>'
-                + '<div class="job-detail"><div class="job-detail-label">Path</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.input_file) + '</div></div>'
-                + renderMediaSection('Media', job.input_media)
+                + '<div class="jt-detail-col-title">' + i18n.t('job_detail.source_title') + '</div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.size_label') + '</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.path_label') + '</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.input_file) + '</div></div>'
+                + renderMediaSection(i18n.t('job_detail.media_label'), job.input_media)
                 + '</div>';
 
             var outCol = '<div class="jt-detail-col">'
-                + '<div class="jt-detail-col-title">Output</div>'
-                + '<div class="job-detail"><div class="job-detail-label">Size</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.output_size_bytes)) + '</div></div>'
-                + (job.output_file ? '<div class="job-detail"><div class="job-detail-label">Path</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.output_file) + '</div></div>' : '')
-                + renderMediaSection('Media', job.output_media)
+                + '<div class="jt-detail-col-title">' + i18n.t('job_detail.output_title') + '</div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.size_label') + '</div><div class="job-detail-value">' + escapeHtml(formatBytes(job.output_size_bytes)) + '</div></div>'
+                + (job.output_file ? '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.path_label') + '</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.output_file) + '</div></div>' : '')
+                + renderMediaSection(i18n.t('job_detail.media_label'), job.output_media)
                 + '</div>';
 
             var footerDetails = '<div class="jt-detail-footer">'
-                + '<div class="job-detail"><div class="job-detail-label">Profile</div><div class="job-detail-value">' + escapeHtml(job.codec) + ' / ' + escapeHtml(job.encode_speed) + '</div></div>'
-                + '<div class="job-detail"><div class="job-detail-label">Submitted</div><div class="job-detail-value">' + escapeHtml(submitted) + '</div></div>'
-                + '<div class="job-detail"><div class="job-detail-label">Compression</div><div class="job-detail-value">' + escapeHtml(formatCompression(job.compression_percent)) + '</div></div>'
-                + (elapsed ? '<div class="job-detail"><div class="job-detail-label">Duration</div><div class="job-detail-value">' + escapeHtml(elapsed) + '</div></div>' : '')
-                + '<div class="job-detail jt-detail-message"><div class="job-detail-label">Message</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.message || 'No extra message.') + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.profile_label') + '</div><div class="job-detail-value">' + escapeHtml(job.codec) + ' / ' + escapeHtml(job.encode_speed) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.submitted_label') + '</div><div class="job-detail-value">' + escapeHtml(submitted) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.compression_label') + '</div><div class="job-detail-value">' + escapeHtml(formatCompression(job.compression_percent)) + '</div></div>'
+                + (elapsed ? '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.duration_label') + '</div><div class="job-detail-value">' + escapeHtml(elapsed) + '</div></div>' : '')
+                + '<div class="job-detail jt-detail-message"><div class="job-detail-label">' + i18n.t('job_detail.message_label') + '</div><div class="job-detail-value job-detail-code">' + escapeHtml(job.message || i18n.t('job_detail.no_message')) + '</div></div>'
                 + '</div>';
 
             var detailRow = '<tr class="jt-detail-row' + (isOpen ? '' : ' jt-detail-hidden') + '" data-detail-for="' + job.id + '">'
@@ -2681,15 +2682,15 @@
             function (button) {
                 button.addEventListener('click', async function () {
                     button.disabled = true;
-                    button.textContent = 'Pausing...';
+                    button.textContent = i18n.t('job_action.pausing');
                     try {
                         const response = await fetchJson(`/jobs/${button.dataset.pauseId}/pause`, { method: 'POST' });
-                        setFormStatus(response.message || 'Conversion paused.', 'ok');
+                        setFormStatus(response.message || i18n.t('toast.conversion_paused'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Pause';
+                        button.textContent = i18n.t('job_action.pause');
                     }
                 });
             }
@@ -2700,15 +2701,15 @@
             function (button) {
                 button.addEventListener('click', async function () {
                     button.disabled = true;
-                    button.textContent = 'Resuming...';
+                    button.textContent = i18n.t('job_action.resuming');
                     try {
                         const response = await fetchJson(`/jobs/${button.dataset.resumeId}/resume`, { method: 'POST' });
-                        setFormStatus(response.message || 'Conversion resumed.', 'ok');
+                        setFormStatus(response.message || i18n.t('toast.conversion_resumed'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Resume';
+                        button.textContent = i18n.t('job_action.resume');
                     }
                 });
             }
@@ -2719,15 +2720,15 @@
             function (button) {
                 button.addEventListener('click', async function () {
                     button.disabled = true;
-                    button.textContent = 'Cancelling...';
+                    button.textContent = i18n.t('job_action.cancelling');
                     try {
                         const response = await fetchJson(`/jobs/${button.dataset.cancelId}`, { method: 'DELETE' });
-                        setFormStatus(response.message || 'Cancellation requested.', 'ok');
+                        setFormStatus(response.message || i18n.t('toast.cancellation_requested'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Cancel';
+                        button.textContent = i18n.t('job_action.cancel');
                     }
                 });
             }
@@ -2737,12 +2738,12 @@
             jobsContainer.querySelectorAll('[data-clear-id]'),
             function (button) {
                 button.addEventListener('click', async function () {
-                    var confirmed = await showConfirm({ title: 'Remove job', message: 'Remove this job from the queue list?', ok: 'Remove' });
+                    var confirmed = await showConfirm({ title: i18n.t('confirm.remove_job_title'), message: i18n.t('confirm.remove_job_message'), ok: i18n.t('confirm.remove_job_ok') });
                     if (!confirmed) return;
                     button.disabled = true;
                     try {
                         await fetchJson(`/jobs/${button.dataset.clearId}?purge=1`, { method: 'DELETE' });
-                        setFormStatus('Job removed from the queue.', 'ok');
+                        setFormStatus(i18n.t('toast.job_removed'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
@@ -2757,15 +2758,15 @@
             function (button) {
                 button.addEventListener('click', async function () {
                     button.disabled = true;
-                    button.textContent = 'Retrying...';
+                    button.textContent = i18n.t('job_action.retrying');
                     try {
                         const response = await fetchJson(`/jobs/${button.dataset.retryId}/retry`, { method: 'POST' });
-                        setFormStatus(response.message || 'Job queued for retry.', 'ok');
+                        setFormStatus(response.message || i18n.t('toast.job_queued_retry'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Retry';
+                        button.textContent = i18n.t('job_action.retry');
                     }
                 });
             }
@@ -2776,15 +2777,15 @@
             function (button) {
                 button.addEventListener('click', async function () {
                     button.disabled = true;
-                    button.textContent = 'Moving...';
+                    button.textContent = i18n.t('job_action.moving');
                     try {
                         await fetchJson(`/jobs/${button.dataset.moveNextId}/move-next`, { method: 'POST' });
-                        setFormStatus('Job promoted to convert next.', 'ok');
+                        setFormStatus(i18n.t('toast.job_promoted'), 'ok');
                         await refreshJobs();
                     } catch (error) {
                         setFormStatus(error.message, 'error');
                         button.disabled = false;
-                        button.textContent = 'Convert next';
+                        button.textContent = i18n.t('job_action.convert_next');
                     }
                 });
             }
@@ -2832,29 +2833,29 @@
 
         // CPU
         if (data.load != null || data.cpu_count) {
-            var cpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">CPU</div>';
-            if (data.cpu_count) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Cores</span><span>' + data.cpu_count + '</span></div>';
-            if (data.load) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Load average</span><span>' + data.load.join(' / ') + '</span></div>';
-            if (data.cpu_temp != null) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">Temperature</span><span>' + data.cpu_temp + ' °C</span></div>';
+            var cpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">' + i18n.t('sysmon.cpu') + '</div>';
+            if (data.cpu_count) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">' + i18n.t('sysmon.cores') + '</span><span>' + data.cpu_count + '</span></div>';
+            if (data.load) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">' + i18n.t('sysmon.load_average') + '</span><span>' + data.load.join(' / ') + '</span></div>';
+            if (data.cpu_temp != null) cpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">' + i18n.t('sysmon.temperature') + '</span><span>' + data.cpu_temp + ' °C</span></div>';
             cpuHtml += '</div>';
             sections.push(cpuHtml);
         }
 
         // Memory
         if (data.memory) {
-            sections.push('<div class="sysmon-section"><div class="sysmon-section-title">Memory</div>'
-                + pctBar(data.memory.used, data.memory.total, 'RAM')
+            sections.push('<div class="sysmon-section"><div class="sysmon-section-title">' + i18n.t('sysmon.memory') + '</div>'
+                + pctBar(data.memory.used, data.memory.total, i18n.t('sysmon.ram'))
                 + '</div>');
         }
 
         // GPUs
         if (data.gpus && data.gpus.length) {
-            var gpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">GPU</div>';
+            var gpuHtml = '<div class="sysmon-section"><div class="sysmon-section-title">' + i18n.t('sysmon.gpu') + '</div>';
             data.gpus.forEach(function (gpu) {
                 gpuHtml += '<div class="sysmon-gpu">';
                 gpuHtml += '<div class="sysmon-kv"><span class="sysmon-kv-label">' + escapeHtml(gpu.name) + '</span></div>';
                 if (gpu.mem_total_mib != null && gpu.mem_used_mib != null) {
-                    gpuHtml += pctBar(gpu.mem_used_mib * 1048576, gpu.mem_total_mib * 1048576, 'VRAM');
+                    gpuHtml += pctBar(gpu.mem_used_mib * 1048576, gpu.mem_total_mib * 1048576, i18n.t('sysmon.vram'));
                 }
                 var meta = [];
                 if (gpu.utilization_pct != null) meta.push('Load ' + gpu.utilization_pct + '%');
@@ -2869,7 +2870,7 @@
 
         // Disks
         if (data.disks && data.disks.length) {
-            var diskHtml = '<div class="sysmon-section"><div class="sysmon-section-title">Disks</div>';
+            var diskHtml = '<div class="sysmon-section"><div class="sysmon-section-title">' + i18n.t('sysmon.disks') + '</div>';
             data.disks.forEach(function (d) {
                 diskHtml += pctBar(d.used, d.total, d.mount)
                     + '<div class="sysmon-metric-detail">' + escapeHtml(d.device) + '</div>';
@@ -2927,27 +2928,27 @@
 
     function renderNotifChannels(channels) {
         if (!channels.length) {
-            notifList.innerHTML = '<div class="empty">No notification channels configured yet.</div>';
+            notifList.innerHTML = '<div class="empty">' + i18n.t('notif.no_channels') + '</div>';
             return;
         }
         notifList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th>Type</th><th>Name</th><th>Events</th><th>Status</th><th></th></tr></thead>'
+            + '<thead><tr><th>' + i18n.t('notif.col_type') + '</th><th>' + i18n.t('notif.col_name') + '</th><th>' + i18n.t('notif.col_events') + '</th><th>' + i18n.t('notif.col_status') + '</th><th></th></tr></thead>'
             + '<tbody>'
             + channels.map(function (ch) {
                 var typeLabel = ch.type === 'telegram' ? '&#x2708; Telegram' : '&#x1F517; Webhook';
-                var evts = (ch.events || []).map(function (e) { return e.replace('job_', ''); }).join(', ') || 'none';
+                var evts = (ch.events || []).map(function (e) { return e.replace('job_', ''); }).join(', ') || i18n.t('notif.events_none');
                 var statusHtml = ch.enabled
-                    ? '<span class="chip chip-ok">Enabled</span>'
-                    : '<span class="chip chip-muted">Disabled</span>';
+                    ? '<span class="chip chip-ok">' + i18n.t('notif.enabled') + '</span>'
+                    : '<span class="chip chip-muted">' + i18n.t('notif.disabled') + '</span>';
                 return '<tr>'
                     + '<td>' + typeLabel + '</td>'
                     + '<td>' + escapeHtml(ch.name || '—') + '</td>'
                     + '<td>' + escapeHtml(evts) + '</td>'
                     + '<td>' + statusHtml + '</td>'
                     + '<td class="actions-cell">'
-                    + '<button class="ghost notif-test-list-btn" data-id="' + ch.id + '" title="Send test notification">Test</button> '
-                    + '<button class="ghost notif-edit-btn" data-id="' + ch.id + '" title="Edit">Edit</button> '
-                    + '<button class="ghost danger-text notif-delete-btn" data-id="' + ch.id + '" title="Delete">Delete</button>'
+                    + '<button class="ghost notif-test-list-btn" data-id="' + ch.id + '" title="' + i18n.t('notif.test_tooltip') + '">' + i18n.t('notif.test') + '</button> '
+                    + '<button class="ghost notif-edit-btn" data-id="' + ch.id + '" title="' + i18n.t('common.edit') + '">' + i18n.t('common.edit') + '</button> '
+                    + '<button class="ghost danger-text notif-delete-btn" data-id="' + ch.id + '" title="' + i18n.t('common.delete') + '">' + i18n.t('common.delete') + '</button>'
                     + '</td>'
                     + '</tr>';
             }).join('')
@@ -2971,7 +2972,7 @@
         notifIdInput.value = (channel && channel.id) || '';
         notifNameInput.value = (channel && channel.name) || '';
         notifEnabledInput.checked = channel ? channel.enabled : true;
-        notifEditorLegend.textContent = channel ? 'Edit Channel' : 'New ' + type.charAt(0).toUpperCase() + type.slice(1);
+        notifEditorLegend.textContent = channel ? i18n.t('notif.edit_channel') : i18n.t('notif.new_channel', { type: type.charAt(0).toUpperCase() + type.slice(1) });
 
         // Telegram fields
         var botTokenInput = document.getElementById('notif-bot-token');
@@ -3015,7 +3016,7 @@
     }
 
     function deleteNotifChannel(id) {
-        showConfirm({ title: 'Delete Channel', message: 'Delete this notification channel?', ok: 'Delete' }).then(function (confirmed) {
+        showConfirm({ title: i18n.t('confirm.delete_channel_title'), message: i18n.t('confirm.delete_channel_message'), ok: i18n.t('confirm.delete_channel_ok') }).then(function (confirmed) {
             if (!confirmed) return;
             fetchJson('/config/notifications/' + id, { method: 'DELETE' }).then(function () {
                 closeNotifEditor();
@@ -3049,7 +3050,7 @@
 
     notifForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        setStatus(notifStatus, 'Saving…');
+        setStatus(notifStatus, i18n.t('toast.saving'));
         var type = notifTypeInput.value;
         var config = {};
         if (type === 'telegram') {
@@ -3060,7 +3061,7 @@
             var headersRaw = document.getElementById('notif-webhook-headers').value.trim();
             if (headersRaw) {
                 try { config.headers = JSON.parse(headersRaw); } catch (_e) {
-                    setStatus(notifStatus, 'Invalid JSON in Headers field.', 'error');
+                    setStatus(notifStatus, i18n.t('toast.invalid_json_headers'), 'error');
                     return;
                 }
             }
@@ -3082,7 +3083,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         }).then(function (result) {
-            setStatus(notifStatus, 'Channel saved.', 'ok');
+            setStatus(notifStatus, i18n.t('toast.channel_saved'), 'ok');
             resetDirtyTracker('notif-form');
             notifIdInput.value = result.id || notifIdInput.value;
             notifTestBtn.style.display = '';
@@ -3094,14 +3095,14 @@
 
     notifTestBtn.addEventListener('click', function () {
         var id = notifIdInput.value;
-        if (!id) { setStatus(notifStatus, 'Save the channel first.', 'error'); return; }
-        setStatus(notifStatus, 'Sending test…');
+        if (!id) { setStatus(notifStatus, i18n.t('toast.save_channel_first'), 'error'); return; }
+        setStatus(notifStatus, i18n.t('toast.sending_test'));
         fetchJson('/config/notifications/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id }),
         }).then(function (result) {
-            setStatus(notifStatus, result.message || 'Test sent.', result.ok ? 'ok' : 'error');
+            setStatus(notifStatus, result.message || i18n.t('toast.test_sent'), result.ok ? 'ok' : 'error');
         }).catch(function (err) {
             setStatus(notifStatus, err.message, 'error');
         });
@@ -3149,11 +3150,11 @@
 
     function renderLogFilesTable(files) {
         if (!files.length) {
-            logFilesTableWrap.innerHTML = '<div class="empty">No log files found.</div>';
+            logFilesTableWrap.innerHTML = '<div class="empty">' + i18n.t('system.logs.no_files') + '</div>';
             return;
         }
         var html = '<table class="log-files-table">'
-            + '<thead><tr><th>Filename</th><th>Size</th><th>Last Modified</th><th></th></tr></thead>'
+            + '<thead><tr><th>' + i18n.t('system.logs.col_filename') + '</th><th>' + i18n.t('system.logs.col_size') + '</th><th>' + i18n.t('system.logs.col_modified') + '</th><th></th></tr></thead>'
             + '<tbody>';
         files.forEach(function (f) {
             var mod = f.modified ? formatIsoTimestamp(f.modified) : '–';
@@ -3161,12 +3162,12 @@
             var isActive = f.name === 'clutch.log';
             var downloadUrl = '/system/logs/download?file=' + encodeURIComponent(f.name);
             if (state.auth.token) downloadUrl += '&token=' + encodeURIComponent(state.auth.token);
-            var actions = '<a href="' + downloadUrl + '" class="ghost" download>Download</a>';
+            var actions = '<a href="' + downloadUrl + '" class="ghost" download>' + i18n.t('system.logs.download') + '</a>';
             if (!isActive) {
-                actions += ' <button class="ghost danger-text" data-delete-logfile="' + escapeHtml(f.name) + '">Delete</button>';
+                actions += ' <button class="ghost danger-text" data-delete-logfile="' + escapeHtml(f.name) + '">' + i18n.t('system.logs.delete') + '</button>';
             }
             html += '<tr>'
-                + '<td>' + escapeHtml(f.name) + (isActive ? ' <span class="chip">active</span>' : '') + '</td>'
+                + '<td>' + escapeHtml(f.name) + (isActive ? ' <span class="chip">' + i18n.t('system.logs.active_chip') + '</span>' : '') + '</td>'
                 + '<td>' + size + '</td>'
                 + '<td>' + mod + '</td>'
                 + '<td class="actions-cell">' + actions + '</td>'
@@ -3181,7 +3182,7 @@
             var btn = e.target.closest('[data-delete-logfile]');
             if (!btn) return;
             var name = btn.dataset.deleteLogfile;
-            showConfirm({ title: 'Delete Log File', message: 'Delete log file "' + name + '"?', ok: 'Delete' }).then(function (confirmed) {
+            showConfirm({ title: i18n.t('confirm.delete_log_file_title'), message: i18n.t('confirm.delete_log_file_message', { name: name }), ok: i18n.t('confirm.delete_log_file_ok') }).then(function (confirmed) {
                 if (!confirmed) return;
                 fetchJson('/system/logs/files?file=' + encodeURIComponent(name), { method: 'DELETE' }).then(function () {
                     loadLogFilesTable();
@@ -3196,7 +3197,7 @@
 
     if (logFilesClearBtn) {
         logFilesClearBtn.addEventListener('click', function () {
-            showConfirm({ title: 'Clear Log Files', message: 'Delete all rotated log files? The active log will be kept.', ok: 'Delete All' }).then(function (confirmed) {
+            showConfirm({ title: i18n.t('confirm.clear_log_files_title'), message: i18n.t('confirm.clear_log_files_message'), ok: i18n.t('confirm.clear_log_files_ok') }).then(function (confirmed) {
                 if (!confirmed) return;
                 fetchJson('/system/logs/files', { method: 'DELETE' }).then(function () {
                     loadLogFilesTable();
@@ -3248,7 +3249,7 @@
 
     function renderLogEntries(entries) {
         if (!entries.length) {
-            logEntriesEl.innerHTML = '<div class="empty">No log entries found.</div>';
+            logEntriesEl.innerHTML = '<div class="empty">' + i18n.t('system.logs.no_entries') + '</div>';
             return;
         }
         var html = '';
@@ -3266,9 +3267,9 @@
     function renderLogPagination(total, page, limit) {
         var totalPages = Math.max(1, Math.ceil(total / limit));
         if (totalPages <= 1) { logPagination.innerHTML = ''; return; }
-        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-logpage="' + (page - 1) + '">&laquo; Prev</button>';
-        html += '<span>Page ' + page + ' / ' + totalPages + ' (' + total + ' entries)</span>';
-        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-logpage="' + (page + 1) + '">Next &raquo;</button>';
+        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-logpage="' + (page - 1) + '">&laquo; ' + i18n.t('pagination.prev') + '</button>';
+        html += '<span>' + i18n.t('pagination.page_info', { page: page, totalPages: totalPages, total: total }) + '</span>';
+        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-logpage="' + (page + 1) + '">' + i18n.t('pagination.next') + ' &raquo;</button>';
         logPagination.innerHTML = html;
     }
 
@@ -3330,17 +3331,17 @@
 
     function renderTasks(tasks) {
         if (!tasks.length) {
-            tasksTableWrap.innerHTML = '<div class="empty">No tasks found.</div>';
+            tasksTableWrap.innerHTML = '<div class="empty">' + i18n.t('system.no_tasks') + '</div>';
             return;
         }
 
         var cols = [
-            { key: 'name', label: 'Name' },
-            { key: 'status', label: 'Status' },
-            { key: 'codec', label: 'Codec' },
-            { key: 'size', label: 'Size' },
-            { key: 'duration', label: 'Duration' },
-            { key: 'submitted', label: 'Submitted' },
+            { key: 'name', label: i18n.t('table.name') },
+            { key: 'status', label: i18n.t('table.status') },
+            { key: 'codec', label: i18n.t('table.codec') },
+            { key: 'size', label: i18n.t('table.size') },
+            { key: 'duration', label: i18n.t('table.duration') },
+            { key: 'submitted', label: i18n.t('table.submitted') },
         ];
 
         var thead = '<thead><tr>' + cols.map(function (c) {
@@ -3377,7 +3378,7 @@
             var rowCls = t.status === 'failed' ? ' class="task-row-failed"' : '';
             return '<tr' + rowCls + '>'
                 + '<td title="' + escapeHtml(t.input_file || '') + '">' + escapeHtml(name) + '</td>'
-                + '<td><span class="' + statusCls + '">' + escapeHtml(t.status || '') + '</span></td>'
+                + '<td><span class="' + statusCls + '">' + escapeHtml(i18n.t('job_status.' + (t.status || 'queued'))) + '</span></td>'
                 + '<td>' + escapeHtml(t.codec || '–') + '</td>'
                 + '<td>' + sizeIn + ' → ' + sizeOut + comp + '</td>'
                 + '<td>' + dur + '</td>'
@@ -3419,9 +3420,9 @@
     function renderTasksPagination(total, page, limit) {
         var totalPages = Math.max(1, Math.ceil(total / limit));
         if (totalPages <= 1) { tasksPagination.innerHTML = ''; return; }
-        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-taskpage="' + (page - 1) + '">&laquo; Prev</button>';
-        html += '<span>Page ' + page + ' / ' + totalPages + ' (' + total + ' tasks)</span>';
-        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-taskpage="' + (page + 1) + '">Next &raquo;</button>';
+        var html = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' data-taskpage="' + (page - 1) + '">&laquo; ' + i18n.t('pagination.prev') + '</button>';
+        html += '<span>' + i18n.t('pagination.page_info', { page: page, totalPages: totalPages, total: total }) + '</span>';
+        html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-taskpage="' + (page + 1) + '">' + i18n.t('pagination.next') + ' &raquo;</button>';
         tasksPagination.innerHTML = html;
     }
 
@@ -3706,11 +3707,33 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ date_format: fmt }),
                 }).then(function () {
-                    showToast('Date format saved.');
+                    showToast(i18n.t('toast.date_format_saved'));
                     // Re-render jobs to reflect new format
                     refreshJobs();
                 }).catch(function (err) { showToast(err.message, 'error'); });
             }
+        });
+    }
+
+    // ── Language selectors ──
+    var generalLanguageSelect = document.getElementById('general-language');
+    var userSettingsLanguageSelect = document.getElementById('user-settings-language');
+
+    if (generalLanguageSelect) {
+        generalLanguageSelect.addEventListener('change', async function () {
+            await i18n.setLanguage(generalLanguageSelect.value);
+            if (userSettingsLanguageSelect) userSettingsLanguageSelect.value = generalLanguageSelect.value;
+            updateAutoRefreshButton();
+            refreshAll();
+        });
+    }
+
+    if (userSettingsLanguageSelect) {
+        userSettingsLanguageSelect.addEventListener('change', async function () {
+            await i18n.setLanguage(userSettingsLanguageSelect.value);
+            if (generalLanguageSelect) generalLanguageSelect.value = userSettingsLanguageSelect.value;
+            updateAutoRefreshButton();
+            refreshAll();
         });
     }
 
@@ -3732,18 +3755,18 @@
     function renderUserTokensList(tokens) {
         if (!userTokensList) return;
         if (!tokens.length) {
-            userTokensList.innerHTML = '<div class="empty">No personal API tokens.</div>';
+            userTokensList.innerHTML = '<div class="empty">' + i18n.t('auth.no_tokens') + '</div>';
             return;
         }
         userTokensList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
+            + '<thead><tr><th>' + i18n.t('table.name') + '</th><th>' + i18n.t('table.created') + '</th><th>' + i18n.t('table.expires') + '</th><th></th></tr></thead>'
             + '<tbody>'
             + tokens.map(function (t) {
                 return '<tr>'
-                    + '<td>' + escapeHtml(t.name || '(unnamed)') + '</td>'
+                    + '<td>' + escapeHtml(t.name || i18n.t('auth.unnamed_token')) + '</td>'
                     + '<td>' + escapeHtml(formatIsoTimestamp(t.created_at) || String(t.created_at || '').substring(0, 10)) + '</td>'
                     + '<td>' + escapeHtml(formatIsoTimestamp(t.expires_at) || String(t.expires_at || '').substring(0, 10)) + '</td>'
-                    + '<td class="actions-cell"><button class="ghost danger-text" data-delete-user-token="' + t.id + '">Revoke</button></td>'
+                    + '<td class="actions-cell"><button class="ghost danger-text" data-delete-user-token="' + t.id + '">' + i18n.t('common.revoke') + '</button></td>'
                     + '</tr>';
             }).join('')
             + '</tbody></table>';
@@ -3753,10 +3776,10 @@
         userTokensList.addEventListener('click', function (e) {
             var tokenId = e.target.dataset.deleteUserToken;
             if (tokenId) {
-                showConfirm({ title: 'Revoke Token', message: 'Revoke this API token? Any integrations using it will stop working.', ok: 'Revoke' }).then(function (confirmed) {
+                showConfirm({ title: i18n.t('confirm.revoke_token_title'), message: i18n.t('confirm.revoke_token_message'), ok: i18n.t('confirm.revoke_token_ok') }).then(function (confirmed) {
                     if (!confirmed) return;
                     fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
-                        .then(function () { refreshUserTokens(); showToast('Token revoked.'); })
+                        .then(function () { refreshUserTokens(); showToast(i18n.t('toast.token_revoked')); })
                         .catch(function (err) { showToast(err.message, 'error'); });
                 });
             }
@@ -3765,7 +3788,7 @@
 
     if (userCreateTokenBtn) {
         userCreateTokenBtn.addEventListener('click', function () {
-            showPrompt({ title: 'Create Token', message: 'Token name (optional):', placeholder: 'API token', ok: 'Create' }).then(function (name) {
+            showPrompt({ title: i18n.t('auth.create_token_title'), message: i18n.t('auth.create_token_message'), placeholder: i18n.t('auth.token_placeholder'), ok: i18n.t('common.create') }).then(function (name) {
                 if (name === null) return;
                 fetchJson('/auth/tokens', {
                     method: 'POST',
@@ -3773,7 +3796,7 @@
                     body: JSON.stringify({ name: name || 'API token', days: 365 }),
                 })
                     .then(function (data) {
-                        setStatus(userTokensStatus, 'Token created: ' + data.token + ' — copy it now, it will not be shown again.', 'ok');
+                        setStatus(userTokensStatus, i18n.t('toast.token_created', { token: data.token }), 'ok');
                         refreshUserTokens();
                     })
                     .catch(function (err) { setStatus(userTokensStatus, err.message, 'error'); });
@@ -3825,6 +3848,12 @@
     }
 
     function initAuth() {
+        // If the URL hash contains a password-reset token, redirect to /login preserving the hash
+        var currentHash = window.location.hash || '';
+        if (currentHash.indexOf('reset-password?token=') !== -1) {
+            window.location.replace('/login' + currentHash);
+            return Promise.reject(new Error('redirecting'));
+        }
         state.auth.token = getStoredToken();
         return fetchJson('/auth/status').then(function (data) {
             state.auth.enabled = data.auth_enabled;
@@ -3836,7 +3865,7 @@
             }
             if (!state.auth.token) {
                 window.location.replace('/login');
-                throw new Error('Login required.');
+                throw new Error(i18n.t('auth.login_required'));
             }
             return fetchJson('/auth/me').then(function (me) {
                 state.auth.user = me.user;
@@ -3845,7 +3874,7 @@
                 state.auth.token = '';
                 try { localStorage.removeItem(tokenStorageKey); } catch (_) { /* noop */ }
                 window.location.replace('/login');
-                throw new Error('Session expired.');
+                throw new Error(i18n.t('auth.session_expired'));
             });
         });
     }
@@ -3924,27 +3953,27 @@
                 if (usersList) usersList.innerHTML = '<div class="empty">' + escapeHtml(err.message) + '</div>';
             }
         } else {
-            if (usersList) usersList.innerHTML = '<div class="empty">Only admins can manage users.</div>';
+            if (usersList) usersList.innerHTML = '<div class="empty">' + i18n.t('system.users.only_admins') + '</div>';
         }
     }
 
     function renderUsersList(users) {
         if (!usersList) return;
         if (!users.length) {
-            usersList.innerHTML = '<div class="empty">No users.</div>';
+            usersList.innerHTML = '<div class="empty">' + i18n.t('system.users.no_users') + '</div>';
             return;
         }
         var currentId = state.auth.user ? state.auth.user.id : 0;
         var isAdmin = state.auth.user && state.auth.user.role === 'admin';
         usersList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th></th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>'
+            + '<thead><tr><th></th><th>' + i18n.t('table.username') + '</th><th>' + i18n.t('table.email') + '</th><th>' + i18n.t('table.role') + '</th><th></th></tr></thead>'
             + '<tbody>'
             + users.map(function (u) {
                 var actions = '';
                 if (isAdmin) {
-                    actions = '<button class=\"ghost\" data-edit-user=\"' + u.id + '\">Edit</button>';
+                    actions = '<button class=\"ghost\" data-edit-user=\"' + u.id + '\">' + i18n.t('common.edit') + '</button>';
                     if (u.id !== currentId) {
-                        actions += ' <button class=\"ghost danger-text\" data-delete-user=\"' + u.id + '\">Delete</button>';
+                        actions += ' <button class=\"ghost danger-text\" data-delete-user=\"' + u.id + '\">' + i18n.t('common.delete') + '</button>';
                     }
                 }
                 var bg = avatarColor(u.username);
@@ -3952,7 +3981,7 @@
                 var avatarHtml = '<span class="user-avatar user-avatar-sm" data-avatar-user="' + escapeHtml(u.username) + '" data-avatar-email="' + escapeHtml(u.email || '') + '" style="background:' + bg + '">' + escapeHtml(initials) + '</span>';
                 return '<tr>'
                     + '<td class="avatar-cell">' + avatarHtml + '</td>'
-                    + '<td>' + escapeHtml(u.username) + (u.id === currentId ? ' <span class="chip">you</span>' : '') + '</td>'
+                    + '<td>' + escapeHtml(u.username) + (u.id === currentId ? ' <span class="chip">' + i18n.t('system.users.you') + '</span>' : '') + '</td>'
                     + '<td>' + escapeHtml(u.email) + '</td>'
                     + '<td><span class="chip">' + escapeHtml(u.role) + '</span></td>'
                     + '<td class="actions-cell">' + actions + '</td>'
@@ -3987,7 +4016,7 @@
         if (!userFormSection) return;
         userFormSection.hidden = false;
         scrollAndHighlight(userFormSection);
-        userFormLegend.textContent = 'New User';
+        userFormLegend.textContent = i18n.t('system.users.new_user');
         userFormId.value = '';
         userFormUsername.value = '';
         userFormEmail.value = '';
@@ -3996,7 +4025,7 @@
         userFormPasswordRow.style.display = '';
         if (userFormSetPasswordRow) userFormSetPasswordRow.hidden = true;
         userFormRole.value = 'viewer';
-        userFormSubmit.textContent = 'Create';
+        userFormSubmit.textContent = i18n.t('common.create');
         setStatus(userFormStatus, '');
     }
 
@@ -4011,7 +4040,7 @@
             if (!userFormSection) return;
             userFormSection.hidden = false;
             scrollAndHighlight(userFormSection);
-            userFormLegend.textContent = 'Edit User';
+            userFormLegend.textContent = i18n.t('system.users.edit_user');
             userFormId.value = String(user.id);
             userFormUsername.value = user.username;
             userFormEmail.value = user.email;
@@ -4019,7 +4048,7 @@
             userFormPassword.required = false;
             userFormPasswordRow.style.display = 'none';
             userFormRole.value = user.role;
-            userFormSubmit.textContent = 'Save';
+            userFormSubmit.textContent = i18n.t('common.save');
             // Show admin set-password field when editing other users
             if (userFormSetPasswordRow) {
                 userFormSetPasswordRow.hidden = false;
@@ -4031,11 +4060,11 @@
     }
 
     function confirmDeleteUser(userId) {
-        showConfirm({ title: 'Delete User', message: 'Are you sure you want to delete this user? This cannot be undone.', ok: 'Delete' })
+        showConfirm({ title: i18n.t('confirm.delete_user_title'), message: i18n.t('confirm.delete_user_message'), ok: i18n.t('confirm.delete_user_ok') })
             .then(function (confirmed) {
                 if (!confirmed) return;
                 fetchJson('/auth/users/' + userId, { method: 'DELETE' })
-                    .then(function () { refreshUsers(); showToast('User deleted.'); })
+                    .then(function () { refreshUsers(); showToast(i18n.t('toast.user_deleted')); })
                     .catch(function (err) { showToast(err.message, 'error'); });
             });
     }
@@ -4073,7 +4102,7 @@
                         body: JSON.stringify(payload),
                     });
                     userFormSection.hidden = true;
-                    showToast('User updated.');
+                    showToast(i18n.t('toast.user_updated'));
                     refreshUsers();
                 } catch (err) {
                     setStatus(userFormStatus, err.message, 'error');
@@ -4088,7 +4117,7 @@
                         body: JSON.stringify(payload),
                     });
                     userFormSection.hidden = true;
-                    showToast('User created.');
+                    showToast(i18n.t('toast.user_created'));
                     refreshUsers();
                 } catch (err) {
                     setStatus(userFormStatus, err.message, 'error');
@@ -4103,7 +4132,7 @@
             var newPwd = document.getElementById('cp-new').value;
             var confirmPwd = document.getElementById('cp-confirm').value;
             if (newPwd !== confirmPwd) {
-                setStatus(changePasswordStatus, 'Passwords do not match.', 'error');
+                setStatus(changePasswordStatus, i18n.t('toast.passwords_mismatch'), 'error');
                 return;
             }
             try {
@@ -4115,7 +4144,7 @@
                         new_password: newPwd,
                     }),
                 });
-                setStatus(changePasswordStatus, result.message || 'Password changed.', 'ok');
+                setStatus(changePasswordStatus, result.message || i18n.t('toast.password_changed'), 'ok');
                 changePasswordForm.reset();
                 // Token invalidated server-side; redirect to login after short delay
                 setTimeout(function () {
@@ -4150,7 +4179,7 @@
     if (smtpForm) {
         smtpForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            setStatus(smtpStatus, 'Saving…');
+            setStatus(smtpStatus, i18n.t('toast.saving'));
             var fd = new FormData(smtpForm);
             var payload = {
                 host: fd.get('host') || '',
@@ -4167,7 +4196,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                setStatus(smtpStatus, 'SMTP settings saved.', 'ok');
+                setStatus(smtpStatus, i18n.t('toast.smtp_saved'), 'ok');
                 resetDirtyTracker('smtp-form');
             } catch (err) {
                 setStatus(smtpStatus, err.message, 'error');
@@ -4180,17 +4209,17 @@
         smtpTestBtn.addEventListener('click', async function () {
             var recipient = (state.auth.user && state.auth.user.email) || '';
             if (!recipient) {
-                setStatus(smtpStatus, 'No recipient email available.', 'error');
+                setStatus(smtpStatus, i18n.t('toast.no_recipient_email'), 'error');
                 return;
             }
-            setStatus(smtpStatus, 'Sending test email…');
+            setStatus(smtpStatus, i18n.t('toast.sending_test_email'));
             try {
                 var res = await fetchJson('/auth/smtp/test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ recipient: recipient }),
                 });
-                setStatus(smtpStatus, res.message || 'Test email sent.', 'ok');
+                setStatus(smtpStatus, res.message || i18n.t('toast.test_email_sent'), 'ok');
             } catch (err) {
                 setStatus(smtpStatus, err.message, 'error');
             }
@@ -4211,19 +4240,19 @@
     function renderAdminTokensList(tokens) {
         if (!adminTokensList) return;
         if (!tokens.length) {
-            adminTokensList.innerHTML = '<div class="empty">No API tokens.</div>';
+            adminTokensList.innerHTML = '<div class="empty">' + i18n.t('auth.no_tokens') + '</div>';
             return;
         }
         adminTokensList.innerHTML = '<table class="users-table">'
-            + '<thead><tr><th>User</th><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>'
+            + '<thead><tr><th>' + i18n.t('table.user') + '</th><th>' + i18n.t('table.name') + '</th><th>' + i18n.t('table.created') + '</th><th>' + i18n.t('table.expires') + '</th><th></th></tr></thead>'
             + '<tbody>'
             + tokens.map(function (t) {
                 return '<tr>'
                     + '<td>' + escapeHtml(t.username || '—') + '</td>'
-                    + '<td>' + escapeHtml(t.name || '(unnamed)') + '</td>'
+                    + '<td>' + escapeHtml(t.name || i18n.t('auth.unnamed_token')) + '</td>'
                     + '<td>' + escapeHtml(formatIsoTimestamp(t.created_at) || String(t.created_at || '').substring(0, 10)) + '</td>'
                     + '<td>' + escapeHtml(formatIsoTimestamp(t.expires_at) || String(t.expires_at || '').substring(0, 10)) + '</td>'
-                    + '<td class="actions-cell"><button class="ghost danger-text" data-admin-delete-token="' + t.id + '">Revoke</button></td>'
+                    + '<td class="actions-cell"><button class="ghost danger-text" data-admin-delete-token="' + t.id + '">' + i18n.t('common.revoke') + '</button></td>'
                     + '</tr>';
             }).join('')
             + '</tbody></table>';
@@ -4233,10 +4262,10 @@
         adminTokensList.addEventListener('click', function (e) {
             var tokenId = e.target.dataset.adminDeleteToken;
             if (tokenId) {
-                showConfirm({ title: 'Revoke Token', message: 'Revoke this API token? Any integrations using it will stop working.', ok: 'Revoke' }).then(function (confirmed) {
+                showConfirm({ title: i18n.t('confirm.revoke_token_title'), message: i18n.t('confirm.revoke_token_message'), ok: i18n.t('confirm.revoke_token_ok') }).then(function (confirmed) {
                     if (!confirmed) return;
                     fetchJson('/auth/tokens/' + tokenId, { method: 'DELETE' })
-                        .then(function () { refreshAdminTokens(); showToast('Token revoked.'); })
+                        .then(function () { refreshAdminTokens(); showToast(i18n.t('toast.token_revoked')); })
                         .catch(function (err) { showToast(err.message, 'error'); });
                 });
             }
@@ -4266,7 +4295,7 @@
     form.addEventListener('submit', async function (event) {
         event.preventDefault();
         submitButton.disabled = true;
-        setFormStatus('Queueing job...');
+        setFormStatus(i18n.t('jobs.queueing'));
 
         const formData = new FormData(form);
         const payload = {
@@ -4293,7 +4322,7 @@
             form.reset();
             clearInputSelection();
             resetDirtyTracker('job-form');
-            setFormStatus(response.message || `Queued job ${response.id}`, 'ok');
+            setFormStatus(response.message || i18n.t('toast.job_queued', { id: response.id }), 'ok');
             await refreshJobs();
         } catch (error) {
             setFormStatus(error.message, 'error');
@@ -4304,7 +4333,7 @@
     settingsForm.addEventListener('submit', async function (event) {
         event.preventDefault();
         settingsButton.disabled = true;
-        setStatus(settingsStatus, 'Saving settings...');
+        setStatus(settingsStatus, i18n.t('toast.saving_settings'));
         syncAllowedRootsField();
 
         const formData = new FormData(settingsForm);
@@ -4329,7 +4358,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            setStatus(settingsStatus, 'Settings saved.', 'ok');
+            setStatus(settingsStatus, i18n.t('toast.settings_saved'), 'ok');
             resetDirtyTracker('settings-form');
             await refreshSummary();
         } catch (error) {
@@ -4349,14 +4378,14 @@
                 log_level: logLevelEl ? logLevelEl.value : 'INFO',
                 log_retention_days: logRetentionEl ? Number(logRetentionEl.value) : 30,
             };
-            setStatus(logSettingsStatus, 'Saving…');
+            setStatus(logSettingsStatus, i18n.t('toast.saving'));
             try {
                 await fetchJson('/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                setStatus(logSettingsStatus, 'Log settings saved.', 'ok');
+                setStatus(logSettingsStatus, i18n.t('toast.log_settings_saved'), 'ok');
                 resetDirtyTracker('log-settings');
             } catch (err) {
                 setStatus(logSettingsStatus, err.message, 'error');
@@ -4393,14 +4422,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                setStatus(watcherStatus, 'Watcher updated.', 'ok');
+                setStatus(watcherStatus, i18n.t('toast.watcher_updated'), 'ok');
             } else {
                 await fetchJson('/watchers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                setStatus(watcherStatus, 'Watcher added.', 'ok');
+                setStatus(watcherStatus, i18n.t('toast.watcher_added'), 'ok');
             }
             resetWatcherForm();
             await refreshSummary();
@@ -4460,7 +4489,7 @@
             scope: 'allowed',
             path: inputFileField.value || '',
             eyebrow: '',
-            title: 'Select source file',
+            title: i18n.t('browser.title_select_file'),
         });
     });
 
@@ -4471,7 +4500,7 @@
             scope: 'allowed',
             path: inputKindField.value === 'directory' ? inputFileField.value || '' : '',
             eyebrow: '',
-            title: 'Choose source folder',
+            title: i18n.t('browser.title_choose_folder'),
         });
     });
 
@@ -4486,7 +4515,7 @@
             scope: 'all',
             path: '',
             eyebrow: '',
-            title: 'Add allowed root directory',
+            title: i18n.t('browser.title_add_root'),
         });
     });
 
@@ -4497,7 +4526,7 @@
             scope: 'allowed',
             path: watcherDirectoryField.value || '',
             eyebrow: '',
-            title: 'Choose watcher source directory',
+            title: i18n.t('browser.title_watcher_source'),
         });
     });
 
@@ -4512,7 +4541,7 @@
             scope: 'all',
             path: watcherOutputDirField.value || '',
             eyebrow: '',
-            title: 'Select watcher output directory',
+            title: i18n.t('browser.title_watcher_output'),
         });
     });
 
@@ -4527,7 +4556,7 @@
             scope: 'all',
             path: outputDirField.value || '',
             eyebrow: '',
-            title: 'Select destination folder',
+            title: i18n.t('browser.title_select_dest'),
         });
     });
 
@@ -4543,7 +4572,7 @@
             scope: 'all',
             path: defaultOutputDirField.value || '',
             eyebrow: '',
-            title: 'Select default destination folder',
+            title: i18n.t('browser.title_default_dest'),
         });
     });
 
@@ -4848,7 +4877,7 @@
                 try {
                     const result = await fetchJson(`/jobs?mode=${mode}`, { method: 'DELETE' });
                     const deletedCount = Number(result.deleted || 0);
-                    setFormStatus(`Removed ${deletedCount} ${label} job${deletedCount === 1 ? '' : 's'}.`, 'ok');
+                    setFormStatus(i18n.t('toast.removed_jobs', { count: deletedCount, label: label }), 'ok');
                     await refreshJobs();
                 } catch (error) {
                     setFormStatus(error.message, 'error');
@@ -4899,7 +4928,7 @@
                     body: JSON.stringify(payload),
                 });
                 if (newPort !== oldPort) {
-                    showToast('Port changed to ' + newPort + '. Redirecting…', 'ok');
+                    showToast(i18n.t('toast.port_changed', { port: newPort }), 'ok');
                     setTimeout(function () {
                         var url = window.location.protocol + '//' + window.location.hostname + ':' + newPort + window.location.pathname + window.location.hash;
                         window.location.href = url;
@@ -4908,11 +4937,11 @@
                 }
                 applySummaryToForms(result);
                 renderMeta(result);
-                if (generalSaveStatus) setStatus(generalSaveStatus, 'Saved', 'ok');
-                showToast('General settings saved.', 'ok');
+                if (generalSaveStatus) setStatus(generalSaveStatus, i18n.t('toast.saved'), 'ok');
+                showToast(i18n.t('toast.general_saved'), 'ok');
             } catch (err) {
-                if (generalSaveStatus) setStatus(generalSaveStatus, 'Error', 'error');
-                showToast('Failed to save general settings.', 'error');
+                if (generalSaveStatus) setStatus(generalSaveStatus, i18n.t('toast.error'), 'error');
+                showToast(i18n.t('toast.general_failed'), 'error');
                 generalSaveBtn.disabled = false;
             }
         });
@@ -4926,9 +4955,9 @@
         if (state.release.update_available) {
             const targetVersion = state.release.remote_version || 'latest';
             const confirmed = await showConfirm({
-                title: 'Install Update',
-                message: 'Install clutch ' + targetVersion + ' and restart the service now?\n\nAny active conversions will be stopped and returned to the queue from the beginning.',
-                ok: 'Install',
+                title: i18n.t('confirm.install_update_title'),
+                message: i18n.t('confirm.install_update_message', { version: targetVersion }),
+                ok: i18n.t('confirm.install_update_ok'),
             });
             if (!confirmed) {
                 return;
@@ -4936,7 +4965,7 @@
 
             releaseButton.disabled = true;
             releaseButton.dataset.busy = 'true';
-            showToast(`Installing clutch ${targetVersion} and restarting the service...`);
+            showToast(i18n.t('toast.installing_update', { version: targetVersion }));
 
             try {
                 const payload = await fetchJson('/updates/upgrade', { method: 'POST' });
@@ -4949,7 +4978,7 @@
                     last_error: '',
                     update_in_progress: true,
                 });
-                showToast(payload.message || `Installing clutch ${targetVersion} and restarting the service...`, 'ok', 0);
+                showToast(payload.message || i18n.t('toast.installing_update', { version: targetVersion }), 'ok', 0);
                 waitForReleaseRestart(targetVersion);
             } catch (error) {
                 renderReleaseControl(state.release);
@@ -4966,9 +4995,9 @@
             if (payload.last_error) {
                 showToast(payload.last_error, 'error');
             } else if (payload.update_available) {
-                showToast(`New version available: ${payload.local_version} \u2192 ${payload.remote_version}`, 'ok');
+                showToast(i18n.t('toast.update_available', { local: payload.local_version, remote: payload.remote_version }), 'ok');
             } else {
-                showToast(`clutch ${payload.local_version} is already up to date.`, 'ok');
+                showToast(i18n.t('toast.already_up_to_date', { version: payload.local_version }), 'ok');
             }
         } catch (error) {
             showToast(error.message, 'error');
@@ -5005,9 +5034,9 @@
     }
 
     if (systemThemeQuery && typeof systemThemeQuery.addEventListener === 'function') {
-        systemThemeQuery.addEventListener('change', function (event) {
+        systemThemeQuery.addEventListener('change', function () {
             if (!getStoredTheme()) {
-                applyTheme(event.matches ? 'dark' : 'light');
+                applyTheme(getPreferredTheme());
             }
         });
     }
@@ -5016,7 +5045,6 @@
     renderReleaseControl(state.release);
     clearInputSelection();
     setWatcherDirectory('');
-    updateAutoRefreshButton();
 
     if (startupParams.get('notice')) {
         setFormStatus(startupParams.get('notice'), 'ok');
@@ -5092,7 +5120,14 @@
     }());
 
     navigateTo(getPageFromHash());
-    initAuth().then(function () {
+    i18n.init().then(function () {
+        // Sync language selectors with the detected/loaded language
+        var currentLang = i18n.getLang();
+        if (generalLanguageSelect) generalLanguageSelect.value = currentLang;
+        if (userSettingsLanguageSelect) userSettingsLanguageSelect.value = currentLang;
+        updateAutoRefreshButton();
+        return initAuth();
+    }).then(function () {
         navigateTo(getPageFromHash());
         refreshAll();
         scheduleRefresh();

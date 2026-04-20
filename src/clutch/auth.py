@@ -737,7 +737,7 @@ class AuthStore:
         if not smtp["host"]:
             raise ValueError("SMTP is not configured. Please contact an administrator.")
 
-        reset_url = f"{base_url}/#reset-password?token={reset_token}"
+        reset_url = f"{base_url}/login#reset-password?token={reset_token}"
         username = user["username"]
         recipient = str(user["email"])
 

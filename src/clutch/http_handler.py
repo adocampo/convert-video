@@ -95,6 +95,9 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
     ASSET_CONTENT_TYPES = {
         "/assets/dashboard.css": ("dashboard.css", "text/css; charset=utf-8", "text"),
         "/assets/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8", "text"),
+        "/assets/i18n.js": ("i18n.js", "application/javascript; charset=utf-8", "text"),
+        "/assets/lang/en.json": ("lang/en.json", "application/json; charset=utf-8", "text"),
+        "/assets/lang/es.json": ("lang/es.json", "application/json; charset=utf-8", "text"),
         "/assets/clutch.png": ("clutch.png", "image/png", "bytes"),
         "/favicon.ico": ("favicon.ico", "image/x-icon", "bytes"),
     }
