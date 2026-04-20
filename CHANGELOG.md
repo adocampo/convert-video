@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.15] - 2026-04-20
+
+### Improved in 1.7.15
+
+- **Exact log-level filtering in Log Viewer**: the log level dropdown now filters entries by exact level instead of hierarchical (e.g. selecting DEBUG shows only DEBUG, not everything above it).
+- **CRITICAL option in log level dropdown**: the Log Viewer filter now includes CRITICAL as a selectable level.
+- **Coloured log levels**: log entries in the Log Viewer are colour-coded by level — DEBUG (magenta), INFO (blue), WARNING (yellow), ERROR (light red), CRITICAL (dark red bold).
+- **Filter no longer changes server log level**: changing the Log Viewer dropdown no longer sends a POST to `/config`, it only filters the displayed entries.
+
 ## [1.7.14] - 2026-04-17
 
 ### Fixed in 1.7.14

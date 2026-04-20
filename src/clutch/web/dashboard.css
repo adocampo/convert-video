@@ -2252,10 +2252,11 @@ body.modal-open {
     text-transform: uppercase;
 }
 
-.log-lvl-DEBUG { color: var(--muted); }
-.log-lvl-INFO  { color: var(--accent); }
+.log-lvl-DEBUG { color: #c678dd; }
+.log-lvl-INFO  { color: #4ea1df; }
 .log-lvl-WARNING { color: #e6a817; }
-.log-lvl-ERROR { color: var(--danger); }
+.log-lvl-ERROR { color: #ff6b6b; }
+.log-lvl-CRITICAL { color: #a8201a; font-weight: 700; }
 
 .log-src {
     flex-shrink: 0;

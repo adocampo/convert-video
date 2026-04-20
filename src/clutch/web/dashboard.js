@@ -3274,12 +3274,6 @@
         if (btn) loadLogs(parseInt(btn.dataset.logpage, 10));
     });
     logLevelFilter.addEventListener('change', function () {
-        // Also set the server log level so DEBUG entries are actually written
-        fetchJson('/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_level: logLevelFilter.value || 'INFO' }),
-        }).catch(function () { /* best-effort */ });
         loadLogs(1);
     });
     logFileSelect.addEventListener('change', function () { loadLogs(1); });

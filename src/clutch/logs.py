@@ -111,8 +111,7 @@ def _read_log_entries(
 
     entries: List[Dict[str, str]] = []
     valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-    level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
-    min_level = level_order.get(level.upper(), 0) if level else 0
+    exact_level = level.upper() if level else ""
     search_lower = search.lower()
 
     try:
@@ -135,7 +134,7 @@ def _read_log_entries(
                     entry_source = parts[2].rstrip(":")
                     entry_msg = parts[3] if len(parts) > 3 else ""
 
-                if level and level_order.get(entry_level, 1) < min_level:
+                if exact_level and entry_level != exact_level:
                     continue
                 if search_lower and search_lower not in line.lower():
                     continue
