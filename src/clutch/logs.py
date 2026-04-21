@@ -278,10 +278,14 @@ def _collect_system_stats() -> Dict[str, object]:
                 except OSError:
                     continue
     except OSError:
-        # Fallback for Windows: enumerate drive letters
+        # Fallback for Windows: use GetLogicalDrives bitmask + net use for UNC
         if os.name == "nt":
+            import ctypes
             import string
-            for letter in string.ascii_uppercase:
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            for i, letter in enumerate(string.ascii_uppercase):
+                if not (bitmask & (1 << i)):
+                    continue
                 drive = f"{letter}:\\"
                 try:
                     usage = shutil.disk_usage(drive)
@@ -293,7 +297,46 @@ def _collect_system_stats() -> Dict[str, object]:
                         "free": usage.free,
                     })
                 except OSError:
-                    continue
+                    # Drive exists but stats unavailable (CD-ROM, disconnected network, etc.)
+                    disks.append({
+                        "mount": drive,
+                        "device": drive,
+                        "total": None,
+                        "used": None,
+                        "free": None,
+                    })
+            # Include UNC network shares from 'net use'
+            seen_unc: set = set()
+            try:
+                result = subprocess.run(
+                    ["net", "use"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                for line in result.stdout.splitlines():
+                    parts = line.split()
+                    for part in parts:
+                        if part.startswith("\\\\") and part not in seen_unc:
+                            seen_unc.add(part)
+                            try:
+                                usage = shutil.disk_usage(part)
+                                disks.append({
+                                    "mount": part,
+                                    "device": part,
+                                    "total": usage.total,
+                                    "used": usage.used,
+                                    "free": usage.free,
+                                })
+                            except OSError:
+                                disks.append({
+                                    "mount": part,
+                                    "device": part,
+                                    "total": None,
+                                    "used": None,
+                                    "free": None,
+                                })
+                            break
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
     stats["disks"] = disks
 
     # ── GPUs (nvidia-smi) ──

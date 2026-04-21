@@ -1141,6 +1141,50 @@ class ConversionService:
             return preferred_path
         return os.sep
 
+    def _list_windows_drives(self) -> List[Dict[str, object]]:
+        """Return available drives and network shares on Windows."""
+        drives: List[Dict[str, object]] = []
+        if os.name != "nt":
+            return drives
+        import ctypes
+        import string
+        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+        for i, letter in enumerate(string.ascii_uppercase):
+            if bitmask & (1 << i):
+                drive = f"{letter}:\\"
+                drives.append(drive)
+        # UNC shares from 'net use'
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["net", "use"], capture_output=True, text=True, timeout=5,
+            )
+            seen: set = set()
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                for part in parts:
+                    if part.startswith("\\\\") and part not in seen:
+                        seen.add(part)
+                        drives.append(part)
+                        break
+        except Exception:
+            pass
+        return drives
+
+    def _is_windows_drive_root(self, path: str) -> bool:
+        """Check if path is a Windows drive root like C:\\ or a UNC root like \\\\server\\share."""
+        if os.name != "nt":
+            return False
+        if len(path) <= 3 and len(path) >= 2 and path[1] == ":":
+            return True
+        # UNC root: \\server\share (no deeper path)
+        if path.startswith("\\\\"):
+            stripped = path.rstrip("\\")
+            # \\server\share has exactly 2 backslash-separated parts after \\
+            parts = stripped[2:].split("\\")
+            return len(parts) <= 2
+        return False
+
     def browse_paths(self, path: str, *, selection: str, scope: str, show_hidden: bool = False) -> Dict[str, object]:
         if selection not in {"file", "directory"}:
             raise ValueError("Browse selection must be 'file' or 'directory'.")
@@ -1148,6 +1192,25 @@ class ConversionService:
             raise ValueError("Browse scope must be 'allowed' or 'all'.")
 
         restricted_roots = self.allowed_roots if scope == "allowed" and self.allowed_roots else []
+
+        # On Windows, empty path shows the drives list
+        if os.name == "nt" and not path.strip() and not restricted_roots:
+            drive_paths = self._list_windows_drives()
+            entries = [
+                {"name": d, "path": d, "kind": "directory", "selectable": selection == "directory"}
+                for d in drive_paths
+            ]
+            return {
+                "path": "",
+                "parent": "",
+                "entries": entries,
+                "selection": selection,
+                "scope": scope,
+                "roots": drive_paths or ["C:\\"],
+                "restricted": False,
+                "show_hidden": bool(show_hidden),
+            }
+
         if path.strip():
             current_path = normalize_path(path)
         else:
@@ -1207,8 +1270,17 @@ class ConversionService:
         parent = os.path.dirname(current_path.rstrip(os.sep)) or os.sep
         if current_path == os.sep:
             parent = ""
+        # On Windows, at a drive root go back to the drives list (parent = "")
+        if self._is_windows_drive_root(current_path):
+            parent = ""
         if restricted_roots and parent and not path_within_roots(parent, restricted_roots):
             parent = ""
+
+        # On Windows, use drive list as default roots instead of os.sep
+        if os.name == "nt" and not restricted_roots:
+            default_roots = self._list_windows_drives() or ["C:\\"]
+        else:
+            default_roots = [os.sep]
 
         return {
             "path": current_path,
@@ -1216,7 +1288,7 @@ class ConversionService:
             "entries": entries,
             "selection": selection,
             "scope": scope,
-            "roots": restricted_roots or [os.sep],
+            "roots": restricted_roots or default_roots,
             "restricted": bool(restricted_roots),
             "show_hidden": bool(show_hidden),
         }
