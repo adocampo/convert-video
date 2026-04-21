@@ -56,7 +56,7 @@ from clutch.store import (
     record_has_recoverable_runtime,
     utc_now,
 )
-from clutch.updater import get_update_state, install_latest_version, mark_update_installed
+from clutch.updater import get_update_state, install_latest_version, mark_update_installed, _build_install_source, _windows_deferred_install
 from clutch.watcher import DirectoryWatcher, WorkerHandle
 
 # Re-export for backward compatibility
@@ -606,17 +606,31 @@ class ConversionService:
                 elif "done!" in clean:
                     self._set_upgrade_step(4, "Install complete")
 
-            result = install_latest_version(
-                target_version=target_version,
-                on_progress=_on_pipx_line,
-            )
-            if result.returncode != 0:
-                if result.stdout:
-                    print_error(f"pipx output:\n{result.stdout}")
-                raise RuntimeError("Upgrade failed. Check the service logs for details.")
+            # On Windows the running python.exe inside the pipx venv is
+            # locked by the OS.  Spawn a detached helper that waits for
+            # this process to exit, then runs pipx and restarts the service.
+            if sys.platform == "win32":
+                self._set_upgrade_step(2, "Preparing deferred upgrade…")
+                source = _build_install_source(target_version)
+                _windows_deferred_install(
+                    source,
+                    on_progress=_on_pipx_line,
+                    restart_service=True,
+                )
+                self._set_upgrade_step(5, "Upgrade helper launched")
+                info("Deferred upgrade helper launched; shutting down for upgrade…")
+            else:
+                result = install_latest_version(
+                    target_version=target_version,
+                    on_progress=_on_pipx_line,
+                )
+                if result.returncode != 0:
+                    if result.stdout:
+                        print_error(f"pipx output:\n{result.stdout}")
+                    raise RuntimeError("Upgrade failed. Check the service logs for details.")
 
-            self._set_upgrade_step(5, "Verifying installation…")
-            mark_update_installed(target_version or get_version())
+                self._set_upgrade_step(5, "Verifying installation…")
+                mark_update_installed(target_version or get_version())
 
             self._set_upgrade_step(6, "Install complete")
             import time as _time

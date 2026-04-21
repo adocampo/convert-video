@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.5] - 2026-04-21
+
+### Fixed in 1.8.5
+
+- **Windows self-upgrade Permission denied**: `clutch --upgrade` and the web UI upgrade button no longer fail with `[Errno 13] Permission denied` on `python.exe`. On Windows, the running process locks its own executable inside the pipx venv, preventing `pipx install --force` from recreating it. The upgrade now spawns a small detached helper script that waits for the current process to exit before running `pipx`, then restarts the service if applicable.
+
 ## [1.8.4] - 2026-04-21
 
 ### Added in 1.8.4

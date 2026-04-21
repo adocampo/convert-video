@@ -263,6 +263,64 @@ def _build_install_source(target_version: str | None = None) -> str:
     return f"git+https://github.com/{GITHUB_REPO}.git"
 
 
+def _windows_deferred_install(
+    source: str,
+    *,
+    on_progress: "Callable[[str], None] | None" = None,
+    restart_service: bool = False,
+) -> None:
+    """Spawn a detached helper script that upgrades clutch after this process exits.
+
+    On Windows the running ``python.exe`` inside the pipx venv is locked by
+    the OS, preventing ``pipx install --force`` from recreating the venv.
+    This function writes a small ``.cmd`` helper, launches it fully detached,
+    and returns immediately.  The caller **must** exit promptly so the helper
+    can proceed.
+    """
+    import tempfile
+
+    pid = os.getpid()
+    restart_cmd = ""
+    if restart_service:
+        restart_cmd = 'start "" clutch --service\n'
+
+    legacy_uninstall = ""
+    if _pipx_package_installed(LEGACY_APP_NAME):
+        legacy_uninstall = f'pipx uninstall {LEGACY_APP_NAME} 2>NUL\n'
+
+    script = (
+        "@echo off\n"
+        "REM --- clutch deferred upgrade helper ---\n"
+        ":WAIT\n"
+        f'tasklist /fi "PID eq {pid}" 2>NUL | find /i "{pid}" >NUL\n'
+        "if %ERRORLEVEL% equ 0 (\n"
+        "    timeout /t 1 /nobreak >NUL\n"
+        "    goto WAIT\n"
+        ")\n"
+        "REM Parent process exited, safe to upgrade\n"
+        f"{legacy_uninstall}"
+        f'pipx install "{source}" --force\n'
+        f"{restart_cmd}"
+        'del "%~f0"\n'
+    )
+
+    script_path = os.path.join(tempfile.gettempdir(), f"clutch-upgrade-{pid}.cmd")
+    with open(script_path, "w") as fh:
+        fh.write(script)
+
+    if on_progress:
+        on_progress("Launching deferred upgrade helper\u2026")
+
+    # DETACHED_PROCESS=0x8, CREATE_NEW_PROCESS_GROUP=0x200
+    subprocess.Popen(
+        ["cmd", "/c", script_path],
+        creationflags=0x00000008 | 0x00000200,
+        close_fds=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def install_latest_version(
     *,
     target_version: str | None = None,
@@ -324,6 +382,19 @@ def upgrade():
         sys.exit(0)
 
     print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} ...")
+
+    # On Windows the running python.exe in the pipx venv is locked by the
+    # current process, so pipx cannot recreate the venv.  Use a detached
+    # helper script that waits for this process to die then runs pipx.
+    if sys.platform == "win32":
+        source = _build_install_source(remote_ver)
+        _windows_deferred_install(source, on_progress=lambda line: print(f"  {line}"))
+        info(
+            f"Upgrade to {remote_ver} will complete in the background.\n"
+            "  The current process must exit first so the installer can replace the environment."
+        )
+        sys.exit(0)
+
     result = install_latest_version(
         target_version=remote_ver,
         on_progress=lambda line: print(f"  {line}"),
