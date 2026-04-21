@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2026-04-21
+
+### Fixed in 1.8.2
+
+- **Windows drive enumeration**: removable and CD-ROM drives without media are no longer shown in the system monitor or file browser, preventing "Path does not exist" errors.
+- **Mapped network drives merged with UNC**: drives mapped via `net use` now display as `Z:\ (\\server\share)` instead of showing both the drive letter and the UNC path as separate entries.
+- **File browser Up button on Windows**: pressing Up at a drive root (e.g. `C:\`) now correctly returns to the drives list instead of doing nothing.
+
 ## [1.8.1] - 2026-04-21
 
 ### Fixed in 1.8.1
