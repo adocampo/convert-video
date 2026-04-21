@@ -282,31 +282,14 @@ def _collect_system_stats() -> Dict[str, object]:
         if os.name == "nt":
             import ctypes
             import string
-            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
-            for i, letter in enumerate(string.ascii_uppercase):
-                if not (bitmask & (1 << i)):
-                    continue
-                drive = f"{letter}:\\"
-                try:
-                    usage = shutil.disk_usage(drive)
-                    disks.append({
-                        "mount": drive,
-                        "device": drive,
-                        "total": usage.total,
-                        "used": usage.used,
-                        "free": usage.free,
-                    })
-                except OSError:
-                    # Drive exists but stats unavailable (CD-ROM, disconnected network, etc.)
-                    disks.append({
-                        "mount": drive,
-                        "device": drive,
-                        "total": None,
-                        "used": None,
-                        "free": None,
-                    })
-            # Include UNC network shares from 'net use'
-            seen_unc: set = set()
+
+            DRIVE_REMOVABLE = 2
+            DRIVE_CDROM = 5
+            GetDriveTypeW = ctypes.windll.kernel32.GetDriveTypeW
+
+            # Build drive-letter → UNC mapping from 'net use'
+            drive_to_unc: dict = {}
+            unmapped_uncs: list = []
             try:
                 result = subprocess.run(
                     ["net", "use"],
@@ -314,29 +297,74 @@ def _collect_system_stats() -> Dict[str, object]:
                 )
                 for line in result.stdout.splitlines():
                     parts = line.split()
+                    local = None
+                    remote = None
                     for part in parts:
-                        if part.startswith("\\\\") and part not in seen_unc:
-                            seen_unc.add(part)
-                            try:
-                                usage = shutil.disk_usage(part)
-                                disks.append({
-                                    "mount": part,
-                                    "device": part,
-                                    "total": usage.total,
-                                    "used": usage.used,
-                                    "free": usage.free,
-                                })
-                            except OSError:
-                                disks.append({
-                                    "mount": part,
-                                    "device": part,
-                                    "total": None,
-                                    "used": None,
-                                    "free": None,
-                                })
-                            break
+                        if len(part) == 2 and part[1] == ":" and part[0].isalpha():
+                            local = part.upper()
+                        if part.startswith("\\\\"):
+                            remote = part
+                    if remote:
+                        if local:
+                            drive_to_unc[local] = remote
+                        else:
+                            unmapped_uncs.append(remote)
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
+
+            mapped_uncs = set(drive_to_unc.values())
+
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            for i, letter in enumerate(string.ascii_uppercase):
+                if not (bitmask & (1 << i)):
+                    continue
+                drive = f"{letter}:\\"
+                dtype = GetDriveTypeW(drive)
+                key = f"{letter}:"
+                unc = drive_to_unc.get(key)
+                label = f"{drive} ({unc})" if unc else drive
+                try:
+                    usage = shutil.disk_usage(drive)
+                    disks.append({
+                        "mount": label,
+                        "device": label,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    })
+                except OSError:
+                    # Skip removable / CD-ROM drives with no media
+                    if dtype in (DRIVE_REMOVABLE, DRIVE_CDROM):
+                        continue
+                    disks.append({
+                        "mount": label,
+                        "device": label,
+                        "total": None,
+                        "used": None,
+                        "free": None,
+                    })
+
+            # Include UNC network shares not already mapped to a drive letter
+            for unc in unmapped_uncs:
+                if unc in mapped_uncs:
+                    continue
+                try:
+                    usage = shutil.disk_usage(unc)
+                    disks.append({
+                        "mount": unc,
+                        "device": unc,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    })
+                except OSError:
+                    disks.append({
+                        "mount": unc,
+                        "device": unc,
+                        "total": None,
+                        "used": None,
+                        "free": None,
+                    })
     stats["disks"] = disks
 
     # ── GPUs (nvidia-smi) ──

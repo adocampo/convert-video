@@ -1873,7 +1873,7 @@
         );
         browserFilter.value = state.browser.filterQuery;
         browserShowHidden.checked = state.browser.showHidden;
-        browserUpButton.disabled = !payload.parent;
+        browserUpButton.disabled = !payload.parent && !payload.path;
         browserSelectCurrentButton.hidden = state.browser.selection !== 'directory';
         renderBrowserRoots(payload.roots || []);
         renderBrowserEntries();

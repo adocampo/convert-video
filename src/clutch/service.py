@@ -1141,34 +1141,70 @@ class ConversionService:
             return preferred_path
         return os.sep
 
-    def _list_windows_drives(self) -> List[Dict[str, object]]:
-        """Return available drives and network shares on Windows."""
-        drives: List[Dict[str, object]] = []
+    def _list_windows_drives(self) -> List[Dict[str, str]]:
+        """Return available drives and network shares on Windows.
+
+        Each entry is a dict with 'name' (display label) and 'path' (navigable path).
+        Removable / CD-ROM drives without media are omitted.
+        Mapped network drives are annotated with their UNC path and the bare
+        UNC entry is suppressed.
+        """
         if os.name != "nt":
-            return drives
+            return []
         import ctypes
         import string
-        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
-        for i, letter in enumerate(string.ascii_uppercase):
-            if bitmask & (1 << i):
-                drive = f"{letter}:\\"
-                drives.append(drive)
-        # UNC shares from 'net use'
+
+        DRIVE_REMOVABLE = 2
+        DRIVE_CDROM = 5
+        GetDriveTypeW = ctypes.windll.kernel32.GetDriveTypeW
+
+        # Build drive-letter → UNC mapping from 'net use'
+        drive_to_unc: Dict[str, str] = {}
+        unmapped_uncs: List[str] = []
         try:
-            import subprocess
-            result = subprocess.run(
-                ["net", "use"], capture_output=True, text=True, timeout=5,
-            )
-            seen: set = set()
+            import subprocess as _sp
+            result = _sp.run(["net", "use"], capture_output=True, text=True, timeout=5)
             for line in result.stdout.splitlines():
                 parts = line.split()
+                local = None
+                remote = None
                 for part in parts:
-                    if part.startswith("\\\\") and part not in seen:
-                        seen.add(part)
-                        drives.append(part)
-                        break
+                    if len(part) == 2 and part[1] == ":" and part[0].isalpha():
+                        local = part.upper()
+                    if part.startswith("\\\\"):
+                        remote = part
+                if remote:
+                    if local:
+                        drive_to_unc[local] = remote
+                    else:
+                        unmapped_uncs.append(remote)
         except Exception:
             pass
+
+        mapped_uncs = set(drive_to_unc.values())
+        drives: List[Dict[str, str]] = []
+        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+        for i, letter in enumerate(string.ascii_uppercase):
+            if not (bitmask & (1 << i)):
+                continue
+            drive = f"{letter}:\\"
+            dtype = GetDriveTypeW(drive)
+            # Skip removable / CD-ROM drives that have no media inserted
+            if dtype in (DRIVE_REMOVABLE, DRIVE_CDROM):
+                try:
+                    os.listdir(drive)
+                except OSError:
+                    continue
+            key = f"{letter}:"
+            unc = drive_to_unc.get(key)
+            name = f"{drive} ({unc})" if unc else drive
+            drives.append({"name": name, "path": drive})
+
+        # Add UNC shares not already mapped to a drive letter
+        for unc in unmapped_uncs:
+            if unc not in mapped_uncs:
+                drives.append({"name": unc, "path": unc})
+
         return drives
 
     def _is_windows_drive_root(self, path: str) -> bool:
@@ -1195,18 +1231,19 @@ class ConversionService:
 
         # On Windows, empty path shows the drives list
         if os.name == "nt" and not path.strip() and not restricted_roots:
-            drive_paths = self._list_windows_drives()
+            drive_list = self._list_windows_drives()
             entries = [
-                {"name": d, "path": d, "kind": "directory", "selectable": selection == "directory"}
-                for d in drive_paths
+                {"name": d["name"], "path": d["path"], "kind": "directory", "selectable": selection == "directory"}
+                for d in drive_list
             ]
+            root_paths = [d["path"] for d in drive_list] or ["C:\\"]
             return {
                 "path": "",
                 "parent": "",
                 "entries": entries,
                 "selection": selection,
                 "scope": scope,
-                "roots": drive_paths or ["C:\\"],
+                "roots": root_paths,
                 "restricted": False,
                 "show_hidden": bool(show_hidden),
             }
@@ -1278,7 +1315,7 @@ class ConversionService:
 
         # On Windows, use drive list as default roots instead of os.sep
         if os.name == "nt" and not restricted_roots:
-            default_roots = self._list_windows_drives() or ["C:\\"]
+            default_roots = [d["path"] for d in self._list_windows_drives()] or ["C:\\"]
         else:
             default_roots = [os.sep]
 
