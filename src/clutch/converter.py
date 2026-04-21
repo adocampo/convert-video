@@ -1,18 +1,20 @@
 import os
-import fcntl
-import pty
 import re
-import select
 import shutil
 import signal
 import struct
 import subprocess
 import sys
 import tempfile
-import termios
 import threading
 import time
 from typing import Callable, Optional
+
+if os.name != "nt":
+    import fcntl
+    import pty
+    import select
+    import termios
 
 from tqdm import tqdm
 
@@ -961,11 +963,10 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             conversion_succeeded = process.returncode == 0
             _update_conversion_state(thread_id, process=None, pid=None)
         elif show_progress:
-            # Progress bar mode — use a pseudo-terminal so HandBrakeCLI
-            # sees a real TTY and emits progress updates.
+            # Progress bar mode — use a pseudo-terminal on Unix so HandBrakeCLI
+            # sees a real TTY and emits progress updates; on Windows fall back
+            # to a progress-log approach.
             conversion_succeeded = False
-            master_fd, slave_fd = pty.openpty()
-            _set_pty_window_size(slave_fd)
             if emit_logs:
                 print(f"Converting: {os.path.basename(input_file)}")
             with tqdm(
@@ -974,27 +975,6 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 leave=False,
                 bar_format="{percentage:3.0f}%|{bar}| [{elapsed}<{remaining}]",
             ) as pbar:
-                process = _spawn_conversion_process(
-                    hb_params,
-                    stdout=slave_fd,
-                    stderr=slave_fd,
-                )
-                os.close(slave_fd)
-                _update_conversion_state(thread_id, process=process, pid=process.pid)
-
-                def handle_resize(signum, frame):
-                    """Redraw the progress bar and propagate window size changes."""
-                    if process.poll() is not None:
-                        return
-                    try:
-                        _set_pty_window_size(master_fd)
-                    except OSError:
-                        return
-                    pbar.refresh()
-
-                old_winch_handler = signal.getsignal(signal.SIGWINCH)
-                signal.signal(signal.SIGWINCH, handle_resize)
-
                 hb_error_lines = []
 
                 def handle_line(line: str):
@@ -1009,14 +989,55 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                         pbar.update(increment)
                     report_progress(percent, line)
 
-                try:
-                    _consume_pty_output(master_fd, process, handle_line)
-                finally:
-                    signal.signal(signal.SIGWINCH, old_winch_handler)
+                if os.name != "nt":
+                    master_fd, slave_fd = pty.openpty()
+                    _set_pty_window_size(slave_fd)
+                    process = _spawn_conversion_process(
+                        hb_params,
+                        stdout=slave_fd,
+                        stderr=slave_fd,
+                    )
+                    os.close(slave_fd)
+                    _update_conversion_state(thread_id, process=process, pid=process.pid)
+
+                    def handle_resize(signum, frame):
+                        """Redraw the progress bar and propagate window size changes."""
+                        if process.poll() is not None:
+                            return
+                        try:
+                            _set_pty_window_size(master_fd)
+                        except OSError:
+                            return
+                        pbar.refresh()
+
+                    old_winch_handler = signal.getsignal(signal.SIGWINCH)
+                    signal.signal(signal.SIGWINCH, handle_resize)
+
                     try:
-                        os.close(master_fd)
-                    except OSError:
-                        pass
+                        _consume_pty_output(master_fd, process, handle_line)
+                    finally:
+                        signal.signal(signal.SIGWINCH, old_winch_handler)
+                        try:
+                            os.close(master_fd)
+                        except OSError:
+                            pass
+                else:
+                    # Windows: use a log file for progress output
+                    win_log_path = f"{temp_filepath}.progress.log"
+                    with open(win_log_path, "ab", buffering=0) as log_handle:
+                        process = _spawn_conversion_process(
+                            hb_params,
+                            stdout=log_handle,
+                            stderr=log_handle,
+                        )
+                        _update_conversion_state(thread_id, process=process, pid=process.pid)
+                        _consume_log_output(
+                            win_log_path,
+                            process=process,
+                            process_id=process.pid,
+                            line_handler=handle_line,
+                        )
+
                 process.wait()
                 _update_conversion_state(thread_id, process=None, pid=None)
                 conversion_succeeded = process.returncode == 0
