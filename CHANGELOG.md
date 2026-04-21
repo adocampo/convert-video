@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.6] - 2026-04-21
+
+### Fixed in 1.8.6
+
+- **Windows disk display in system monitor**: physical drives now show the drive letter (e.g. `C:\`) as the mount label and the device path from `QueryDosDeviceW` (e.g. `\Device\HarddiskVolume3`) as the detail line. Network drives show the drive letter as mount and the UNC path (e.g. `\\NAS01\DOWNLOADS`) as device. Previously both fields were identical, causing duplicated text in the dashboard.
+
 ## [1.8.5] - 2026-04-21
 
 ### Fixed in 1.8.5
