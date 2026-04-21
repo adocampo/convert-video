@@ -60,7 +60,7 @@ function Install-Pkg {
     switch ($mgr) {
         'winget' {
             Write-Warn "Installing $Label via winget..."
-            winget install --id $WingetId --accept-source-agreements --accept-package-agreements --silent
+            winget install --id $WingetId --source winget --accept-source-agreements --accept-package-agreements --silent
         }
         'choco' {
             Write-Warn "Installing $Label via choco..."
