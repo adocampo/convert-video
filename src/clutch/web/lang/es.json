@@ -63,6 +63,7 @@
   "nav.schedule": "Programación",
   "nav.settings": "Ajustes",
   "nav.settings.general": "General",
+  "nav.settings.binaries": "Rutas de binarios",
   "nav.settings.media": "Media por defecto",
   "nav.settings.smtp": "SMTP",
   "nav.settings.notifications": "Notificaciones",
@@ -336,6 +337,16 @@
   "settings.general.date_format_title": "Formato de visualización de fechas.",
   "settings.general.save": "Guardar",
 
+  "settings.binaries.title": "Rutas de binarios",
+  "settings.binaries.description": "Configura las rutas de las herramientas externas necesarias para el motor de conversión. Las rutas detectadas se rellenan automáticamente.",
+  "settings.binaries.legend": "Herramientas requeridas",
+  "settings.binaries.not_found": "No encontrado – introduce la ruta completa",
+  "settings.binaries.save": "Guardar",
+  "settings.binaries.detect": "Auto-detectar",
+
+  "banner.missing_binaries": "Faltan binarios requeridos. Ve a Ajustes > Rutas de binarios para configurarlos. Los trabajos fallarán hasta que se establezcan todas las rutas.",
+  "banner.missing_binaries_link": "Configurar",
+
   "settings.media.title": "Media por defecto",
   "settings.media.legend": "Configuración del servicio",
   "settings.media.allowed_roots_label": "Raíces permitidas",
@@ -537,6 +548,7 @@
   "system.changelog.loading": "Cargando historial de cambios…",
   "system.changelog.scroll_top_title": "Ir arriba",
   "system.changelog.failed": "Error al cargar el historial de cambios.",
+  "system.changelog.new_badge": "nuevo",
 
   "system.about.title": "Acerca de",
   "system.about.sysmon_legend": "Monitor del sistema",
@@ -624,6 +636,10 @@
   "toast.installing_update": "Instalando clutch {version} y reiniciando el servicio…",
   "toast.general_saved": "Ajustes generales guardados.",
   "toast.general_failed": "Error al guardar los ajustes generales.",
+  "toast.binaries_saved": "Rutas de binarios guardadas.",
+  "toast.binaries_failed": "Error al guardar las rutas de binarios.",
+  "toast.binaries_detected": "Rutas de binarios auto-detectadas.",
+  "toast.binaries_detect_failed": "Error al auto-detectar las rutas de binarios.",
   "toast.port_changed": "Puerto cambiado a {port}. Redirigiendo…",
   "toast.date_format_saved": "Formato de fecha guardado.",
   "toast.token_revoked": "Token revocado.",

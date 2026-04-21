@@ -543,6 +543,49 @@ body {
     overflow-y: auto;
 }
 
+/* ── Missing-binaries banner ── */
+.banner-missing-binaries {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--fail);
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 500;
+    line-height: 1.4;
+    position: sticky;
+    top: 0;
+    z-index: 90;
+}
+.banner-missing-binaries[hidden] { display: none; }
+.banner-missing-binaries .banner-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.banner-missing-binaries .banner-link {
+    margin-left: auto;
+    white-space: nowrap;
+    color: #fff;
+    text-decoration: underline;
+    font-weight: 600;
+}
+.banner-missing-binaries .banner-link:hover {
+    opacity: .85;
+}
+
+/* Input field marked as missing */
+input.input-missing {
+    border-color: var(--fail) !important;
+    background: color-mix(in srgb, var(--fail) 8%, var(--panel)) !important;
+}
+
 .page[hidden] { display: none; }
 
 .page-inner {
@@ -1799,6 +1842,26 @@ button:disabled {
 
 .changelog-version-block:last-child {
     border-bottom: none;
+}
+
+.changelog-version-new {
+    border-left: 3px solid var(--accent-strong);
+    padding-left: 14px;
+    margin-left: -2px;
+}
+
+.changelog-new-badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent-strong) 14%, transparent);
+    padding: 1px 6px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 6px;
 }
 
 .changelog-version-title {

@@ -112,7 +112,7 @@ ensure_pipx() {
 
 # ── Ensure external dependencies ─────────────
 ensure_external_deps() {
-    local deps=("HandBrakeCLI" "mediainfo" "mkvpropedit")
+    local deps=("HandBrakeCLI" "mediainfo" "mkvpropedit" "mkvmerge")
     local missing=()
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
@@ -125,6 +125,7 @@ ensure_external_deps() {
         echo "    HandBrakeCLI  → https://handbrake.fr/downloads2.php"
         echo "    mediainfo     → your package manager (mediainfo)"
         echo "    mkvpropedit   → your package manager (mkvtoolnix)"
+        echo "    mkvmerge      → your package manager (mkvtoolnix)"
     else
         info "Runtime dependencies found: ${deps[*]}"
     fi

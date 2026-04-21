@@ -7,6 +7,39 @@ APP_NAME = "clutch"
 LEGACY_APP_NAME = "convert-video"
 GITHUB_REPO = "adocampo/clutch"
 
+# ── Binary path registry ──
+# Required external tools.  The key is the canonical binary name; the value
+# stored at runtime is the resolved absolute path (or the bare name when no
+# explicit configuration exists).
+REQUIRED_BINARIES = ("HandBrakeCLI", "mediainfo", "mkvpropedit", "mkvmerge")
+
+_binary_paths: dict[str, str] = {}
+
+
+def get_binary_path(name: str) -> str:
+    """Return the configured/detected path for *name*, or the bare name."""
+    return _binary_paths.get(name) or name
+
+
+def set_binary_paths(paths: dict[str, str]) -> None:
+    """Bulk-set binary paths (called once at service startup)."""
+    _binary_paths.update({k: v for k, v in paths.items() if v})
+
+
+def detect_binary(name: str) -> str:
+    """Try to locate *name* in ``$PATH``; return the path or ``""``."""
+    return shutil.which(name) or ""
+
+
+def detect_all_binaries() -> dict[str, str]:
+    """Auto-detect every required binary and return ``{name: path}``."""
+    return {name: detect_binary(name) for name in REQUIRED_BINARIES}
+
+
+def get_missing_binaries() -> list[str]:
+    """Return binary names that have no configured or detectable path."""
+    return [name for name in REQUIRED_BINARIES if not _binary_paths.get(name)]
+
 
 def get_package_names() -> tuple[str, ...]:
     return APP_NAME, LEGACY_APP_NAME

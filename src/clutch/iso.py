@@ -3,6 +3,7 @@ import re
 import subprocess
 from typing import List, Optional, Tuple
 
+from clutch import get_binary_path
 from clutch.output import info, warning, error
 
 ISO_EXTENSIONS = ('.iso',)
@@ -32,7 +33,7 @@ def scan_iso(filepath: str) -> List[dict]:
     info(f"Scanning ISO image: {os.path.basename(filepath)} ...")
     try:
         result = subprocess.run(
-            ["HandBrakeCLI", "-i", filepath, "-t", "0", "--scan"],
+            [get_binary_path("HandBrakeCLI"), "-i", filepath, "-t", "0", "--scan"],
             capture_output=True, text=True, timeout=300,
         )
         # HandBrakeCLI outputs scan info on stderr

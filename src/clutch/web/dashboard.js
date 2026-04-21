@@ -835,10 +835,23 @@
 
     var changelogFullLoaded = false;
 
-    function changelogMarkdownToHtml(md) {
+    function changelogMarkdownToHtml(md, localVersion) {
         var lines = String(md || '').split('\n');
         var html = [];
         var inList = false;
+        var localParts = String(localVersion || '').split('.').map(Number);
+
+        function isNewer(ver) {
+            if (!localParts.length || !localParts[0]) return false;
+            var parts = ver.split('.').map(Number);
+            for (var j = 0; j < Math.max(parts.length, localParts.length); j++) {
+                var a = parts[j] || 0;
+                var b = localParts[j] || 0;
+                if (a > b) return true;
+                if (a < b) return false;
+            }
+            return false;
+        }
 
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
@@ -851,8 +864,10 @@
             var versionMatch = line.match(/^## \[(.+?)\]\s*-\s*(.+)/);
             if (versionMatch) {
                 if (inList) { html.push('</ul>'); inList = false; }
-                html.push('<div class="changelog-version-block" id="changelog-' + escapeHtml(versionMatch[1]) + '">');
-                html.push('<h3 class="changelog-version-title">' + escapeHtml('v' + versionMatch[1]) + ' <span class="changelog-date">' + escapeHtml(versionMatch[2].trim()) + '</span></h3>');
+                var extraClass = isNewer(versionMatch[1]) ? ' changelog-version-new' : '';
+                html.push('<div class="changelog-version-block' + extraClass + '" id="changelog-' + escapeHtml(versionMatch[1]) + '">');
+                var badge = isNewer(versionMatch[1]) ? ' <span class="changelog-new-badge">' + escapeHtml(i18n.t('system.changelog.new_badge')) + '</span>' : '';
+                html.push('<h3 class="changelog-version-title">' + escapeHtml('v' + versionMatch[1]) + badge + ' <span class="changelog-date">' + escapeHtml(versionMatch[2].trim()) + '</span></h3>');
                 continue;
             }
 
@@ -904,8 +919,11 @@
         var container = document.getElementById('changelog-full-container');
         if (!container) return;
         try {
-            var data = await fetchJson('/system/changelog');
-            var rendered = changelogMarkdownToHtml(data.changelog || '');
+            var url = state.release.update_available
+                ? '/system/changelog?source=remote'
+                : '/system/changelog';
+            var data = await fetchJson(url);
+            var rendered = changelogMarkdownToHtml(data.changelog || '', state.release.local_version);
             container.innerHTML = '<div class="changelog-text changelog-full-text">' + rendered + '</div>';
             changelogFullLoaded = true;
         } catch (err) {
@@ -1240,7 +1258,7 @@
 
     var validPages = [
         'activity', 'jobs', 'watchers', 'schedule',
-        'settings/general', 'settings/media', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
+        'settings/general', 'settings/binaries', 'settings/media', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
         'system/users', 'system/logs', 'system/tasks', 'system/changelog', 'system/about',
     ];
 
@@ -2097,6 +2115,10 @@
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
         syncAllCustomSelects();
+
+        // Binary paths
+        applyBinaryPaths(summary.binary_paths || {});
+        updateMissingBinariesBanner(summary.missing_binaries || []);
 
         // Reset dirty trackers after server values are applied
         refreshDirtyTracker('settings-form');
@@ -4951,6 +4973,80 @@
         });
     }
 
+    // ── Binary Paths helpers ──
+    var _binaryNames = ['HandBrakeCLI', 'mediainfo', 'mkvpropedit', 'mkvmerge'];
+
+    function applyBinaryPaths(paths) {
+        _binaryNames.forEach(function (name) {
+            var el = document.getElementById('bin-' + name);
+            if (el) {
+                el.value = paths[name] || '';
+                el.classList.toggle('input-missing', !paths[name]);
+            }
+        });
+    }
+
+    function updateMissingBinariesBanner(missing) {
+        var banner = document.getElementById('banner-missing-binaries');
+        if (banner) banner.hidden = !missing || missing.length === 0;
+    }
+
+    function collectBinaryPaths() {
+        var paths = {};
+        _binaryNames.forEach(function (name) {
+            var el = document.getElementById('bin-' + name);
+            if (el) paths[name] = el.value.trim();
+        });
+        return paths;
+    }
+
+    // ── Binary Paths Save ──
+    var binSaveBtn = document.getElementById('binaries-settings-save');
+    var binDetectBtn = document.getElementById('binaries-settings-detect');
+    var binStatus = document.getElementById('binaries-settings-status');
+
+    if (binSaveBtn) {
+        binSaveBtn.addEventListener('click', async function () {
+            binSaveBtn.disabled = true;
+            if (binStatus) setStatus(binStatus, '');
+            try {
+                var result = await fetchJson('/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ binary_paths: collectBinaryPaths() }),
+                });
+                applySummaryToForms(result);
+                renderMeta(result);
+                if (binStatus) setStatus(binStatus, i18n.t('toast.saved'), 'ok');
+                showToast(i18n.t('toast.binaries_saved'), 'ok');
+            } catch (err) {
+                if (binStatus) setStatus(binStatus, i18n.t('toast.error'), 'error');
+                showToast(i18n.t('toast.binaries_failed'), 'error');
+            } finally {
+                binSaveBtn.disabled = false;
+            }
+        });
+    }
+
+    if (binDetectBtn) {
+        binDetectBtn.addEventListener('click', async function () {
+            binDetectBtn.disabled = true;
+            if (binStatus) setStatus(binStatus, '');
+            try {
+                var result = await fetchJson('/config/detect-binaries', { method: 'POST' });
+                applyBinaryPaths(result.binary_paths || {});
+                updateMissingBinariesBanner(result.missing_binaries || []);
+                if (binStatus) setStatus(binStatus, i18n.t('toast.binaries_detected'), 'ok');
+                showToast(i18n.t('toast.binaries_detected'), 'ok');
+            } catch (err) {
+                if (binStatus) setStatus(binStatus, i18n.t('toast.error'), 'error');
+                showToast(i18n.t('toast.binaries_detect_failed'), 'error');
+            } finally {
+                binDetectBtn.disabled = false;
+            }
+        });
+    }
+
     releaseButton.addEventListener('click', async function () {
         if (state.release.update_in_progress) {
             return;
@@ -5000,6 +5096,8 @@
                 showToast(payload.last_error, 'error');
             } else if (payload.update_available) {
                 showToast(i18n.t('toast.update_available', { local: payload.local_version, remote: payload.remote_version }), 'ok');
+                // Reload changelog page so it picks up newer remote versions
+                changelogFullLoaded = false;
             } else {
                 showToast(i18n.t('toast.already_up_to_date', { version: payload.local_version }), 'ok');
             }

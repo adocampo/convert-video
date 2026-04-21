@@ -16,6 +16,7 @@ from typing import Callable, Optional
 
 from tqdm import tqdm
 
+from clutch import get_binary_path
 from clutch.output import (
     info, warning, error, success, skip,
 )
@@ -512,7 +513,7 @@ def _join_with_mkvmerge(partial_file: str, remainder_file: str, output_file: str
     """Join a partial encode with its remainder using mkvmerge append mode."""
     try:
         result = subprocess.run(
-            ["mkvmerge", "-o", output_file, partial_file, "+", remainder_file],
+            [get_binary_path("mkvmerge"), "-o", output_file, partial_file, "+", remainder_file],
             capture_output=True, text=True,
         )
         # mkvmerge returns 0 on success, 1 on warnings (still OK)
@@ -571,7 +572,7 @@ def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool 
         track_num = i + 1
         try:
             subprocess.run(
-                ["mkvpropedit", output_file,
+                [get_binary_path("mkvpropedit"), output_file,
                  "--edit", f"track:a{track_num}",
                  "--set", f"name={title}"],
                 capture_output=True, check=True,
@@ -883,7 +884,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
     # Build HandBrakeCLI command
     hb_params = [
-        "HandBrakeCLI",
+        get_binary_path("HandBrakeCLI"),
         "-i", input_file,
         "-o", temp_filepath,
         "--all-subtitles",

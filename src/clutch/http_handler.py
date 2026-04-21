@@ -27,7 +27,7 @@ from clutch.mediainfo import VIDEO_EXTENSIONS, get_media_duration_seconds
 from clutch.output import debug, error, info, set_log_level
 from clutch.scheduler import BIDDING_ZONES
 from clutch.store import ConversionJob
-from clutch.updater import get_update_state
+from clutch.updater import get_update_state, _fetch_remote_changelog
 
 if False:  # TYPE_CHECKING
     from clutch.service import ConversionService
@@ -803,7 +803,12 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             user = self._require_role("viewer")
             if not user:
                 return
-            content = _read_changelog()
+            _, query_params = self._get_request_parts()
+            use_remote = query_params.get("source") == "remote"
+            if use_remote:
+                content = _fetch_remote_changelog() or _read_changelog()
+            else:
+                content = _read_changelog()
             self._send_json(200, {"changelog": content})
             return
 
@@ -943,6 +948,35 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "Job not found."})
                 return
             self._send_json(200, record)
+            return
+
+        if path == "/config/detect-binaries":
+            user = self._require_role("admin")
+            if not user:
+                return
+            from clutch import REQUIRED_BINARIES, detect_all_binaries
+            detected = detect_all_binaries()
+            self.server.service.binary_paths = {
+                name: detected.get(name, "") for name in REQUIRED_BINARIES
+            }
+            from clutch import set_binary_paths, get_missing_binaries
+            set_binary_paths(self.server.service.binary_paths)
+            self.server.service.store.save_service_config(
+                self.server.service.allowed_roots,
+                self.server.service.default_job_settings,
+                self.server.service.worker_count,
+                self.server.service.gpu_devices,
+                self.server.service.scheduler.config.to_dict(),
+                self.server.service.log_level,
+                self.server.service.log_retention_days,
+                self.server.service.default_date_format,
+                self.server.service.listen_port,
+                self.server.service.binary_paths,
+            )
+            self._send_json(200, {
+                "binary_paths": dict(self.server.service.binary_paths),
+                "missing_binaries": get_missing_binaries(),
+            })
             return
 
         if path == "/config/notifications":

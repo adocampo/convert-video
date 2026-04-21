@@ -3,6 +3,7 @@ import os
 import subprocess
 from typing import List
 
+from clutch import get_binary_path
 from clutch.output import info, warning, error, skip
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.ts', '.iso')
@@ -59,7 +60,7 @@ def get_mediainfo_json(filepath: str) -> dict:
     """Get full mediainfo JSON output for a file."""
     try:
         result = subprocess.run(
-            ["mediainfo", "--Output=JSON", filepath],
+            [get_binary_path("mediainfo"), "--Output=JSON", filepath],
             capture_output=True, check=True, text=True,
         )
         return json.loads(result.stdout)
@@ -167,7 +168,7 @@ def extract_media_summary(filepath: str) -> dict:
 def get_resolution(filepath: str) -> str:
     try:
         result = subprocess.run(
-            ["mediainfo", "--Inform=Video;%Width%x%Height%", filepath],
+            [get_binary_path("mediainfo"), "--Inform=Video;%Width%x%Height%", filepath],
             capture_output=True, check=True, text=True,
         )
         return result.stdout.strip()

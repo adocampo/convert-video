@@ -67,6 +67,8 @@
                 <ul class="sidebar-sub">
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/general" data-page="settings/general">
                             <span class="sidebar-label" data-i18n="nav.settings.general">General</span></a></li>
+                    <li><a class="sidebar-link sidebar-sub-link" href="#settings/binaries" data-page="settings/binaries">
+                            <span class="sidebar-label" data-i18n="nav.settings.binaries">Binary Paths</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/media" data-page="settings/media">
                             <span class="sidebar-label" data-i18n="nav.settings.media">Media Defaults</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/smtp" data-page="settings/smtp">
@@ -85,6 +87,8 @@
                     <div class="sidebar-flyout-title" data-i18n="nav.settings">Settings</div>
                     <a href="#settings/general" data-page="settings/general"
                         data-i18n="nav.settings.general">General</a>
+                    <a href="#settings/binaries" data-page="settings/binaries"
+                        data-i18n="nav.settings.binaries">Binary Paths</a>
                     <a href="#settings/media" data-page="settings/media" data-i18n="nav.settings.media">Media
                         Defaults</a>
                     <a href="#settings/smtp" data-page="settings/smtp" data-i18n="nav.settings.smtp">SMTP</a>
@@ -184,6 +188,21 @@
 
     <!-- ── Main content area ── -->
     <main class="content" id="content">
+
+        <!-- ── Missing-binaries banner ── -->
+        <div class="banner-missing-binaries" id="banner-missing-binaries" hidden>
+            <svg class="banner-icon" viewBox="0 0 24 24">
+                <path
+                    d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                </path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span id="banner-missing-binaries-text" data-i18n="banner.missing_binaries">Required binaries are missing.
+                Go to Settings &gt; Binary Paths to configure them. Jobs will fail until all paths are set.</span>
+            <a class="banner-link" href="#settings/binaries"
+                data-i18n="banner.missing_binaries_link">Configure</a>
+        </div>
 
         <!-- ── Activity page (Queue) ── -->
         <section class="page" id="page-activity" data-page="activity">
@@ -819,6 +838,57 @@
                         data-i18n="settings.general.save">Save</button>
                 </div>
                 <div class="status-line" id="general-settings-status"></div>
+            </div>
+        </section>
+
+        <!-- Settings > Binary Paths -->
+        <section class="page" id="page-settings-binaries" data-page="settings/binaries" hidden>
+            <div class="page-inner page-narrow">
+                <h2 data-i18n="settings.binaries.title">Binary Paths</h2>
+                <p class="section-help" data-i18n="settings.binaries.description">Configure the paths to external
+                    tools required by the conversion engine. Detected paths are pre-filled automatically.</p>
+                <fieldset class="options-section">
+                    <legend data-i18n="settings.binaries.legend">Required Tools</legend>
+                    <div class="field-row">
+                        <label class="field-row-label">HandBrakeCLI</label>
+                        <div class="field-row-control">
+                            <input id="bin-HandBrakeCLI" type="text"
+                                data-i18n-placeholder="settings.binaries.not_found"
+                                placeholder="Not found – enter the full path">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <label class="field-row-label">mediainfo</label>
+                        <div class="field-row-control">
+                            <input id="bin-mediainfo" type="text"
+                                data-i18n-placeholder="settings.binaries.not_found"
+                                placeholder="Not found – enter the full path">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <label class="field-row-label">mkvpropedit</label>
+                        <div class="field-row-control">
+                            <input id="bin-mkvpropedit" type="text"
+                                data-i18n-placeholder="settings.binaries.not_found"
+                                placeholder="Not found – enter the full path">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <label class="field-row-label">mkvmerge</label>
+                        <div class="field-row-control">
+                            <input id="bin-mkvmerge" type="text"
+                                data-i18n-placeholder="settings.binaries.not_found"
+                                placeholder="Not found – enter the full path">
+                        </div>
+                    </div>
+                </fieldset>
+                <div class="actions actions-centered">
+                    <button id="binaries-settings-save" class="primary" type="button"
+                        data-i18n="settings.binaries.save">Save</button>
+                    <button id="binaries-settings-detect" class="secondary" type="button"
+                        data-i18n="settings.binaries.detect">Auto-detect</button>
+                </div>
+                <div class="status-line" id="binaries-settings-status"></div>
             </div>
         </section>
 

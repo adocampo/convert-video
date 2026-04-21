@@ -10,7 +10,15 @@ import time
 import uuid
 from typing import Callable, Dict, List, Optional
 
-from clutch import APP_NAME, build_state_dir, get_version
+from clutch import (
+    APP_NAME,
+    REQUIRED_BINARIES,
+    build_state_dir,
+    detect_all_binaries,
+    get_missing_binaries,
+    get_version,
+    set_binary_paths,
+)
 from clutch.auth import AuthStore
 from clutch.converter import (
     ConversionDetached,
@@ -137,6 +145,9 @@ class ConversionService:
             self.listen_port = 8765
             schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
             self.scheduler.update_config(schedule_cfg)
+            # Auto-detect binaries on first run
+            self.binary_paths = detect_all_binaries()
+            set_binary_paths(self.binary_paths)
             self.store.save_service_config(
                 self.allowed_roots,
                 self.default_job_settings,
@@ -147,6 +158,7 @@ class ConversionService:
                 self.log_retention_days,
                 self.default_date_format,
                 self.listen_port,
+                self.binary_paths,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -167,6 +179,11 @@ class ConversionService:
             self.listen_port = int(persisted_config.get("listen_port") or 8765)
             schedule_raw = persisted_config.get("schedule_config") or {}
             self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
+            # Merge: auto-detect first, then overlay user-configured paths
+            detected = detect_all_binaries()
+            persisted_bins = persisted_config.get("binary_paths") or {}
+            self.binary_paths = {name: persisted_bins.get(name) or detected.get(name, "") for name in REQUIRED_BINARIES}
+            set_binary_paths(self.binary_paths)
 
         with self._watchers_lock:
             for watcher_config in persisted_watchers:
@@ -895,6 +912,15 @@ class ConversionService:
             except (TypeError, ValueError):
                 pass
 
+        # Update binary paths if present in payload
+        if "binary_paths" in payload:
+            incoming = payload.get("binary_paths") or {}
+            if isinstance(incoming, dict):
+                for name in REQUIRED_BINARIES:
+                    val = str(incoming.get(name) or "").strip()
+                    self.binary_paths[name] = val
+                set_binary_paths(self.binary_paths)
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
@@ -905,6 +931,7 @@ class ConversionService:
             self.log_retention_days,
             self.default_date_format,
             self.listen_port,
+            self.binary_paths,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -1334,6 +1361,8 @@ class ConversionService:
             "auth_enabled": self.auth.is_auth_enabled(),
             "default_date_format": self.default_date_format,
             "listen_port": self.listen_port,
+            "binary_paths": dict(self.binary_paths),
+            "missing_binaries": get_missing_binaries(),
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:

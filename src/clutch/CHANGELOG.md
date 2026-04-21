@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-04-21
+
+### Added in 1.8.0
+
+- **Configurable binary paths**: the service now starts even when required binaries (HandBrakeCLI, mediainfo, mkvpropedit, mkvmerge) are not installed. A new **Settings > Binary Paths** page lets you set or auto-detect them from the web UI.
+- **Red banner for missing binaries**: when one or more required binaries are not configured, a sticky red banner warns that jobs will fail until they are set.
+- **CLI binary path arguments**: new optional flags `--handbrake-cli`, `--mediainfo`, `--mkvpropedit`, `--mkvmerge` allow specifying custom binary paths in CLI mode.
+- **Improved CLI dependency check**: CLI mode now uses `shutil.which()` for auto-detection, registers resolved paths in the global registry, and provides a clear error listing all missing binaries with the corresponding CLI flags.
+- **Windows installer**: new `install.ps1` PowerShell script for native Windows installation via winget, choco, or scoop.
+- **Remote changelog in web UI**: the System > Changelog page can now fetch and display the changelog for newer versions from GitHub, with a "new" badge indicator.
+
+### Fixed in 1.8.0
+
+- **Binary paths page routing**: fixed navigation to Settings > Binary Paths (was falling back to Activity due to missing route registration).
+- **install.sh missing mkvmerge**: added mkvmerge to the runtime dependency check list.
+
 ## [1.7.18] - 2026-04-21
 
 ### Fixed in 1.7.18

@@ -63,6 +63,7 @@
   "nav.schedule": "Schedule",
   "nav.settings": "Settings",
   "nav.settings.general": "General",
+  "nav.settings.binaries": "Binary Paths",
   "nav.settings.media": "Media Defaults",
   "nav.settings.smtp": "SMTP",
   "nav.settings.notifications": "Notifications",
@@ -336,6 +337,16 @@
   "settings.general.date_format_title": "Date display format.",
   "settings.general.save": "Save",
 
+  "settings.binaries.title": "Binary Paths",
+  "settings.binaries.description": "Configure the paths to external tools required by the conversion engine. Detected paths are pre-filled automatically.",
+  "settings.binaries.legend": "Required Tools",
+  "settings.binaries.not_found": "Not found – enter the full path",
+  "settings.binaries.save": "Save",
+  "settings.binaries.detect": "Auto-detect",
+
+  "banner.missing_binaries": "Required binaries are missing. Go to Settings > Binary Paths to configure them. Jobs will fail until all paths are set.",
+  "banner.missing_binaries_link": "Configure",
+
   "settings.media.title": "Media Defaults",
   "settings.media.legend": "Service Configuration",
   "settings.media.allowed_roots_label": "Allowed roots",
@@ -536,6 +547,7 @@
   "system.changelog.loading": "Loading changelog…",
   "system.changelog.scroll_top_title": "Scroll to top",
   "system.changelog.failed": "Failed to load changelog.",
+  "system.changelog.new_badge": "new",
 
   "system.about.title": "About",
   "system.about.sysmon_legend": "System Monitor",
@@ -623,6 +635,10 @@
   "toast.installing_update": "Installing clutch {version} and restarting the service…",
   "toast.general_saved": "General settings saved.",
   "toast.general_failed": "Failed to save general settings.",
+  "toast.binaries_saved": "Binary paths saved.",
+  "toast.binaries_failed": "Failed to save binary paths.",
+  "toast.binaries_detected": "Binary paths auto-detected.",
+  "toast.binaries_detect_failed": "Failed to auto-detect binary paths.",
   "toast.port_changed": "Port changed to {port}. Redirecting…",
   "toast.date_format_saved": "Date format saved.",
   "toast.token_revoked": "Token revoked.",

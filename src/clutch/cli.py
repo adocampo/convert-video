@@ -14,7 +14,7 @@ import time
 from typing import List
 from tqdm import tqdm
 
-from clutch import APP_NAME, get_version
+from clutch import APP_NAME, REQUIRED_BINARIES, get_version, set_binary_paths, detect_binary
 from clutch.output import info, warning, error, deleted, skip, success
 from clutch.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
 from clutch.converter import (
@@ -305,12 +305,43 @@ def get_job_gpu_device(job_index: int, gpu_devices: list[int]) -> int | None:
     return gpu_devices[job_index % len(gpu_devices)]
 
 
-def check_dependency(command: str):
-    try:
-        subprocess.run([command, '--version'], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        error(f"{command} is required but not installed.")
+def check_dependencies(cli_overrides: dict[str, str] | None = None) -> None:
+    """Verify all required binaries are reachable.
+
+    CLI-provided paths take precedence over $PATH auto-detection.
+    Resolved paths are registered in the global binary registry so that
+    converter/mediainfo/iso modules pick them up via ``get_binary_path()``.
+    """
+    overrides = cli_overrides or {}
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    for name in REQUIRED_BINARIES:
+        path = overrides.get(name) or detect_binary(name)
+        if path:
+            resolved[name] = path
+        else:
+            missing.append(name)
+    if missing:
+        error(
+            "The following required binaries were not found: "
+            + ", ".join(missing)
+            + ".  Install them or specify their path with "
+            + ", ".join(f"--{_bin_cli_flag(n)}" for n in missing)
+            + "."
+        )
         sys.exit(1)
+    set_binary_paths(resolved)
+
+
+def _bin_cli_flag(name: str) -> str:
+    """Map a binary name to its CLI flag name."""
+    _MAP = {
+        "HandBrakeCLI": "handbrake-cli",
+        "mediainfo": "mediainfo",
+        "mkvpropedit": "mkvpropedit",
+        "mkvmerge": "mkvmerge",
+    }
+    return _MAP.get(name, name.lower())
 
 
 def find_video_files(pattern: str) -> List[str]:
@@ -734,6 +765,16 @@ def main():
                              help="Whether to block new jobs or pause running ones when schedule blocks (default: block_new).")
 
     # ── Info ─────────────────────────────────
+    bin_group = parser.add_argument_group("binary paths")
+    bin_group.add_argument("--handbrake-cli", default="", metavar="PATH",
+                           help="Path to HandBrakeCLI binary.")
+    bin_group.add_argument("--mediainfo", default="", metavar="PATH",
+                           help="Path to mediainfo binary.")
+    bin_group.add_argument("--mkvpropedit", default="", metavar="PATH",
+                           help="Path to mkvpropedit binary.")
+    bin_group.add_argument("--mkvmerge", default="", metavar="PATH",
+                           help="Path to mkvmerge binary.")
+
     info_group = parser.add_argument_group("info")
     info_group.add_argument("-si", "--source-info", action="store_true",
                             help="Show source information about a single video file.")
@@ -794,9 +835,14 @@ def main():
         sys.exit(0)
 
     if args.serve:
-        check_dependency("HandBrakeCLI")
-        check_dependency("mediainfo")
-        check_dependency("mkvpropedit")
+        from clutch import detect_all_binaries as _detect_bins
+        _detected = _detect_bins()
+        _missing = [n for n, p in _detected.items() if not p]
+        if _missing:
+            warning(
+                f"The following binaries were not found in $PATH: {', '.join(_missing)}. "
+                "You can configure their paths in Settings > Binary Paths."
+            )
 
         allowed_roots = [os.path.abspath(path) for path in args.allow_root]
         for watch_dir in args.watch_dir:
@@ -861,11 +907,22 @@ def main():
         )
         sys.exit(0)
 
+    # Collect CLI binary path overrides
+    _cli_bins: dict[str, str] = {}
+    if args.handbrake_cli:
+        _cli_bins["HandBrakeCLI"] = args.handbrake_cli
+    if args.mediainfo:
+        _cli_bins["mediainfo"] = args.mediainfo
+    if args.mkvpropedit:
+        _cli_bins["mkvpropedit"] = args.mkvpropedit
+    if args.mkvmerge:
+        _cli_bins["mkvmerge"] = args.mkvmerge
+
     # Runtime dependency checks (only needed for actual conversion)
     if not args.server_url:
-        check_dependency("HandBrakeCLI")
-        check_dependency("mediainfo")
-        check_dependency("mkvpropedit")
+        check_dependencies(_cli_bins or None)
+    elif _cli_bins:
+        set_binary_paths(_cli_bins)
 
     if not args.server_url:
         print(f"Using {args.workers} worker(s) for local transcoding.")
