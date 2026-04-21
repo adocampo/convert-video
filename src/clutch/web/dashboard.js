@@ -4608,7 +4608,7 @@
     });
 
     browserUpButton.addEventListener('click', function () {
-        if (state.browser.parent) {
+        if (state.browser.parent || state.browser.currentPath) {
             loadBrowserPath(state.browser.parent, { resetFilter: true, focusFilter: true });
         }
     });
