@@ -161,6 +161,13 @@ function Resolve-Source {
 function Find-BinaryPath {
     <# Search common install directories for a binary that is not in PATH. #>
     param([string]$Name)
+    # Try where.exe first (Windows equivalent of 'which')
+    try {
+        $whereResult = where.exe "$Name.exe" 2>$null | Select-Object -First 1
+        if ($whereResult -and (Test-Path $whereResult)) {
+            return (Split-Path $whereResult -Parent)
+        }
+    } catch {}
     $searchRoots = @(
         "$env:ProgramFiles",
         "${env:ProgramFiles(x86)}",
@@ -193,9 +200,9 @@ function Add-ToUserPath {
 
 function Install-RuntimeDeps {
     $deps = @(
-        @{ Name = 'HandBrakeCLI'; WingetId = 'HandBrake.HandBrake.CLI'; ChocoName = 'handbrake-cli'; ScoopName = 'handbrake-cli'; Label = 'HandBrake CLI' },
-        @{ Name = 'mediainfo';    WingetId = 'MediaArea.MediaInfo.CLI';  ChocoName = 'mediainfo-cli';  ScoopName = 'mediainfo';      Label = 'MediaInfo CLI' },
-        @{ Name = 'mkvpropedit'; WingetId = 'MKVToolNix.MKVToolNix';   ChocoName = 'mkvtoolnix';     ScoopName = 'mkvtoolnix';     Label = 'MKVToolNix' },
+        @{ Name = 'HandBrakeCLI'; WingetId = 'HandBrake.HandBrake'; ChocoName = 'handbrake-cli'; ScoopName = 'handbrake-cli'; Label = 'HandBrake (includes CLI)' },
+        @{ Name = 'mediainfo';    WingetId = 'MediaArea.MediaInfo';  ChocoName = 'mediainfo-cli';  ScoopName = 'mediainfo';      Label = 'MediaInfo CLI' },
+        @{ Name = 'mkvpropedit'; WingetId = 'MoritzBunkus.MKVToolNix'; ChocoName = 'mkvtoolnix';  ScoopName = 'mkvtoolnix';     Label = 'MKVToolNix' },
         @{ Name = 'mkvmerge';    WingetId = '';                          ChocoName = '';                ScoopName = '';                Label = '' }
     )
 
