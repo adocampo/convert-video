@@ -157,6 +157,40 @@ function Resolve-Source {
 }
 
 # ── Check runtime dependencies ───────────────
+
+function Find-BinaryPath {
+    <# Search common install directories for a binary that is not in PATH. #>
+    param([string]$Name)
+    $searchRoots = @(
+        "$env:ProgramFiles",
+        "${env:ProgramFiles(x86)}",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages",
+        "$env:LOCALAPPDATA\Programs"
+    )
+    foreach ($root in $searchRoots) {
+        if (-not $root -or -not (Test-Path $root)) { continue }
+        $hits = Get-ChildItem -Path $root -Filter "$Name.exe" -Recurse -ErrorAction SilentlyContinue -Depth 3 |
+                Select-Object -First 1
+        if ($hits) { return $hits.DirectoryName }
+    }
+    return $null
+}
+
+function Add-ToUserPath {
+    <# Append a directory to the persistent user PATH if not already present. #>
+    param([string]$Dir)
+    $currentUser = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($currentUser -and $currentUser.ToLower().Contains($Dir.ToLower())) { return }
+    $newPath = if ($currentUser) { "$currentUser;$Dir" } else { $Dir }
+    [System.Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+    # Also update the running session
+    if (-not $env:Path.ToLower().Contains($Dir.ToLower())) {
+        $env:Path = "$env:Path;$Dir"
+    }
+    Write-Info "Added to user PATH: $Dir"
+}
+
 function Install-RuntimeDeps {
     $deps = @(
         @{ Name = 'HandBrakeCLI'; WingetId = 'HandBrake.HandBrake.CLI'; ChocoName = 'handbrake-cli'; ScoopName = 'handbrake-cli'; Label = 'HandBrake CLI' },
@@ -181,6 +215,17 @@ function Install-RuntimeDeps {
                     [System.Environment]::GetEnvironmentVariable('Path', 'User')
     }
 
+    # Search for binaries that are installed but not in PATH and add their directories
+    $pathsAdded = @{}
+    foreach ($dep in $deps) {
+        if (Test-Command $dep.Name) { continue }
+        $dir = Find-BinaryPath $dep.Name
+        if ($dir -and -not $pathsAdded.ContainsKey($dir)) {
+            Add-ToUserPath $dir
+            $pathsAdded[$dir] = $true
+        }
+    }
+
     # Final status check
     $still_missing = @()
     foreach ($dep in $deps) {
@@ -190,7 +235,7 @@ function Install-RuntimeDeps {
     }
     if ($still_missing.Count -gt 0) {
         Write-Warn "Some dependencies are still not in PATH: $($still_missing -join ', ')"
-        Write-Warn "You may need to restart your terminal or add them to PATH manually."
+        Write-Warn "You can configure their paths in clutch Settings > Binary Paths."
     } else {
         Write-Info "All runtime dependencies found: $($deps.Name -join ', ')"
     }
