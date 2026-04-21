@@ -157,26 +157,42 @@ function Resolve-Source {
 }
 
 # ── Check runtime dependencies ───────────────
-function Check-RuntimeDeps {
+function Install-RuntimeDeps {
     $deps = @(
-        @{ Name = 'HandBrakeCLI'; Hint = 'https://handbrake.fr/downloads2.php (install the CLI version)' },
-        @{ Name = 'mediainfo';    Hint = 'winget install MediaArea.MediaInfo.CLI  /  choco install mediainfo-cli' },
-        @{ Name = 'mkvpropedit';  Hint = 'winget install MKVToolNix.MKVToolNix    /  choco install mkvtoolnix' },
-        @{ Name = 'mkvmerge';     Hint = 'Included with MKVToolNix (see above)' }
+        @{ Name = 'HandBrakeCLI'; WingetId = 'HandBrake.HandBrake.CLI'; ChocoName = 'handbrake-cli'; ScoopName = 'handbrake-cli'; Label = 'HandBrake CLI' },
+        @{ Name = 'mediainfo';    WingetId = 'MediaArea.MediaInfo.CLI';  ChocoName = 'mediainfo-cli';  ScoopName = 'mediainfo';      Label = 'MediaInfo CLI' },
+        @{ Name = 'mkvpropedit'; WingetId = 'MKVToolNix.MKVToolNix';   ChocoName = 'mkvtoolnix';     ScoopName = 'mkvtoolnix';     Label = 'MKVToolNix' },
+        @{ Name = 'mkvmerge';    WingetId = '';                          ChocoName = '';                ScoopName = '';                Label = '' }
     )
-    $missing = @()
+
+    $installed_any = $false
+    foreach ($dep in $deps) {
+        if (Test-Command $dep.Name) { continue }
+        # mkvmerge is provided by MKVToolNix (same package as mkvpropedit), skip duplicate install
+        if ($dep.Name -eq 'mkvmerge') { continue }
+        Write-Warn "$($dep.Label) not found. Installing..."
+        Install-Pkg -WingetId $dep.WingetId -ChocoName $dep.ChocoName -ScoopName $dep.ScoopName -Label $dep.Label
+        $installed_any = $true
+    }
+
+    if ($installed_any) {
+        # Refresh PATH so newly installed tools are visible
+        $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    }
+
+    # Final status check
+    $still_missing = @()
     foreach ($dep in $deps) {
         if (-not (Test-Command $dep.Name)) {
-            $missing += $dep
+            $still_missing += $dep.Name
         }
     }
-    if ($missing.Count -gt 0) {
-        Write-Warn "Optional runtime dependencies not found:"
-        foreach ($m in $missing) {
-            Write-Host "    $($m.Name)  -> $($m.Hint)" -ForegroundColor Yellow
-        }
+    if ($still_missing.Count -gt 0) {
+        Write-Warn "Some dependencies are still not in PATH: $($still_missing -join ', ')"
+        Write-Warn "You may need to restart your terminal or add them to PATH manually."
     } else {
-        Write-Info "Runtime dependencies found: $($deps.Name -join ', ')"
+        Write-Info "All runtime dependencies found: $($deps.Name -join ', ')"
     }
 }
 
@@ -218,7 +234,7 @@ Write-Info "Installing $AppName via pipx..."
 & pipx install $sourceDir
 
 Write-Host ''
-Check-RuntimeDeps
+Install-RuntimeDeps
 
 # Clean up temp clone if used
 if ($sourceDir -ne $PSScriptRoot -and $sourceDir -like "*clutch-install-*") {
