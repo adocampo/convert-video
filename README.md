@@ -22,6 +22,7 @@ Clutch manages video transcodes through HandBrakeCLI from the command line or fr
 - Persist service configuration, worker count, GPU list, and watched folders in SQLite.
 - Watch folders and auto-enqueue new videos once they stop changing on disk.
 - Include a `change-title` helper to sync MKV title metadata with the file name.
+- **Native Windows support**: runs on Windows 10/11 with a dedicated PowerShell installer, automatic drive enumeration, mapped network drive detection, and system monitor using native Win32 APIs.
 
 ## Requirements
 
@@ -31,11 +32,15 @@ For the full feature set, install these tools as well:
 
 - `mediainfo`
 - `mkvpropedit`
-- `pv` (optional, used by the shell helpers)
+- `pv` (optional, Linux/macOS only — used by the shell helpers)
+
+> **Windows note:** The PowerShell installer automatically installs all required runtime dependencies (HandBrakeCLI, mediainfo, MKVToolNix) via your package manager (winget, Chocolatey, or Scoop) and adds them to your user PATH.
 
 ## Installation
 
-### One-liner install (no manual clone needed)
+### Linux / macOS
+
+#### One-liner install (no manual clone needed)
 
 The GitHub repository now lives at `adocampo/clutch`, and the installer and self-update commands below use the renamed repo.
 
@@ -45,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/adocampo/clutch/master/install.sh |
 
 The installer detects your OS and package manager, ensures Python 3.9+, venv, and pipx are available, clones the repo to a temporary directory when needed, installs `clutch` via pipx, checks runtime dependencies, and places the systemd user unit on Linux.
 
-### Install from a local clone
+#### Install from a local clone
 
 ```bash
 git clone https://github.com/adocampo/clutch.git clutch
@@ -53,11 +58,46 @@ cd clutch
 bash install.sh
 ```
 
-### Direct install with pipx from GitHub
+#### Direct install with pipx from GitHub
 
 ```bash
 pipx install git+https://github.com/adocampo/clutch.git
 ```
+
+### Windows
+
+#### One-liner install (PowerShell)
+
+Open a PowerShell terminal (no admin required) and run:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+irm https://raw.githubusercontent.com/adocampo/clutch/master/install.ps1 | iex
+```
+
+The installer will:
+
+1. Detect your package manager (winget, Chocolatey, or Scoop).
+2. Install Python 3.12+ if not found (skipping Microsoft Store stubs).
+3. Install pipx via pip.
+4. Clone the repo to a temporary directory and install `clutch` via pipx.
+5. Install runtime dependencies (HandBrakeCLI, mediainfo, MKVToolNix) and add them to your user PATH.
+
+#### Install from a local clone
+
+```powershell
+git clone https://github.com/adocampo/clutch.git clutch
+cd clutch
+.\install.ps1
+```
+
+#### Direct install with pipx from GitHub
+
+```powershell
+pipx install git+https://github.com/adocampo/clutch.git
+```
+
+> **Tip:** If HandBrakeCLI, mediainfo, or mkvpropedit are not in your PATH after a manual install, you can configure their locations from the clutch web dashboard under **Settings → Binary Paths**.
 
 ### Verify installation
 
@@ -264,6 +304,22 @@ To keep the service running after you log out:
 ```bash
 loginctl enable-linger $USER
 ```
+
+#### Running on Windows
+
+On Windows there is no systemd, so you start the service manually from PowerShell or Command Prompt:
+
+```powershell
+clutch --serve --listen-host 0.0.0.0 --listen-port 8765 --allow-root D:\Videos
+```
+
+To have the service start automatically at login, create a shortcut in the Windows Startup folder (`shell:startup`) that runs the command above, or register it as a scheduled task:
+
+```powershell
+schtasks /create /tn "Clutch Service" /tr "clutch --serve --listen-host 0.0.0.0 --listen-port 8765" /sc onlogon /rl limited
+```
+
+The dashboard and all features (file browser, system monitor, one-click upgrade, watched directories) work the same on Windows. The system monitor uses native Win32 APIs to report CPU, memory, and disk usage, and the file browser enumerates drive letters and mapped network drives automatically.
 
 #### Manual service launch
 
