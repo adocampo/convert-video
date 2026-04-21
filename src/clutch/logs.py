@@ -173,7 +173,7 @@ def _collect_system_stats() -> Dict[str, object]:
     try:
         load1, load5, load15 = os.getloadavg()
         stats["load"] = [round(load1, 2), round(load5, 2), round(load15, 2)]
-    except OSError:
+    except (OSError, AttributeError):
         stats["load"] = None
 
     try:
@@ -226,7 +226,32 @@ def _collect_system_stats() -> Dict[str, object]:
             "used": total_mem - avail_mem,
         }
     except (OSError, ValueError):
-        stats["memory"] = None
+        # Fallback for Windows / non-Linux: use ctypes or wmic
+        if os.name == "nt":
+            try:
+                import ctypes
+                class _MEMSTAT(ctypes.Structure):
+                    _fields_ = [("dwLength", ctypes.c_ulong),
+                                ("dwMemoryLoad", ctypes.c_ulong),
+                                ("ullTotalPhys", ctypes.c_ulonglong),
+                                ("ullAvailPhys", ctypes.c_ulonglong),
+                                ("ullTotalPageFile", ctypes.c_ulonglong),
+                                ("ullAvailPageFile", ctypes.c_ulonglong),
+                                ("ullTotalVirtual", ctypes.c_ulonglong),
+                                ("ullAvailVirtual", ctypes.c_ulonglong),
+                                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+                ms = _MEMSTAT()
+                ms.dwLength = ctypes.sizeof(ms)
+                ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms))
+                stats["memory"] = {
+                    "total": ms.ullTotalPhys,
+                    "available": ms.ullAvailPhys,
+                    "used": ms.ullTotalPhys - ms.ullAvailPhys,
+                }
+            except Exception:
+                stats["memory"] = None
+        else:
+            stats["memory"] = None
 
     # ── Disks (mount points) ──
     disks: List[Dict[str, object]] = []
@@ -253,7 +278,22 @@ def _collect_system_stats() -> Dict[str, object]:
                 except OSError:
                     continue
     except OSError:
-        pass
+        # Fallback for Windows: enumerate drive letters
+        if os.name == "nt":
+            import string
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                try:
+                    usage = shutil.disk_usage(drive)
+                    disks.append({
+                        "mount": drive,
+                        "device": drive,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    })
+                except OSError:
+                    continue
     stats["disks"] = disks
 
     # ── GPUs (nvidia-smi) ──
