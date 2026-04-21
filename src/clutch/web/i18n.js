@@ -104,7 +104,11 @@ const i18n = (() => {
       // If the preferred language fails, fall back to English
       if (_lang !== DEFAULT_LANG) {
         _lang = DEFAULT_LANG;
-        _strings = await _load(DEFAULT_LANG);
+        try {
+          _strings = await _load(DEFAULT_LANG);
+        } catch (_e2) {
+          // Both languages failed — keep empty strings (HTML defaults stay)
+        }
       }
     }
     applyPage();
