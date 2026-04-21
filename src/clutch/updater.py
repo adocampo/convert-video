@@ -251,19 +251,38 @@ def _pipx_package_installed(package_name: str) -> bool:
     return result.returncode == 0 and package_name in result.stdout
 
 
-def install_latest_version(*, on_progress: "Callable[[str], None] | None" = None) -> subprocess.CompletedProcess:
+def _build_install_source(target_version: str | None = None) -> str:
+    """Return the pipx-compatible install source for the given version.
+
+    When *target_version* is provided the tagged source archive is used,
+    which avoids requiring ``git`` in the subprocess environment.
+    Falls back to the ``git+https`` URL when no version is specified.
+    """
+    if target_version:
+        return f"https://github.com/{GITHUB_REPO}/archive/refs/tags/v{target_version}.zip"
+    return f"git+https://github.com/{GITHUB_REPO}.git"
+
+
+def install_latest_version(
+    *,
+    target_version: str | None = None,
+    on_progress: "Callable[[str], None] | None" = None,
+) -> subprocess.CompletedProcess:
     """Install the latest clutch version from GitHub via pipx.
 
-    If *on_progress* is provided it is called with each meaningful line from
-    the pipx output so the caller can update the UI step label.
+    When *target_version* is given the tagged source archive is downloaded
+    directly (no ``git`` required).  If *on_progress* is provided it is
+    called with each meaningful line from the pipx output so the caller can
+    update the UI step label.
     """
     if _pipx_package_installed(LEGACY_APP_NAME):
         subprocess.run(
             ["pipx", "uninstall", LEGACY_APP_NAME],
             capture_output=False,
         )
+    source = _build_install_source(target_version)
     proc = subprocess.Popen(
-        ["pipx", "install", f"git+https://github.com/{GITHUB_REPO}.git", "--force"],
+        ["pipx", "install", source, "--force"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -305,10 +324,15 @@ def upgrade():
         sys.exit(0)
 
     print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} ...")
-    result = install_latest_version()
+    result = install_latest_version(
+        target_version=remote_ver,
+        on_progress=lambda line: print(f"  {line}"),
+    )
     if result.returncode == 0:
         mark_update_installed(remote_ver)
         info(f"Successfully upgraded to {remote_ver}.")
     else:
+        if result.stdout:
+            print(result.stdout)
         error("Upgrade failed. Check the output above for details.")
         sys.exit(1)

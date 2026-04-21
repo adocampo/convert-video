@@ -606,8 +606,13 @@ class ConversionService:
                 elif "done!" in clean:
                     self._set_upgrade_step(4, "Install complete")
 
-            result = install_latest_version(on_progress=_on_pipx_line)
+            result = install_latest_version(
+                target_version=target_version,
+                on_progress=_on_pipx_line,
+            )
             if result.returncode != 0:
+                if result.stdout:
+                    print_error(f"pipx output:\n{result.stdout}")
                 raise RuntimeError("Upgrade failed. Check the service logs for details.")
 
             self._set_upgrade_step(5, "Verifying installation…")

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.3] - 2026-04-21
+
+### Fixed in 1.8.3
+
+- **Self-upgrade on Windows**: `clutch --upgrade` and the web UI upgrade button now use the tagged source archive instead of `git+https://`, which avoids failures when `git` is not available in the subprocess environment. The CLI also streams pipx output in real time so errors are visible.
+
 ## [1.8.2] - 2026-04-21
 
 ### Fixed in 1.8.2
