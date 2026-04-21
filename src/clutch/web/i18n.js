@@ -100,7 +100,7 @@ const i18n = (() => {
     _lang = forceLang || _detect();
     try {
       _strings = await _load(_lang);
-    } catch {
+    } catch (_e) {
       // If the preferred language fails, fall back to English
       if (_lang !== DEFAULT_LANG) {
         _lang = DEFAULT_LANG;

@@ -274,6 +274,12 @@
 
     <script src="/assets/i18n.js"></script>
     <script>
+        // Fallback shim if i18n.js failed to load or parse
+        if (typeof i18n === 'undefined') {
+            window.i18n = { init: function () { return Promise.resolve('en'); }, t: function (k) { return k; }, applyPage: function () { }, setLanguage: function () { }, getLang: function () { return 'en'; }, getSupported: function () { return ['en']; } };
+        }
+    </script>
+    <script>
         (function () {
             // If auth is disabled, redirect to dashboard immediately
             fetch('/auth/status').then(function (r) { return r.json(); }).then(function (d) {

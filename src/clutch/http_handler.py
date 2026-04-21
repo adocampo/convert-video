@@ -33,12 +33,20 @@ if False:  # TYPE_CHECKING
     from clutch.service import ConversionService
 
 
+def _resolve_web_asset(name: str):
+    """Resolve a web asset path, handling subdirectory traversal for Python < 3.12."""
+    base = files("clutch.web")
+    for segment in name.split("/"):
+        base = base.joinpath(segment)
+    return base
+
+
 def read_web_asset(name: str) -> str:
-    return files("clutch.web").joinpath(name).read_text(encoding="utf-8")
+    return _resolve_web_asset(name).read_text(encoding="utf-8")
 
 
 def read_web_asset_bytes(name: str) -> bytes:
-    return files("clutch.web").joinpath(name).read_bytes()
+    return _resolve_web_asset(name).read_bytes()
 
 
 _changelog_cache: str | None = None

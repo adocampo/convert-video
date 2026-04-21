@@ -8,6 +8,12 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/assets/dashboard.css">
     <script src="/assets/i18n.js"></script>
+    <script>
+        // Fallback shim if i18n.js failed to load or parse
+        if (typeof i18n === 'undefined') {
+            window.i18n = { init: function () { return Promise.resolve('en'); }, t: function (k) { return k; }, applyPage: function () { }, setLanguage: function () { }, getLang: function () { return 'en'; }, getSupported: function () { return ['en']; } };
+        }
+    </script>
 </head>
 
 <body>
