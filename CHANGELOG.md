@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.18] - 2026-04-21
+
+### Fixed in 1.7.18
+
+- **HandBrakeCLI error output in UI logs**: when a conversion fails, the dashboard now shows the actual HandBrakeCLI error messages (e.g. invalid codec, unsupported option) instead of just "Conversion failed".
+- **Empty output detection**: conversions that produce a 0-byte file are now correctly reported as failures and the empty file is removed, preventing false "Succeeded" status.
+- **Audio fallback codec**: changed `--audio-fallback` from `none` to `opus` so that unrecognised audio codecs get transcoded instead of silently dropped.
+- **Bulk action confirm dialogs fully translated**: Cancel/Retry/Remove labels and result toasts now use the active language instead of hardcoded English.
+- **User role display translated**: user role chips in the table and profile section now show the localised label.
+- **Select dropdowns keep value on language switch**: changing the UI language no longer resets dropdown selections.
+
 ## [1.7.17] - 2026-04-20
 
 ### Improved in 1.7.17

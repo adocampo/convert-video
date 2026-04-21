@@ -452,6 +452,7 @@
             confirmTitle.textContent = options.title || 'Confirm';
             confirmMessage.textContent = options.message || '';
             confirmOkButton.textContent = options.ok || 'Ok';
+            confirmCancelButton.textContent = options.cancel || i18n.t('common.cancel');
 
             // Style the OK button: danger (red) for confirms, primary for prompts/alerts
             if (mode === 'confirm' && !options.primary) {
@@ -2448,7 +2449,8 @@
         var ids = Array.from(state.selectedJobs);
         if (!ids.length) return;
 
-        var actionLabel = { cancel: 'Cancel', retry: 'Retry', clear: 'Remove' }[action] || action;
+        var actionKey = { cancel: 'confirm.bulk_cancel_label', retry: 'confirm.bulk_retry_label', clear: 'confirm.bulk_clear_label' }[action];
+        var actionLabel = actionKey ? i18n.t(actionKey) : action;
         var confirmed = await showConfirm({
             title: i18n.t('confirm.bulk_action_title', { action: actionLabel, count: ids.length }),
             message: i18n.t('confirm.bulk_action_message', { action: actionLabel, count: ids.length }),
@@ -2475,8 +2477,9 @@
 
         state.selectedJobs.clear();
         updateBulkActionsBar();
-        var msg = actionLabel + ': ' + succeeded + ' succeeded';
-        if (failed) msg += ', ' + failed + ' failed';
+        var msg = failed
+            ? i18n.t('confirm.bulk_result_partial', { action: actionLabel, succeeded: succeeded, failed: failed })
+            : i18n.t('confirm.bulk_result', { action: actionLabel, succeeded: succeeded });
         setFormStatus(msg, failed ? 'error' : 'ok');
         await refreshJobs();
     }
@@ -3669,7 +3672,7 @@
         if (userSettingsAvatar) renderAvatar(userSettingsAvatar, user);
         if (userSettingsUsername) userSettingsUsername.value = user.username;
         if (userSettingsEmail) userSettingsEmail.value = user.email || '';
-        if (userSettingsRole) userSettingsRole.textContent = user.role;
+        if (userSettingsRole) userSettingsRole.textContent = i18n.t('system.users.role_' + user.role);
         if (userSettingsTheme) userSettingsTheme.value = state.theme;
         // Load user preferences from server
         if (state.auth.enabled && state.auth.token) {
@@ -3979,11 +3982,12 @@
                 var bg = avatarColor(u.username);
                 var initials = userInitials(u.username);
                 var avatarHtml = '<span class="user-avatar user-avatar-sm" data-avatar-user="' + escapeHtml(u.username) + '" data-avatar-email="' + escapeHtml(u.email || '') + '" style="background:' + bg + '">' + escapeHtml(initials) + '</span>';
+                var roleKey = 'system.users.role_' + u.role;
                 return '<tr>'
                     + '<td class="avatar-cell">' + avatarHtml + '</td>'
                     + '<td>' + escapeHtml(u.username) + (u.id === currentId ? ' <span class="chip">' + i18n.t('system.users.you') + '</span>' : '') + '</td>'
                     + '<td>' + escapeHtml(u.email) + '</td>'
-                    + '<td><span class="chip">' + escapeHtml(u.role) + '</span></td>'
+                    + '<td><span class="chip">' + escapeHtml(i18n.t(roleKey)) + '</span></td>'
                     + '<td class="actions-cell">' + actions + '</td>'
                     + '</tr>';
             }).join('')

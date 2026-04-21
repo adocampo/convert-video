@@ -66,6 +66,12 @@ const i18n = (() => {
    *   data-i18n-html="key"               → innerHTML (use sparingly)
    */
   function applyPage() {
+    // Collect <select> values before translating their <option> children
+    const selectValues = new Map();
+    document.querySelectorAll('select').forEach(sel => {
+      selectValues.set(sel, sel.value);
+    });
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       if (key) el.textContent = t(key);
@@ -81,6 +87,11 @@ const i18n = (() => {
     document.querySelectorAll('[data-i18n-html]').forEach(el => {
       const key = el.getAttribute('data-i18n-html');
       if (key) el.innerHTML = t(key);
+    });
+
+    // Restore <select> values after translation
+    selectValues.forEach((val, sel) => {
+      if (val) sel.value = val;
     });
   }
 

@@ -471,6 +471,26 @@ def _remove_temp_and_log(temp_filepath: str):
             pass
 
 
+def _read_last_error_lines(log_path: str, max_lines: int = 30) -> str:
+    """Read the last meaningful non-progress lines from a HandBrakeCLI log file."""
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except OSError:
+        return ""
+    meaningful = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if re.search(r"Encoding:.*?\d+\.\d+ %", stripped):
+            continue
+        meaningful.append(stripped)
+    if not meaningful:
+        return ""
+    return "\n".join(meaningful[-max_lines:])
+
+
 def _cleanup_sibling_temps(final_output: str, base_name: str, output_dir: str):
     """Remove orphaned .tmp. files for the same base name after a successful conversion."""
     if not output_dir or not os.path.isdir(output_dir):
@@ -757,7 +777,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             "--all-audio",
             "--audio-copy-mask", "eac3,ac3,aac,truehd,dts,dtshd,mp2,mp3,opus,vorbis,flac,alac",
             "--aencoder", "copy",
-            "--audio-fallback", "none",
+            "--audio-fallback", "opus",
         ]
     elif is_iso:
         # For ISO sources mediainfo cannot inspect tracks;
@@ -896,6 +916,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         last_progress = max(0.0, float(initial_progress or 0.0))
         process: Optional[subprocess.Popen] = None
         log_path = progress_log_path or f"{temp_filepath}.progress.log"
+        hb_error_detail = ""
 
         def report_progress(percent: float, detail: str):
             nonlocal last_progress
@@ -973,9 +994,14 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 old_winch_handler = signal.getsignal(signal.SIGWINCH)
                 signal.signal(signal.SIGWINCH, handle_resize)
 
+                hb_error_lines = []
+
                 def handle_line(line: str):
                     percent = _extract_progress_percent(line)
                     if percent is None:
+                        stripped = line.strip()
+                        if stripped:
+                            hb_error_lines.append(stripped)
                         return
                     increment = percent - pbar.n
                     if increment > 0:
@@ -993,6 +1019,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 process.wait()
                 _update_conversion_state(thread_id, process=None, pid=None)
                 conversion_succeeded = process.returncode == 0
+                if not conversion_succeeded and hb_error_lines:
+                    hb_error_detail = "\n".join(hb_error_lines[-30:])
                 elapsed_text = tqdm.format_interval(pbar.format_dict["elapsed"])
         elif progress_callback is not None:
             if emit_logs:
@@ -1037,6 +1065,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     )
                     process.wait()
                     conversion_succeeded = process.returncode == 0
+                    if not conversion_succeeded:
+                        hb_error_detail = _read_last_error_lines(log_path)
             if existing_process_id:
                 _consume_log_output(
                     log_path,
@@ -1049,14 +1079,21 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     detach_when=should_detach if detach_when is not None else None,
                 )
                 conversion_succeeded = last_progress >= 99.9 and os.path.exists(temp_filepath)
+                if not conversion_succeeded:
+                    hb_error_detail = _read_last_error_lines(log_path)
             _update_conversion_state(thread_id, process=None, pid=None)
         else:
             if emit_logs:
                 info(f"Converting: {os.path.basename(input_file)}")
-            process = _spawn_conversion_process(hb_params)
+            process = _spawn_conversion_process(hb_params, stderr=subprocess.PIPE)
             _update_conversion_state(thread_id, process=process, pid=process.pid)
-            process.wait()
+            _, stderr_data = process.communicate()
             conversion_succeeded = process.returncode == 0
+            if not conversion_succeeded and stderr_data:
+                hb_error_detail = stderr_data.decode("utf-8", errors="replace").strip()
+                if hb_error_detail:
+                    lines = hb_error_detail.splitlines()
+                    hb_error_detail = "\n".join(lines[-30:])
             _update_conversion_state(thread_id, process=None, pid=None)
 
         # Check if this conversion was interrupted by Ctrl+C
@@ -1110,7 +1147,29 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     return ""
             else:
                 shutil.move(temp_filepath, final_output)
+                if not hb_error_detail:
+                    hb_error_detail = _read_last_error_lines(log_path)
                 _remove_temp_and_log(temp_filepath)  # clean up the progress log
+            # Validate the output file is not empty (HandBrakeCLI may exit 0 with 0-byte output)
+            try:
+                output_size = os.path.getsize(final_output)
+            except OSError:
+                output_size = 0
+            if output_size == 0:
+                try:
+                    os.remove(final_output)
+                except OSError:
+                    pass
+                _update_conversion_state(
+                    thread_id, temp_file=None, process=None, pid=None,
+                    interrupted=False, paused=False, paused_at=None, paused_seconds=0.0,
+                )
+                if emit_logs:
+                    error(f"Conversion produced empty file: {os.path.basename(input_file)}")
+                    if hb_error_detail:
+                        error(f"HandBrakeCLI output:\n{hb_error_detail}")
+                report_progress(last_progress, "Conversion failed (empty output).")
+                return ""
             _update_conversion_state(
                 thread_id,
                 temp_file=None,
@@ -1136,6 +1195,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             report_progress(100.0, "Conversion successful.")
             return final_output
         else:
+            if not hb_error_detail:
+                hb_error_detail = _read_last_error_lines(log_path)
             _remove_temp_and_log(temp_filepath)
             _update_conversion_state(
                 thread_id,
@@ -1152,6 +1213,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     error(f"Conversion failed [{elapsed_text}]: {os.path.basename(input_file)}")
                 else:
                     error(f"Conversion failed: {os.path.basename(input_file)}")
+                if hb_error_detail:
+                    error(f"HandBrakeCLI output:\n{hb_error_detail}")
             report_progress(last_progress, "Conversion failed.")
             return ""
     except ConversionDetached:
