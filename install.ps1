@@ -25,6 +25,27 @@ function Write-Fail  { param([string]$Msg) Write-Host "[x] $Msg" -ForegroundColo
 
 function Test-Command { param([string]$Name) $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
 
+function Test-RealPython {
+    <# Returns the python executable name if a real interpreter is found, $null otherwise.
+       Windows ships MS Store stubs (WindowsApps\python.exe) that are not real interpreters. #>
+    foreach ($candidate in @('python', 'python3', 'py')) {
+        $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+        if (-not $cmd) { continue }
+        # Skip MS Store stubs: they live in WindowsApps and are tiny (0-byte or ≤10 KB).
+        $exe = $cmd.Source
+        if ($exe -and $exe -like '*WindowsApps*') {
+            $size = (Get-Item $exe -ErrorAction SilentlyContinue).Length
+            if ($size -lt 20480) { continue }
+        }
+        # Verify it actually responds to --version
+        try {
+            $out = & $candidate --version 2>&1
+            if ($out -match 'Python \d+\.\d+') { return $candidate }
+        } catch { continue }
+    }
+    return $null
+}
+
 # ── Detect package manager ───────────────────
 function Get-PackageManager {
     if (Test-Command 'winget')  { return 'winget' }
@@ -56,26 +77,34 @@ function Install-Pkg {
 }
 
 # ── Ensure Python 3.9+ ──────────────────────
+$script:PythonExe = 'python'
+
 function Ensure-Python {
-    if (Test-Command 'python') {
-        $ver = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+    $found = Test-RealPython
+    if ($found) {
+        $ver = & $found -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
         if ($ver) {
             $parts = $ver -split '\.'
             if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 9) {
-                Write-Info "Python $ver found"
+                Write-Info "Python $ver found ($found)"
+                $script:PythonExe = $found
                 return
             }
             Write-Warn "Python $ver found but 3.9+ is required"
         }
+    } else {
+        Write-Warn "No real Python interpreter found (MS Store stubs are ignored)"
     }
     Install-Pkg -WingetId 'Python.Python.3.12' -ChocoName 'python' -ScoopName 'python' -Label 'Python 3'
     # Refresh PATH so the new python is visible
     $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
                 [System.Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not (Test-Command 'python')) {
+    $found = Test-RealPython
+    if (-not $found) {
         Write-Fail "Python was installed but is not in PATH. Restart your terminal and run this script again."
     }
-    Write-Info "Python installed"
+    $script:PythonExe = $found
+    Write-Info "Python installed ($found)"
 }
 
 # ── Ensure pipx ──────────────────────────────
@@ -85,8 +114,8 @@ function Ensure-Pipx {
         return
     }
     Write-Warn "Installing pipx via pip..."
-    & python -m pip install --user pipx 2>$null
-    & python -m pipx ensurepath 2>$null
+    & $script:PythonExe -m pip install --user pipx 2>$null
+    & $script:PythonExe -m pipx ensurepath 2>$null
     # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
                 [System.Environment]::GetEnvironmentVariable('Path', 'User')
