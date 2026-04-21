@@ -114,8 +114,10 @@ function Ensure-Pipx {
         return
     }
     Write-Warn "Installing pipx via pip..."
-    & $script:PythonExe -m pip install --user pipx 2>$null
-    & $script:PythonExe -m pipx ensurepath 2>$null
+    $prev = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+    & $script:PythonExe -m pip install --user pipx 2>&1 | Out-Null
+    & $script:PythonExe -m pipx ensurepath 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
     # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
                 [System.Environment]::GetEnvironmentVariable('Path', 'User')
@@ -149,7 +151,7 @@ function Resolve-Source {
     Ensure-Git
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "clutch-install-$([guid]::NewGuid().ToString('N').Substring(0,8))"
     Write-Info "Cloning $RepoUrl into temporary directory..."
-    git clone --depth 1 $RepoUrl $tmpDir 2>$null
+    git clone --depth 1 $RepoUrl $tmpDir 2>&1 | Out-Null
     Write-Info "Cloned to $tmpDir"
     return $tmpDir
 }
@@ -200,15 +202,17 @@ $sourceDir = Resolve-Source
 Write-Host ''
 
 # Remove legacy or existing installation
-$pipxList = & pipx list 2>$null | Out-String
+$prev = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+$pipxList = & pipx list 2>&1 | Out-String
 if ($pipxList -match [regex]::Escape($LegacyAppName)) {
     Write-Info "Legacy pipx installation detected; removing $LegacyAppName"
-    & pipx uninstall $LegacyAppName 2>$null
+    & pipx uninstall $LegacyAppName 2>&1 | Out-Null
 }
 if ($pipxList -match [regex]::Escape($AppName)) {
     Write-Info "Existing $AppName installation detected; reinstalling"
-    & pipx uninstall $AppName 2>$null
+    & pipx uninstall $AppName 2>&1 | Out-Null
 }
+$ErrorActionPreference = $prev
 
 Write-Info "Installing $AppName via pipx..."
 & pipx install $sourceDir
