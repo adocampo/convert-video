@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-04-21
+
+### Fixed in 1.8.1
+
+- **Windows installer hardening**: fixed `install.ps1` MS Store Python stub bypass, `--source winget` to avoid msstore certificate errors, suppressed PowerShell `NativeCommandError` on stderr warnings, corrected winget package IDs (`MediaArea.MediaInfo`, `MoritzBunkus.MKVToolNix`, `HandBrake.HandBrake`), and added `where.exe` fallback for binary discovery.
+- **Windows installer auto-installs runtime deps**: `install.ps1` now automatically installs HandBrakeCLI, mediainfo, and MKVToolNix via the detected package manager and adds their paths to the user PATH persistently.
+- **Windows converter compatibility**: Unix-only imports (`fcntl`, `pty`, `select`, `termios`) are now conditional so the converter module loads on Windows.
+- **System monitor cross-platform**: `os.getloadavg()` no longer crashes on Windows; memory stats use `ctypes GlobalMemoryStatusEx` and disk stats enumerate drive letters as fallbacks when `/proc` is unavailable.
+- **Setup wizard broken on fresh install**: restored missing `</script></body></html>` closing tags in `setup.html` that caused the page to be non-functional.
+- **Web JS compatibility**: fixed `catch {}` optional binding for older browsers, added i18n fallback shim for `login.html`/`dashboard.html`, and fixed `importlib.resources` `joinpath()` for Python < 3.12.
+- **Web package missing `__init__.py`**: added `web/__init__.py` so `lang/*.json` translation files are included in the installed package.
+
 ## [1.8.0] - 2026-04-21
 
 ### Added in 1.8.0
