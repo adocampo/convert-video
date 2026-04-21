@@ -287,6 +287,13 @@ def _collect_system_stats() -> Dict[str, object]:
             DRIVE_CDROM = 5
             GetDriveTypeW = ctypes.windll.kernel32.GetDriveTypeW
 
+            # Query physical device name for a drive letter via QueryDosDeviceW
+            QueryDosDeviceW = ctypes.windll.kernel32.QueryDosDeviceW
+            def _query_dos_device(letter: str) -> str:
+                buf = ctypes.create_unicode_buffer(260)
+                ret = QueryDosDeviceW(f"{letter}:", buf, 260)
+                return buf.value if ret else ""
+
             # Build drive-letter → UNC mapping from 'net use'
             drive_to_unc: dict = {}
             unmapped_uncs: list = []
@@ -322,12 +329,19 @@ def _collect_system_stats() -> Dict[str, object]:
                 dtype = GetDriveTypeW(drive)
                 key = f"{letter}:"
                 unc = drive_to_unc.get(key)
-                label = f"{drive} ({unc})" if unc else drive
+
+                # mount = drive letter only; device = UNC path or physical device
+                mount_label = drive
+                if unc:
+                    device_label = unc
+                else:
+                    device_label = _query_dos_device(letter) or drive
+
                 try:
                     usage = shutil.disk_usage(drive)
                     disks.append({
-                        "mount": label,
-                        "device": label,
+                        "mount": mount_label,
+                        "device": device_label,
                         "total": usage.total,
                         "used": usage.used,
                         "free": usage.free,
@@ -337,8 +351,8 @@ def _collect_system_stats() -> Dict[str, object]:
                     if dtype in (DRIVE_REMOVABLE, DRIVE_CDROM):
                         continue
                     disks.append({
-                        "mount": label,
-                        "device": label,
+                        "mount": mount_label,
+                        "device": device_label,
                         "total": None,
                         "used": None,
                         "free": None,
