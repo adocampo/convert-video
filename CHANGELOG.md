@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4] - 2026-04-21
+
+### Added in 1.8.4
+
+- **Windows documentation in README**: added native Windows installation instructions (PowerShell one-liner, local clone), Windows service launch guide, and scheduled task example. Updated feature list and requirements with Windows-specific notes.
+
 ## [1.8.3] - 2026-04-21
 
 ### Fixed in 1.8.3
