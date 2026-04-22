@@ -109,6 +109,7 @@ class ConversionService:
         self._upgrade_step_total = 9
         self._upgrade_step_label = ""
         self._restart_requested = False
+        self._upgrade_deferred = False
         self._restart_command = [sys.argv[0], *sys.argv[1:]]
         self.scheduler = ScheduleEngine()
         self._schedule_monitor_thread: Optional[threading.Thread] = None
@@ -615,8 +616,9 @@ class ConversionService:
                 _windows_deferred_install(
                     source,
                     on_progress=_on_pipx_line,
-                    restart_service=True,
+                    restart_command=list(self._restart_command),
                 )
+                self._upgrade_deferred = True
                 self._set_upgrade_step(5, "Upgrade helper launched")
                 info("Deferred upgrade helper launched; shutting down for upgrade…")
             else:
@@ -2075,6 +2077,12 @@ def run_service(
     if service.should_restart():
         restart_command = service.get_restart_command()
         if restart_command and restart_command[0]:
+            if sys.platform == "win32" and service._upgrade_deferred:
+                # On Windows the deferred .cmd helper handles the restart
+                # after this PID dies.  os.execvp would keep the PID alive
+                # (Python emulates it via spawn+wait) so just exit cleanly.
+                info(f"Exiting so deferred upgrade helper can restart {APP_NAME}…")
+                sys.exit(0)
             info(f"Restarting {APP_NAME} service with the upgraded version...")
             try:
                 os.execvp(restart_command[0], restart_command)

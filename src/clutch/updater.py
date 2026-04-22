@@ -267,7 +267,7 @@ def _windows_deferred_install(
     source: str,
     *,
     on_progress: "Callable[[str], None] | None" = None,
-    restart_service: bool = False,
+    restart_command: "list[str] | None" = None,
 ) -> None:
     """Spawn a detached helper script that upgrades clutch after this process exits.
 
@@ -281,8 +281,15 @@ def _windows_deferred_install(
 
     pid = os.getpid()
     restart_cmd = ""
-    if restart_service:
-        restart_cmd = 'start "" clutch --service\n'
+    if restart_command:
+        # Build a quoted command line for the restart
+        parts = []
+        for arg in restart_command:
+            if " " in arg or '"' in arg:
+                parts.append(f'"{arg}"')
+            else:
+                parts.append(arg)
+        restart_cmd = 'start "" ' + " ".join(parts) + "\n"
 
     legacy_uninstall = ""
     if _pipx_package_installed(LEGACY_APP_NAME):
@@ -311,10 +318,13 @@ def _windows_deferred_install(
     if on_progress:
         on_progress("Launching deferred upgrade helper\u2026")
 
-    # DETACHED_PROCESS=0x8, CREATE_NEW_PROCESS_GROUP=0x200
+    # CREATE_NO_WINDOW so no visible terminal pops up.
+    # CREATE_NEW_PROCESS_GROUP so it survives parent exit.
+    CREATE_NO_WINDOW = 0x08000000
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
     subprocess.Popen(
         ["cmd", "/c", script_path],
-        creationflags=0x00000008 | 0x00000200,
+        creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
