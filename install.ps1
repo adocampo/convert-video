@@ -379,8 +379,12 @@ try {
                 Write-Info "Service will start on next boot."
             }
         } else {
-            $errMsg = if (Test-Path $resultFile) { (Get-Content $resultFile -Raw).Trim() } else { "No response from elevated process" }
-            if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
+            if (Test-Path $resultFile) {
+                $errMsg = (Get-Content $resultFile -Raw).Trim()
+                Remove-Item $resultFile -Force
+            } else {
+                $errMsg = "No response from elevated process"
+            }
             Write-Warn "Failed to register scheduled task: $errMsg"
             Write-Warn "You can create it manually with Task Scheduler."
         }
