@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.12] - 2026-04-22
+
+### Added in 1.8.12
+
+- **Linux installer auto-installs runtime dependencies**: `install.sh` now automatically installs HandBrakeCLI, mediainfo, and mkvtoolnix on Arch, Debian/Ubuntu, Fedora, Alpine, openSUSE, and macOS instead of only printing a warning.
+- **Alpine Linux support**: `install.sh` now supports the `apk` package manager for Python, pipx, and all runtime dependencies.
+- **Broken pipx detection**: `install.sh` verifies that `pipx` actually works (not just present in PATH) and reinstalls it if broken (common on Arch after Python upgrades).
+- **pipx ensurepath**: `install.sh` now runs `pipx ensurepath` and injects `~/.local/bin` into the current session PATH.
+
+### Fixed in 1.8.12
+
+- **Systemd service crash on WSL (exit code 226/NAMESPACE)**: both `install.sh` and `clutch --install-service` now detect WSL and strip mount-namespace hardening directives (`ProtectSystem`, `PrivateTmp`, `ReadWritePaths`) that WSL does not support. Native Linux keeps the full hardening.
+- **Service now listens on all interfaces**: changed `--listen-host` default from `127.0.0.1` to `0.0.0.0` so the dashboard is reachable from other machines on the network.
+
 ## [1.8.5] - 2026-04-21
 
 ### Fixed in 1.8.5
