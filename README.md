@@ -82,6 +82,9 @@ The installer will:
 3. Install pipx via pip.
 4. Clone the repo to a temporary directory and install `clutch` via pipx.
 5. Install runtime dependencies (HandBrakeCLI, mediainfo, MKVToolNix) and add them to your user PATH.
+6. Offer to register `clutch` as a Windows scheduled task that starts the service at system startup (before any user logs in).
+
+The scheduled task step asks for your Windows password so the Task Scheduler can run the service without requiring an interactive logon session. A UAC elevation prompt will appear briefly to register the task with administrator privileges. The password is stored only by the Windows Task Scheduler; the installer does not keep it.
 
 #### Install from a local clone
 
@@ -307,16 +310,38 @@ loginctl enable-linger $USER
 
 #### Running on Windows
 
-On Windows there is no systemd, so you start the service manually from PowerShell or Command Prompt:
+The PowerShell installer (`install.ps1`) can register `clutch` as a Windows scheduled task that starts automatically at system startup -- before any user logs in. When you run the installer, it will ask whether you want to register the service. If you accept:
+
+1. You enter your Windows password in the installer window (stored only by Task Scheduler).
+2. A brief UAC prompt appears to grant the necessary privileges.
+3. The task is registered silently and the installer offers to start it immediately.
+
+The service listens on `0.0.0.0:8765` by default. After the task is registered, the dashboard is available at `http://localhost:8765` on every boot.
+
+To manage the scheduled task manually:
+
+```powershell
+# Check task status
+Get-ScheduledTask -TaskName clutch
+
+# Start / stop
+Start-ScheduledTask -TaskName clutch
+Stop-ScheduledTask -TaskName clutch
+
+# Remove the task entirely
+Unregister-ScheduledTask -TaskName clutch -Confirm:$false
+```
+
+If you prefer not to use the installer, you can also register the task by hand:
+
+```powershell
+schtasks /create /tn "clutch" /tr "clutch --serve --listen-host 0.0.0.0 --listen-port 8765" /sc onstart /ru %USERNAME% /rp
+```
+
+Or simply start the service manually from PowerShell:
 
 ```powershell
 clutch --serve --listen-host 0.0.0.0 --listen-port 8765 --allow-root D:\Videos
-```
-
-To have the service start automatically at login, create a shortcut in the Windows Startup folder (`shell:startup`) that runs the command above, or register it as a scheduled task:
-
-```powershell
-schtasks /create /tn "Clutch Service" /tr "clutch --serve --listen-host 0.0.0.0 --listen-port 8765" /sc onlogon /rl limited
 ```
 
 The dashboard and all features (file browser, system monitor, one-click upgrade, watched directories) work the same on Windows. The system monitor uses native Win32 APIs to report CPU, memory, and disk usage, and the file browser enumerates drive letters and mapped network drives automatically.

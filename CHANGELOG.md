@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.11] - 2026-04-22
+
+### Added in 1.8.11
+
+- **Windows installer registers clutch as a scheduled task**: `install.ps1` now offers to register `clutch --serve` as a Windows scheduled task that starts at system startup (before any user logs in). The password prompt, result messages, and "start now?" question all happen in the main installer window; only a brief UAC elevation runs silently in the background.
+
+### Fixed in 1.8.11
+
+- **Windows installer PowerShell 5.1 compatibility**: replaced all non-ASCII characters (em dashes, box-drawing lines) with ASCII equivalents so the script parses correctly on PS5.1 regardless of file encoding or BOM.
+- **Windows installer PowerShell 5.1 syntax**: replaced `$var = if () {} else {}` ternary-style assignments (PS7-only) with classic `if/else` blocks.
+- **Windows installer here-string removal**: replaced here-strings with string arrays joined at runtime, avoiding PS5.1 parsing failures when the file has LF line endings instead of CRLF.
+
 ## [1.8.10] - 2026-04-22
 
 ### Changed in 1.8.10
