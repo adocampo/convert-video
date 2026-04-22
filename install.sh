@@ -42,8 +42,9 @@ detect_pkg_manager() {
     if command -v apt-get &>/dev/null; then echo "apt"
     elif command -v dnf &>/dev/null; then echo "dnf"
     elif command -v pacman &>/dev/null; then echo "pacman"
+    elif command -v apk &>/dev/null; then echo "apk"
     elif command -v zypper &>/dev/null; then echo "zypper"
-    else fail "Unsupported package manager. Install python3, python3-venv, and pipx manually."
+    else echo "unknown"
     fi
 }
 
@@ -56,8 +57,11 @@ install_pkg() {
         apt)    sudo apt-get update -qq && sudo apt-get install -y -qq "$pkg" ;;
         dnf)    sudo dnf install -y -q "$pkg" ;;
         pacman) sudo pacman -S --noconfirm --needed "$pkg" ;;
+        apk)    sudo apk add --quiet "$pkg" ;;
         zypper) sudo zypper install -y "$pkg" ;;
         brew)   brew install "$pkg" ;;
+        *)      warn "Cannot auto-install ${pkg} (unknown package manager). Install it manually."
+                return 1 ;;
     esac
 }
 
@@ -75,7 +79,10 @@ ensure_python() {
         fi
         warn "Python ${ver} found but 3.9+ is required"
     fi
-    install_pkg python3 "$PKG_MGR"
+    case "$PKG_MGR" in
+        apk) install_pkg python3 "$PKG_MGR" ;;
+        *)   install_pkg python3 "$PKG_MGR" ;;
+    esac
 }
 
 # ── Ensure python3-venv is available ─────────
@@ -88,6 +95,7 @@ ensure_venv() {
         apt)    install_pkg python3-venv "$PKG_MGR" ;;
         dnf)    install_pkg python3-libs "$PKG_MGR" ;;  # venv included
         pacman) info "venv is bundled with python on Arch" ;;
+        apk)    info "venv is bundled with python on Alpine" ;;
         zypper) install_pkg python3-venv "$PKG_MGR" ;;
         brew)   info "venv is bundled with python on macOS" ;;
     esac
@@ -96,38 +104,121 @@ ensure_venv() {
 # ── Ensure pipx is available ─────────────────
 ensure_pipx() {
     if command -v pipx &>/dev/null; then
-        info "pipx found at $(command -v pipx)"
-        return
+        # Verify pipx actually works (Arch can break it after Python upgrades)
+        if pipx --version &>/dev/null; then
+            info "pipx found at $(command -v pipx)"
+        else
+            warn "pipx binary found but broken (likely a Python version mismatch). Reinstalling..."
+            case "$PKG_MGR" in
+                pacman) sudo pacman -S --noconfirm python-pipx ;;
+                *)      install_pkg pipx "$PKG_MGR" ;;
+            esac
+        fi
+    else
+        case "$PKG_MGR" in
+            apt)    install_pkg pipx "$PKG_MGR" ;;
+            dnf)    install_pkg pipx "$PKG_MGR" ;;
+            pacman) install_pkg python-pipx "$PKG_MGR" ;;
+            apk)    install_pkg pipx "$PKG_MGR" ;;
+            zypper) install_pkg python3-pipx "$PKG_MGR" ;;
+            brew)   install_pkg pipx "$PKG_MGR" ;;
+            *)      warn "Install pipx manually: https://pypa.github.io/pipx/"
+                    fail "pipx is required to install ${APP_NAME}." ;;
+        esac
     fi
-    case "$PKG_MGR" in
-        apt)    install_pkg pipx "$PKG_MGR" ;;
-        dnf)    install_pkg pipx "$PKG_MGR" ;;
-        pacman) install_pkg python-pipx "$PKG_MGR" ;;
-        zypper) install_pkg python3-pipx "$PKG_MGR" ;;
-        brew)   install_pkg pipx "$PKG_MGR" ;;
-    esac
-    # Ensure ~/.local/bin is in PATH
+    # Ensure ~/.local/bin is in PATH for this session and future shells
     pipx ensurepath 2>/dev/null || true
+    if [[ ":${PATH}:" != *":${HOME}/.local/bin:"* ]]; then
+        export PATH="${HOME}/.local/bin:${PATH}"
+    fi
 }
 
 # ── Ensure external dependencies ─────────────
+# Maps: binary name -> package name per distro
+# HandBrakeCLI is only in Flatpak/AUR/manual on most distros; we handle it specially.
+install_runtime_dep() {
+    local binary="$1"
+    case "$binary" in
+        HandBrakeCLI)
+            case "$PKG_MGR" in
+                apt)    install_pkg handbrake-cli "$PKG_MGR" ;;
+                dnf)    install_pkg HandBrake-cli "$PKG_MGR" ;;
+                pacman) install_pkg handbrake-cli "$PKG_MGR" ;;
+                apk)    install_pkg handbrake "$PKG_MGR" ;;
+                brew)   brew install --cask handbrake ;;
+                *)      return 1 ;;
+            esac
+            ;;
+        mediainfo)
+            case "$PKG_MGR" in
+                apt)    install_pkg mediainfo "$PKG_MGR" ;;
+                dnf)    install_pkg mediainfo "$PKG_MGR" ;;
+                pacman) install_pkg mediainfo "$PKG_MGR" ;;
+                apk)    install_pkg mediainfo "$PKG_MGR" ;;
+                brew)   install_pkg media-info "$PKG_MGR" ;;
+                *)      return 1 ;;
+            esac
+            ;;
+        mkvpropedit|mkvmerge)
+            # Both come from the mkvtoolnix package
+            case "$PKG_MGR" in
+                apt)    install_pkg mkvtoolnix "$PKG_MGR" ;;
+                dnf)    install_pkg mkvtoolnix "$PKG_MGR" ;;
+                pacman) install_pkg mkvtoolnix-cli "$PKG_MGR" ;;
+                apk)    install_pkg mkvtoolnix "$PKG_MGR" ;;
+                brew)   install_pkg mkvtoolnix "$PKG_MGR" ;;
+                *)      return 1 ;;
+            esac
+            ;;
+    esac
+}
+
 ensure_external_deps() {
     local deps=("HandBrakeCLI" "mediainfo" "mkvpropedit" "mkvmerge")
     local missing=()
+    local still_missing=()
+
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
             missing+=("$dep")
         fi
     done
-    if (( ${#missing[@]} > 0 )); then
-        warn "Optional runtime dependencies not found: ${missing[*]}"
-        echo "  These are required at runtime. Install them separately:"
-        echo "    HandBrakeCLI  → https://handbrake.fr/downloads2.php"
-        echo "    mediainfo     → your package manager (mediainfo)"
-        echo "    mkvpropedit   → your package manager (mkvtoolnix)"
-        echo "    mkvmerge      → your package manager (mkvtoolnix)"
-    else
+
+    if (( ${#missing[@]} == 0 )); then
         info "Runtime dependencies found: ${deps[*]}"
+        return
+    fi
+
+    # Track which packages we already tried to avoid duplicate installs
+    # (mkvpropedit and mkvmerge come from the same package)
+    local tried_mkvtoolnix=false
+    for dep in "${missing[@]}"; do
+        if [[ "$dep" == "mkvmerge" || "$dep" == "mkvpropedit" ]] && $tried_mkvtoolnix; then
+            continue
+        fi
+        if [[ "$dep" == "mkvmerge" || "$dep" == "mkvpropedit" ]]; then
+            tried_mkvtoolnix=true
+        fi
+        install_runtime_dep "$dep" || true
+    done
+
+    # Re-check after install attempts
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            still_missing+=("$dep")
+        fi
+    done
+
+    if (( ${#still_missing[@]} > 0 )); then
+        warn "Could not auto-install: ${still_missing[*]}"
+        echo "  Install them manually or configure their paths in the clutch dashboard"
+        echo "  under Settings > Binary Paths."
+        echo "    HandBrakeCLI  -> https://handbrake.fr/downloads2.php"
+        echo "    mediainfo     -> your package manager (mediainfo)"
+        echo "    mkvpropedit   -> your package manager (mkvtoolnix)"
+        echo "    mkvmerge      -> your package manager (mkvtoolnix)"
+    else
+        info "Runtime dependencies installed: ${deps[*]}"
     fi
 }
 
