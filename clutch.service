@@ -6,9 +6,9 @@ After=network.target
 Type=simple
 # User unit: runs as the logged-in user.
 # If installed via pipx, the binary lives under ~/.local/bin
-ExecStart=%h/.local/bin/clutch --serve --listen-host 127.0.0.1 --listen-port 8765
+ExecStart=%h/.local/bin/clutch --serve --listen-host 0.0.0.0 --listen-port 8765
 # Uncomment and edit to restrict which paths the service can access:
-#ExecStart=%h/.local/bin/clutch --serve --listen-host 127.0.0.1 --listen-port 8765 --allow-root /path/to/media
+#ExecStart=%h/.local/bin/clutch --serve --listen-host 0.0.0.0 --listen-port 8765 --allow-root /path/to/media
 Restart=on-failure
 RestartSec=5
 

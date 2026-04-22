@@ -620,7 +620,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={exec_start} --serve --listen-host 127.0.0.1 --listen-port 8765
+ExecStart={exec_start} --serve --listen-host 0.0.0.0 --listen-port 8765
 Restart=on-failure
 RestartSec=5
 Environment=HOME=%h
@@ -633,6 +633,9 @@ ReadWritePaths=%h/.local/state/clutch
 [Install]
 WantedBy=default.target
 """
+
+# Directives that require mount namespaces (unsupported on WSL)
+_NAMESPACE_DIRECTIVES = {"ProtectSystem", "ProtectHome", "PrivateTmp", "ReadWritePaths"}
 
 
 def install_systemd_service():
@@ -648,6 +651,23 @@ def install_systemd_service():
         clutch_bin = os.path.join(os.path.expanduser("~"), ".local", "bin", "clutch")
 
     unit_content = SYSTEMD_UNIT_TEMPLATE.format(exec_start=clutch_bin)
+
+    # WSL does not support mount namespaces; strip those directives
+    # to avoid exit code 226/NAMESPACE.
+    is_wsl = False
+    try:
+        with open("/proc/version", "r") as pv:
+            proc_version = pv.read().lower()
+            is_wsl = "microsoft" in proc_version or "wsl" in proc_version
+    except OSError:
+        pass
+    if is_wsl:
+        lines = unit_content.splitlines(keepends=True)
+        unit_content = "".join(
+            l for l in lines
+            if not any(l.startswith(d + "=") for d in _NAMESPACE_DIRECTIVES)
+        )
+        warning("WSL detected: stripped mount-namespace hardening from unit file.")
 
     os.makedirs(unit_dir, exist_ok=True)
     with open(unit_path, "w") as f:
@@ -724,8 +744,8 @@ def main():
     service_group = parser.add_argument_group("service")
     service_group.add_argument("--serve", action="store_true",
                                help="Run the HTTP conversion service on this machine.")
-    service_group.add_argument("--listen-host", default="127.0.0.1",
-                               help="Bind host for the service (default: 127.0.0.1).")
+    service_group.add_argument("--listen-host", default="0.0.0.0",
+                               help="Bind host for the service (default: 0.0.0.0).")
     service_group.add_argument("--listen-port", type=int, default=8765,
                                help="Bind port for the service (default: 8765).")
     service_group.add_argument("--service-db", default=build_service_db_path(),
