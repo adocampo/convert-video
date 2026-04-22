@@ -275,63 +275,114 @@ function Install-ScheduledTask {
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 
     if (-not $isAdmin) {
-        Write-Warn "Registering a startup task requires administrator privileges."
-        Write-Warn "Relaunching this step in an elevated prompt..."
         $clutchExe = Get-ClutchExePath
         if (-not $clutchExe) {
             Write-Warn "Could not locate $AppName executable. Skipping scheduled task creation."
             return
         }
-        # Build a self-contained elevated script block
+
+        # Check for an existing task
+        $existing = Get-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warn "Scheduled task '$($script:TaskName)' already exists."
+            $overwrite = Read-Host "    Overwrite it? [y/N]"
+            if ($overwrite -notmatch '^[yY]') {
+                Write-Info "Keeping existing scheduled task."
+                return
+            }
+        }
+
+        # Collect password here, in the main window
+        $user = "$env:USERDOMAIN\$env:USERNAME"
+        Write-Host ''
+        Write-Warn "Windows requires your password to run the task at startup without logon."
+        Write-Warn "The password is stored securely by the Task Scheduler; this script does not keep it."
+        $securePass = Read-Host "    Password for $user" -AsSecureString
+        $cred = New-Object System.Management.Automation.PSCredential($user, $securePass)
+        $plainPass = $cred.GetNetworkCredential().Password
+
+        # Pass credentials via temp file so the elevated process needs no interaction
+        $credFile   = Join-Path ([IO.Path]::GetTempPath()) "clutch-task-cred.tmp"
+        $resultFile = Join-Path ([IO.Path]::GetTempPath()) "clutch-task-result.tmp"
+        if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
+        [IO.File]::WriteAllText($credFile, $plainPass)
+        $plainPass = $null
+
+        # Elevated script: reads cred file, registers task, writes result, cleans up
         $elevatedScript = @"
 `$ErrorActionPreference = 'Stop'
-`$taskName = '$($script:TaskName)'
-`$clutchExe = '$clutchExe'
-`$arguments = '--serve --listen-host 0.0.0.0 --listen-port 8765'
-`$user = '$env:USERDOMAIN\$env:USERNAME'
+try {
+    `$credFile   = '$credFile'
+    `$resultFile = '$resultFile'
+    `$taskName   = '$($script:TaskName)'
+    `$clutchExe  = '$clutchExe'
+    `$arguments  = '--serve --listen-host 0.0.0.0 --listen-port 8765'
+    `$user       = '$env:USERDOMAIN\$env:USERNAME'
+    `$plainPass  = [IO.File]::ReadAllText(`$credFile)
+    Remove-Item `$credFile -Force -ErrorAction SilentlyContinue
 
-Write-Host ''
-Write-Host '[!] Windows requires your password to run the task at startup without logon.' -ForegroundColor Yellow
-Write-Host '[!] The password is stored securely by the Task Scheduler; this script does not keep it.' -ForegroundColor Yellow
-`$securePass = Read-Host "    Password for `$user" -AsSecureString
-`$cred = New-Object System.Management.Automation.PSCredential(`$user, `$securePass)
-`$plainPass = `$cred.GetNetworkCredential().Password
+    `$existing = Get-ScheduledTask -TaskName `$taskName -ErrorAction SilentlyContinue
+    if (`$existing) { Unregister-ScheduledTask -TaskName `$taskName -Confirm:`$false }
 
-# Remove existing task if present
-`$existing = Get-ScheduledTask -TaskName `$taskName -ErrorAction SilentlyContinue
-if (`$existing) { Unregister-ScheduledTask -TaskName `$taskName -Confirm:`$false }
+    `$action   = New-ScheduledTaskAction -Execute `$clutchExe -Argument `$arguments
+    `$trigger  = New-ScheduledTaskTrigger -AtStartup
+    `$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 ``
+        -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-`$action   = New-ScheduledTaskAction -Execute `$clutchExe -Argument `$arguments
-`$trigger  = New-ScheduledTaskTrigger -AtStartup
-`$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 ``
-    -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName `$taskName -Action `$action -Trigger `$trigger ``
+        -Settings `$settings -User `$user -Password `$plainPass ``
+        -Description 'Run clutch media transcoding service at system startup' ``
+        -ErrorAction Stop | Out-Null
 
-Register-ScheduledTask -TaskName `$taskName -Action `$action -Trigger `$trigger ``
-    -Settings `$settings -User `$user -Password `$plainPass ``
-    -Description 'Run clutch media transcoding service at system startup' | Out-Null
-
-Write-Host "[+] Scheduled task '`$taskName' registered successfully." -ForegroundColor Green
-Write-Host "[+]   Executable : `$clutchExe" -ForegroundColor Green
-Write-Host "[+]   Arguments  : `$arguments" -ForegroundColor Green
-Write-Host "[+]   Trigger    : At system startup (runs as `$user)" -ForegroundColor Green
-Write-Host ''
-`$startNow = Read-Host '    Start the service now? [Y/n]'
-if (`$startNow -notmatch '^[nN]') {
-    Start-ScheduledTask -TaskName `$taskName
-    Write-Host '[+] Service started. Dashboard: http://localhost:8765' -ForegroundColor Green
-} else {
-    Write-Host '[+] Service will start on next boot.' -ForegroundColor Green
+    [IO.File]::WriteAllText(`$resultFile, 'OK')
+} catch {
+    Remove-Item `$credFile -Force -ErrorAction SilentlyContinue
+    [IO.File]::WriteAllText(`$resultFile, `$_.Exception.Message)
 }
-Write-Host ''
-Read-Host 'Press Enter to close this window'
 "@
-        $tmpScript = Join-Path ([System.IO.Path]::GetTempPath()) "clutch-register-task.ps1"
+        $tmpScript = Join-Path ([IO.Path]::GetTempPath()) "clutch-register-task.ps1"
         Set-Content -Path $tmpScript -Value $elevatedScript -Encoding UTF8
+
+        Write-Warn "An administrator prompt (UAC) will appear — please accept it."
         try {
-            Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$tmpScript`"" `
+            Start-Process powershell.exe `
+                -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tmpScript`"" `
                 -Verb RunAs -Wait
         } catch {
-            Write-Warn "Elevation was cancelled or failed. You can register the task manually."
+            # UAC was cancelled
+            if (Test-Path $credFile) { Remove-Item $credFile -Force }
+            Write-Warn "Elevation was cancelled. You can register the task manually."
+            return
+        }
+
+        # Clean up cred file just in case
+        if (Test-Path $credFile) { Remove-Item $credFile -Force }
+
+        # Read result from elevated process
+        if ((Test-Path $resultFile) -and ((Get-Content $resultFile -Raw).Trim() -eq 'OK')) {
+            Remove-Item $resultFile -Force
+            Write-Info "Scheduled task '$($script:TaskName)' registered successfully."
+            Write-Info "  Executable : $clutchExe"
+            Write-Info "  Arguments  : --serve --listen-host 0.0.0.0 --listen-port 8765"
+            Write-Info "  Trigger    : At system startup (runs as $user)"
+            Write-Host ''
+            $startNow = Read-Host "    Start the service now? [Y/n]"
+            if ($startNow -notmatch '^[nN]') {
+                try {
+                    Start-ScheduledTask -TaskName $script:TaskName -ErrorAction Stop
+                    Write-Info "Service started. Dashboard: http://localhost:8765"
+                } catch {
+                    Write-Warn "Could not start task: $_"
+                    Write-Warn "It will start automatically on next boot."
+                }
+            } else {
+                Write-Info "Service will start on next boot."
+            }
+        } else {
+            $errMsg = if (Test-Path $resultFile) { (Get-Content $resultFile -Raw).Trim() } else { "No response from elevated process" }
+            if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
+            Write-Warn "Failed to register scheduled task: $errMsg"
+            Write-Warn "You can create it manually with Task Scheduler."
         }
         return
     }
