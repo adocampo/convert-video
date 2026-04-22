@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.8] - 2026-04-22
+
+### Fixed in 1.8.8
+
+- **Windows deferred upgrade now actually works**: the `.cmd` helper used `timeout /t 1` for the wait loop, which requires a console and fails silently under `CREATE_NO_WINDOW`. Replaced with `ping -n 2 127.0.0.1` which works without a console.
+- **Resolve full pipx path before spawning helper**: the deferred `.cmd` now embeds the absolute path to `pipx` instead of relying on PATH lookup in the detached process.
+- **Upgrade log file**: all pipx output is now written to `%TEMP%\clutch-upgrade.log` for debugging. The log path is shown to the user after launching the upgrade.
+
 ## [1.8.7] - 2026-04-22
 
 ### Fixed in 1.8.7
