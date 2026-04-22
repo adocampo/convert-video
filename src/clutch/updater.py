@@ -268,7 +268,7 @@ def _windows_deferred_install(
     *,
     on_progress: "Callable[[str], None] | None" = None,
     restart_command: "list[str] | None" = None,
-) -> None:
+) -> str:
     """Spawn a detached helper script that upgrades clutch after this process exits.
 
     On Windows the running ``python.exe`` inside the pipx venv is locked by
@@ -276,10 +276,23 @@ def _windows_deferred_install(
     This function writes a small ``.cmd`` helper, launches it fully detached,
     and returns immediately.  The caller **must** exit promptly so the helper
     can proceed.
+
+    Returns the path to the log file written by the helper script.
     """
+    import shutil
     import tempfile
 
     pid = os.getpid()
+    tmp_dir = tempfile.gettempdir()
+    log_path = os.path.join(tmp_dir, "clutch-upgrade.log")
+
+    # Resolve the full path to pipx now so the .cmd doesn't depend on PATH.
+    pipx_path = shutil.which("pipx")
+    if not pipx_path:
+        if on_progress:
+            on_progress("ERROR: pipx not found in PATH, cannot upgrade.")
+        return log_path
+
     restart_cmd = ""
     if restart_command:
         # Build a quoted command line for the restart
@@ -293,25 +306,34 @@ def _windows_deferred_install(
 
     legacy_uninstall = ""
     if _pipx_package_installed(LEGACY_APP_NAME):
-        legacy_uninstall = f'pipx uninstall {LEGACY_APP_NAME} 2>NUL\n'
+        legacy_uninstall = f'"{pipx_path}" uninstall {LEGACY_APP_NAME} 2>NUL\n'
 
+    # Use `ping` for the delay instead of `timeout`, because `timeout`
+    # requires a console and fails silently under CREATE_NO_WINDOW.
     script = (
         "@echo off\n"
         "REM --- clutch deferred upgrade helper ---\n"
+        f'echo [%date% %time%] Upgrade helper started, waiting for PID {pid} >> "{log_path}"\n'
         ":WAIT\n"
         f'tasklist /fi "PID eq {pid}" 2>NUL | find /i "{pid}" >NUL\n'
         "if %ERRORLEVEL% equ 0 (\n"
-        "    timeout /t 1 /nobreak >NUL\n"
+        "    ping -n 2 127.0.0.1 >NUL\n"
         "    goto WAIT\n"
         ")\n"
-        "REM Parent process exited, safe to upgrade\n"
+        f'echo [%date% %time%] Parent exited, starting upgrade >> "{log_path}"\n'
         f"{legacy_uninstall}"
-        f'pipx install "{source}" --force\n'
+        f'"{pipx_path}" install "{source}" --force >> "{log_path}" 2>&1\n'
+        "if %ERRORLEVEL% neq 0 (\n"
+        f'    echo [%date% %time%] ERROR: pipx install failed with exit code %ERRORLEVEL% >> "{log_path}"\n'
+        "    goto CLEANUP\n"
+        ")\n"
+        f'echo [%date% %time%] Upgrade completed successfully >> "{log_path}"\n'
         f"{restart_cmd}"
+        ":CLEANUP\n"
         'del "%~f0"\n'
     )
 
-    script_path = os.path.join(tempfile.gettempdir(), f"clutch-upgrade-{pid}.cmd")
+    script_path = os.path.join(tmp_dir, f"clutch-upgrade-{pid}.cmd")
     with open(script_path, "w") as fh:
         fh.write(script)
 
@@ -326,9 +348,11 @@ def _windows_deferred_install(
         ["cmd", "/c", script_path],
         creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    return log_path
 
 
 def install_latest_version(
@@ -398,10 +422,11 @@ def upgrade():
     # helper script that waits for this process to die then runs pipx.
     if sys.platform == "win32":
         source = _build_install_source(remote_ver)
-        _windows_deferred_install(source, on_progress=lambda line: print(f"  {line}"))
+        log_path = _windows_deferred_install(source, on_progress=lambda line: print(f"  {line}"))
         info(
             f"Upgrade to {remote_ver} will complete in the background.\n"
-            "  The current process must exit first so the installer can replace the environment."
+            "  The current process must exit first so the installer can replace the environment.\n"
+            f"  Log file: {log_path}"
         )
         sys.exit(0)
 
