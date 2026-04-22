@@ -372,7 +372,7 @@ if ($pipxList -match [regex]::Escape($AppName)) {
 $ErrorActionPreference = $prev
 
 Write-Info "Installing $AppName via pipx..."
-& pipx install $sourceDir
+& pipx install $sourceDir --force
 
 Write-Host ''
 Install-RuntimeDeps
