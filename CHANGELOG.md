@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.9] - 2026-04-22
+
+### Changed in 1.8.9
+
+- Test release for validating the Windows deferred upgrade mechanism.
+
 ## [1.8.8] - 2026-04-22
 
 ### Fixed in 1.8.8
