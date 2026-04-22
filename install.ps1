@@ -253,10 +253,13 @@ $script:TaskName = 'clutch'
 
 function Get-ClutchExePath {
     <# Resolve the full path to clutch.exe installed by pipx. #>
+    # Refresh PATH so recently installed binaries are visible
+    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [System.Environment]::GetEnvironmentVariable('Path', 'User')
     $cmd = Get-Command $AppName -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    # Fallback: common pipx binary location
-    $fallback = Join-Path $env:USERPROFILE '.local\bin\clutch.exe'
+    # Fallback: standard pipx binary location
+    $fallback = Join-Path $env:USERPROFILE ".local\bin\$AppName.exe"
     if (Test-Path $fallback) { return $fallback }
     return $null
 }
