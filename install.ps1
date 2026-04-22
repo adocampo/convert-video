@@ -18,7 +18,7 @@ $RepoUrl        = 'https://github.com/adocampo/clutch.git'
 $AppName        = 'clutch'
 $LegacyAppName  = 'convert-video'
 
-# ── Helpers ──────────────────────────────────
+# -- Helpers -----------------------------------
 function Write-Info  { param([string]$Msg) Write-Host "[+] $Msg" -ForegroundColor Green }
 function Write-Warn  { param([string]$Msg) Write-Host "[!] $Msg" -ForegroundColor Yellow }
 function Write-Fail  { param([string]$Msg) Write-Host "[x] $Msg" -ForegroundColor Red; exit 1 }
@@ -31,7 +31,7 @@ function Test-RealPython {
     foreach ($candidate in @('python', 'python3', 'py')) {
         $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
         if (-not $cmd) { continue }
-        # Skip MS Store stubs: they live in WindowsApps and are tiny (0-byte or ≤10 KB).
+        # Skip MS Store stubs: they live in WindowsApps and are tiny (0-byte or <=10 KB).
         $exe = $cmd.Source
         if ($exe -and $exe -like '*WindowsApps*') {
             $size = (Get-Item $exe -ErrorAction SilentlyContinue).Length
@@ -46,7 +46,7 @@ function Test-RealPython {
     return $null
 }
 
-# ── Detect package manager ───────────────────
+# -- Detect package manager --------------------
 function Get-PackageManager {
     if (Test-Command 'winget')  { return 'winget' }
     if (Test-Command 'choco')   { return 'choco'  }
@@ -76,7 +76,7 @@ function Install-Pkg {
     }
 }
 
-# ── Ensure Python 3.9+ ──────────────────────
+# -- Ensure Python 3.9+ -----------------------
 $script:PythonExe = 'python'
 
 function Ensure-Python {
@@ -107,7 +107,7 @@ function Ensure-Python {
     Write-Info "Python installed ($found)"
 }
 
-# ── Ensure pipx ──────────────────────────────
+# -- Ensure pipx ------------------------------
 function Ensure-Pipx {
     if (Test-Command 'pipx') {
         Write-Info "pipx found at $(Get-Command pipx | Select-Object -ExpandProperty Source)"
@@ -127,7 +127,7 @@ function Ensure-Pipx {
     Write-Info "pipx installed"
 }
 
-# ── Ensure git ───────────────────────────────
+# -- Ensure git -------------------------------
 function Ensure-Git {
     if (Test-Command 'git') {
         Write-Info "git found"
@@ -141,7 +141,7 @@ function Ensure-Git {
     }
 }
 
-# ── Resolve source directory ─────────────────
+# -- Resolve source directory ------------------
 function Resolve-Source {
     $scriptDir = $PSScriptRoot
     if ($scriptDir -and (Test-Path (Join-Path $scriptDir 'pyproject.toml'))) {
@@ -156,7 +156,7 @@ function Resolve-Source {
     return $tmpDir
 }
 
-# ── Check runtime dependencies ───────────────
+# -- Check runtime dependencies ----------------
 
 function Find-BinaryPath {
     <# Search common install directories for a binary that is not in PATH. #>
@@ -248,7 +248,7 @@ function Install-RuntimeDeps {
     }
 }
 
-# ── Scheduled Task (Windows Service) ─────────
+# -- Scheduled Task (Windows Service) ----------
 $script:TaskName = 'clutch'
 
 function Get-ClutchExePath {
@@ -269,7 +269,7 @@ function Install-ScheduledTask {
        The task runs as the current user and does not require an interactive logon.
        Registering an AtStartup task requires administrator privileges. #>
 
-    # Check for admin rights — required for AtStartup triggers
+    # Check for admin rights -- required for AtStartup triggers
     $isAdmin = ([Security.Principal.WindowsPrincipal] `
         [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -309,7 +309,7 @@ function Install-ScheduledTask {
         $plainPass = $null
 
         # Elevated script: reads cred file, registers task, writes result, cleans up
-        # Avoid here-strings — PS5.1 with LF line endings cannot parse them
+        # Avoid here-strings -- PS5.1 with LF line endings cannot parse them
         $nl = [Environment]::NewLine
         $elevatedLines = @(
             '$ErrorActionPreference = "Stop"'
@@ -343,7 +343,7 @@ function Install-ScheduledTask {
         $tmpScript = Join-Path ([IO.Path]::GetTempPath()) "clutch-register-task.ps1"
         Set-Content -Path $tmpScript -Value $elevatedScript -Encoding UTF8
 
-        Write-Warn "An administrator prompt (UAC) will appear — please accept it."
+        Write-Warn "An administrator prompt (UAC) will appear -- please accept it."
         try {
             Start-Process powershell.exe `
                 -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tmpScript`"" `
@@ -391,7 +391,7 @@ function Install-ScheduledTask {
         return
     }
 
-    # Already running as admin — register directly
+    # Already running as admin -- register directly
     $clutchExe = Get-ClutchExePath
     if (-not $clutchExe) {
         Write-Warn "Could not locate $AppName executable. Skipping scheduled task creation."
@@ -461,7 +461,7 @@ function Install-ScheduledTask {
     }
 }
 
-# ── Main ─────────────────────────────────────
+# -- Main --------------------------------------
 Write-Host ''
 Write-Host '==========================================' -ForegroundColor Cyan
 Write-Host '  clutch installer (Windows)' -ForegroundColor Cyan
