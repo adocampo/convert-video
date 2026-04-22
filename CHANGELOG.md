@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.7] - 2026-04-22
+
+### Fixed in 1.8.7
+
+- **Windows service upgrade no longer opens a visible terminal**: the deferred upgrade helper now runs with `CREATE_NO_WINDOW` so no `cmd.exe` window pops up during the upgrade process.
+- **Windows service upgrade no longer hangs**: `os.execvp` on Windows spawns a child process and waits (keeping the original PID alive), which caused the deferred helper to wait forever. The service now calls `sys.exit(0)` so the PID actually dies and the helper can proceed.
+- **Correct service restart command**: the deferred helper now receives the real service arguments (e.g. `clutch --serve --listen-host 0.0.0.0 --listen-port 8765`) instead of the invalid `clutch --service`.
+
 ## [1.8.6] - 2026-04-21
 
 ### Fixed in 1.8.6
