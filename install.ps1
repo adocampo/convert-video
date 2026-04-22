@@ -309,37 +309,43 @@ function Install-ScheduledTask {
         $plainPass = $null
 
         # Elevated script: reads cred file, registers task, writes result, cleans up
-        $elevatedScript = @"
-`$ErrorActionPreference = 'Stop'
+        # Use single-quoted here-string to avoid PS5.1 escaping issues
+        $elevatedScript = @'
+$ErrorActionPreference = "Stop"
 try {
-    `$credFile   = '$credFile'
-    `$resultFile = '$resultFile'
-    `$taskName   = '$($script:TaskName)'
-    `$clutchExe  = '$clutchExe'
-    `$arguments  = '--serve --listen-host 0.0.0.0 --listen-port 8765'
-    `$user       = '$env:USERDOMAIN\$env:USERNAME'
-    `$plainPass  = [IO.File]::ReadAllText(`$credFile)
-    Remove-Item `$credFile -Force -ErrorAction SilentlyContinue
+    $credFile   = "%%CREDFILE%%"
+    $resultFile = "%%RESULTFILE%%"
+    $taskName   = "%%TASKNAME%%"
+    $clutchExe  = "%%CLUTCHEXE%%"
+    $arguments  = "--serve --listen-host 0.0.0.0 --listen-port 8765"
+    $user       = "%%USER%%"
+    $plainPass  = [IO.File]::ReadAllText($credFile)
+    Remove-Item $credFile -Force -ErrorAction SilentlyContinue
 
-    `$existing = Get-ScheduledTask -TaskName `$taskName -ErrorAction SilentlyContinue
-    if (`$existing) { Unregister-ScheduledTask -TaskName `$taskName -Confirm:`$false }
+    $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
 
-    `$action   = New-ScheduledTaskAction -Execute `$clutchExe -Argument `$arguments
-    `$trigger  = New-ScheduledTaskTrigger -AtStartup
-    `$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 ``
+    $action   = New-ScheduledTaskAction -Execute $clutchExe -Argument $arguments
+    $trigger  = New-ScheduledTaskTrigger -AtStartup
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 `
         -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-    Register-ScheduledTask -TaskName `$taskName -Action `$action -Trigger `$trigger ``
-        -Settings `$settings -User `$user -Password `$plainPass ``
-        -Description 'Run clutch media transcoding service at system startup' ``
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+        -Settings $settings -User $user -Password $plainPass `
+        -Description "Run clutch media transcoding service at system startup" `
         -ErrorAction Stop | Out-Null
 
-    [IO.File]::WriteAllText(`$resultFile, 'OK')
+    [IO.File]::WriteAllText($resultFile, "OK")
 } catch {
-    Remove-Item `$credFile -Force -ErrorAction SilentlyContinue
-    [IO.File]::WriteAllText(`$resultFile, `$_.Exception.Message)
+    Remove-Item $credFile -Force -ErrorAction SilentlyContinue
+    [IO.File]::WriteAllText($resultFile, $_.Exception.Message)
 }
-"@
+'@
+        $elevatedScript = $elevatedScript.Replace('%%CREDFILE%%', $credFile)
+        $elevatedScript = $elevatedScript.Replace('%%RESULTFILE%%', $resultFile)
+        $elevatedScript = $elevatedScript.Replace('%%TASKNAME%%', $script:TaskName)
+        $elevatedScript = $elevatedScript.Replace('%%CLUTCHEXE%%', $clutchExe)
+        $elevatedScript = $elevatedScript.Replace('%%USER%%', "$env:USERDOMAIN\$env:USERNAME")
         $tmpScript = Join-Path ([IO.Path]::GetTempPath()) "clutch-register-task.ps1"
         Set-Content -Path $tmpScript -Value $elevatedScript -Encoding UTF8
 
