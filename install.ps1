@@ -189,7 +189,7 @@ function Add-ToUserPath {
     param([string]$Dir)
     $currentUser = [System.Environment]::GetEnvironmentVariable('Path', 'User')
     if ($currentUser -and $currentUser.ToLower().Contains($Dir.ToLower())) { return }
-    $newPath = if ($currentUser) { "$currentUser;$Dir" } else { $Dir }
+    if ($currentUser) { $newPath = "$currentUser;$Dir" } else { $newPath = $Dir }
     [System.Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
     # Also update the running session
     if (-not $env:Path.ToLower().Contains($Dir.ToLower())) {
