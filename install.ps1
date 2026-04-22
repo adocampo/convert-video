@@ -266,8 +266,77 @@ function Get-ClutchExePath {
 
 function Install-ScheduledTask {
     <# Register a scheduled task that starts clutch --serve at system startup.
-       The task runs as the current user and does not require an interactive logon. #>
+       The task runs as the current user and does not require an interactive logon.
+       Registering an AtStartup task requires administrator privileges. #>
 
+    # Check for admin rights — required for AtStartup triggers
+    $isAdmin = ([Security.Principal.WindowsPrincipal] `
+        [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    if (-not $isAdmin) {
+        Write-Warn "Registering a startup task requires administrator privileges."
+        Write-Warn "Relaunching this step in an elevated prompt..."
+        $clutchExe = Get-ClutchExePath
+        if (-not $clutchExe) {
+            Write-Warn "Could not locate $AppName executable. Skipping scheduled task creation."
+            return
+        }
+        # Build a self-contained elevated script block
+        $elevatedScript = @"
+`$ErrorActionPreference = 'Stop'
+`$taskName = '$($script:TaskName)'
+`$clutchExe = '$clutchExe'
+`$arguments = '--serve --listen-host 0.0.0.0 --listen-port 8765'
+`$user = '$env:USERDOMAIN\$env:USERNAME'
+
+Write-Host ''
+Write-Host '[!] Windows requires your password to run the task at startup without logon.' -ForegroundColor Yellow
+Write-Host '[!] The password is stored securely by the Task Scheduler; this script does not keep it.' -ForegroundColor Yellow
+`$securePass = Read-Host "    Password for `$user" -AsSecureString
+`$cred = New-Object System.Management.Automation.PSCredential(`$user, `$securePass)
+`$plainPass = `$cred.GetNetworkCredential().Password
+
+# Remove existing task if present
+`$existing = Get-ScheduledTask -TaskName `$taskName -ErrorAction SilentlyContinue
+if (`$existing) { Unregister-ScheduledTask -TaskName `$taskName -Confirm:`$false }
+
+`$action   = New-ScheduledTaskAction -Execute `$clutchExe -Argument `$arguments
+`$trigger  = New-ScheduledTaskTrigger -AtStartup
+`$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 ``
+    -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+
+Register-ScheduledTask -TaskName `$taskName -Action `$action -Trigger `$trigger ``
+    -Settings `$settings -User `$user -Password `$plainPass ``
+    -Description 'Run clutch media transcoding service at system startup' | Out-Null
+
+Write-Host "[+] Scheduled task '`$taskName' registered successfully." -ForegroundColor Green
+Write-Host "[+]   Executable : `$clutchExe" -ForegroundColor Green
+Write-Host "[+]   Arguments  : `$arguments" -ForegroundColor Green
+Write-Host "[+]   Trigger    : At system startup (runs as `$user)" -ForegroundColor Green
+Write-Host ''
+`$startNow = Read-Host '    Start the service now? [Y/n]'
+if (`$startNow -notmatch '^[nN]') {
+    Start-ScheduledTask -TaskName `$taskName
+    Write-Host '[+] Service started. Dashboard: http://localhost:8765' -ForegroundColor Green
+} else {
+    Write-Host '[+] Service will start on next boot.' -ForegroundColor Green
+}
+Write-Host ''
+Read-Host 'Press Enter to close this window'
+"@
+        $tmpScript = Join-Path ([System.IO.Path]::GetTempPath()) "clutch-register-task.ps1"
+        Set-Content -Path $tmpScript -Value $elevatedScript -Encoding UTF8
+        try {
+            Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$tmpScript`"" `
+                -Verb RunAs -Wait
+        } catch {
+            Write-Warn "Elevation was cancelled or failed. You can register the task manually."
+        }
+        return
+    }
+
+    # Already running as admin — register directly
     $clutchExe = Get-ClutchExePath
     if (-not $clutchExe) {
         Write-Warn "Could not locate $AppName executable. Skipping scheduled task creation."
@@ -316,8 +385,8 @@ function Install-ScheduledTask {
             -Settings $settings `
             -User $user `
             -Password $plainPass `
-            -RunLevel Highest `
             -Description "Run clutch media transcoding service at system startup" `
+            -ErrorAction Stop `
             | Out-Null
         Write-Info "Scheduled task '$($script:TaskName)' registered successfully."
         Write-Info "  Executable : $clutchExe"
@@ -328,7 +397,7 @@ function Install-ScheduledTask {
         if ($startNow -match '^[nN]') {
             Write-Info "Service will start on next boot."
         } else {
-            Start-ScheduledTask -TaskName $script:TaskName
+            Start-ScheduledTask -TaskName $script:TaskName -ErrorAction Stop
             Write-Info "Service started. Dashboard: http://localhost:8765"
         }
     } catch {
@@ -358,6 +427,17 @@ Write-Host ''
 $sourceDir = Resolve-Source
 Write-Host ''
 
+# Stop the running scheduled task if it exists (the service locks python.exe)
+$script:TaskWasRunning = $false
+$existingTask = Get-ScheduledTask -TaskName $AppName -ErrorAction SilentlyContinue
+if ($existingTask -and $existingTask.State -eq 'Running') {
+    Write-Warn "Stopping running '$AppName' scheduled task so the venv can be replaced..."
+    Stop-ScheduledTask -TaskName $AppName
+    # Give the process a moment to release file locks
+    Start-Sleep -Seconds 2
+    $script:TaskWasRunning = $true
+}
+
 # Remove legacy or existing installation
 $prev = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
 $pipxList = & pipx list 2>&1 | Out-String
@@ -385,6 +465,13 @@ if ($sourceDir -ne $PSScriptRoot -and $sourceDir -like "*clutch-install-*") {
 Write-Host ''
 Write-Info "Installation complete!"
 Write-Host ''
+
+# Restart the scheduled task if it was running before the install
+if ($script:TaskWasRunning) {
+    Write-Info "Restarting '$AppName' scheduled task..."
+    Start-ScheduledTask -TaskName $AppName
+    Write-Info "Service restarted. Dashboard: http://localhost:8765"
+}
 
 # Offer to register as a Windows scheduled task (service mode)
 $registerService = Read-Host "[?] Register clutch as a Windows service (scheduled task at startup)? [Y/n]"
