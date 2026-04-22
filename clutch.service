@@ -15,8 +15,12 @@ RestartSec=5
 # Environment
 Environment=HOME=%h
 
-# Hardening (only directives that work on WSL and bare-metal)
+# Hardening
 NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=true
+ReadWritePaths=%h/.local/state/clutch
 
 [Install]
 WantedBy=default.target

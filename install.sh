@@ -303,7 +303,16 @@ install_systemd_unit() {
     fi
 
     mkdir -p "$unit_dir"
-    cp "$unit_src" "$unit_dst"
+
+    # WSL does not support mount namespaces, so strip hardening directives
+    # that cause exit code 226/NAMESPACE.  On native Linux they stay.
+    if grep -qi 'microsoft\|WSL' /proc/version 2>/dev/null; then
+        warn "WSL detected: stripping mount-namespace hardening from unit file"
+        sed -E '/^(ProtectSystem|ProtectHome|PrivateTmp|ReadWritePaths)=/d' \
+            "$unit_src" > "$unit_dst"
+    else
+        cp "$unit_src" "$unit_dst"
+    fi
     info "Installed systemd unit to ${unit_dst}"
     if [[ -f "$legacy_unit_dst" ]]; then
         rm -f "$legacy_unit_dst"
