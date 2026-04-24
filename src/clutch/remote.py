@@ -30,6 +30,77 @@ class _ProgressFileWrapper:
         return self._total
 
 
+class _StreamingMultipartBody:
+    """Streams a multipart/form-data body from disk without loading the file into memory.
+
+    Reads from three sequential segments: preamble bytes, the file on disk, and footer bytes.
+    Reports file upload progress via an optional callback.
+    """
+
+    _CHUNK_SIZE = 65536
+
+    def __init__(
+        self,
+        preamble: bytes,
+        file_path: str,
+        file_size: int,
+        footer: bytes,
+        callback: Optional[Callable[[int, int], None]] = None,
+    ):
+        self._segments: list = [
+            ("bytes", preamble),
+            ("file", file_path),
+            ("bytes", footer),
+        ]
+        self._total_size = len(preamble) + file_size + len(footer)
+        self._file_size = file_size
+        self._callback = callback
+        # State
+        self._seg_idx = 0
+        self._seg_offset = 0
+        self._fobj: Optional[Any] = None
+        self._file_bytes_read = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if size == -1 or size is None:
+            size = self._total_size
+        result = bytearray()
+        while len(result) < size and self._seg_idx < len(self._segments):
+            seg_type, seg_data = self._segments[self._seg_idx]
+            remaining = size - len(result)
+            if seg_type == "bytes":
+                chunk = seg_data[self._seg_offset:self._seg_offset + remaining]
+                self._seg_offset += len(chunk)
+                result.extend(chunk)
+                if self._seg_offset >= len(seg_data):
+                    self._seg_idx += 1
+                    self._seg_offset = 0
+            else:
+                # File segment — stream from disk
+                if self._fobj is None:
+                    self._fobj = open(seg_data, "rb")
+                chunk = self._fobj.read(min(remaining, self._CHUNK_SIZE))
+                if not chunk:
+                    self._fobj.close()
+                    self._fobj = None
+                    self._seg_idx += 1
+                    self._seg_offset = 0
+                else:
+                    self._file_bytes_read += len(chunk)
+                    result.extend(chunk)
+                    if self._callback:
+                        self._callback(self._file_bytes_read, self._file_size)
+        return bytes(result)
+
+    def __len__(self) -> int:
+        return self._total_size
+
+    def close(self):
+        if self._fobj is not None:
+            self._fobj.close()
+            self._fobj = None
+
+
 class RemoteClient:
     """HTTP client for interacting with a remote Clutch server."""
 
@@ -93,6 +164,7 @@ class RemoteClient:
     ) -> Dict[str, Any]:
         """Upload a local file and submit a conversion job in one request.
 
+        Streams the file from disk to avoid loading the entire file into memory.
         Returns the job record dict from the server.
         """
         if not os.path.isfile(local_path):
@@ -105,10 +177,9 @@ class RemoteClient:
         boundary = uuid.uuid4().hex
         boundary_bytes = f"--{boundary}".encode("utf-8")
 
-        # Build multipart body parts
+        # Build multipart preamble (form fields + file part header)
         parts: list[bytes] = []
 
-        # Add form fields
         for key, value in settings.items():
             if value is None:
                 continue
@@ -116,7 +187,6 @@ class RemoteClient:
             parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
             parts.append(f"{value}\r\n".encode("utf-8"))
 
-        # File part header
         file_header = (
             boundary_bytes + b"\r\n"
             + f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode("utf-8")
@@ -124,63 +194,27 @@ class RemoteClient:
         )
         file_footer = b"\r\n" + boundary_bytes + b"--\r\n"
 
-        # Calculate total body size for Content-Length
-        preamble = b"".join(parts)
-        total_body_size = len(preamble) + len(file_header) + file_size + len(file_footer)
+        preamble = b"".join(parts) + file_header
+        total_body_size = len(preamble) + file_size + len(file_footer)
 
-        # Build body as a readable object
         url = f"{self.server_url}/upload-and-convert"
         hdrs = self._headers({
             "Content-Type": f"multipart/form-data; boundary={boundary}",
             "Content-Length": str(total_body_size),
         })
 
-        # Assemble body: preamble + file header + file content + footer
-        # For progress tracking, we use a custom body that reads from file
-        body_parts = preamble + file_header
-
         req = request.Request(url, method="POST", headers=hdrs)
 
-        # Build full body with progress callback
-        with open(local_path, "rb") as fobj:
-            # Read file content
-            file_data = fobj.read()
-
-        full_body = body_parts + file_data + file_footer
-
-        if progress_callback:
-            # Wrap in a progress-tracking object
-            class _BodyReader:
-                def __init__(self, data: bytes, callback: Callable):
-                    self._data = data
-                    self._pos = 0
-                    self._callback = callback
-                    self._file_start = len(body_parts)
-                    self._file_end = self._file_start + file_size
-
-                def read(self, size: int = -1) -> bytes:
-                    if size == -1:
-                        chunk = self._data[self._pos:]
-                        self._pos = len(self._data)
-                    else:
-                        chunk = self._data[self._pos:self._pos + size]
-                        self._pos += len(chunk)
-                    # Report file upload progress
-                    file_progress = max(0, min(self._pos - self._file_start, file_size))
-                    self._callback(file_progress, file_size)
-                    return chunk
-
-                def __len__(self):
-                    return len(self._data)
-
-            req.data = _BodyReader(full_body, progress_callback)
-        else:
-            req.data = full_body
+        body = _StreamingMultipartBody(
+            preamble, local_path, file_size, file_footer,
+            callback=progress_callback,
+        )
+        req.data = body
 
         try:
             with request.urlopen(req, timeout=600) as resp:
-                body = resp.read().decode("utf-8")
-                return json.loads(body) if body.strip() else {}
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else {}
         except error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
             try:
@@ -190,6 +224,8 @@ class RemoteClient:
             raise RuntimeError(payload.get("error") or str(exc)) from exc
         except error.URLError as exc:
             raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
+        finally:
+            body.close()
 
     def poll_jobs(
         self,
