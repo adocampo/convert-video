@@ -1202,12 +1202,40 @@ class ConversionService:
         except Exception:
             pass
 
+        # Read persistent network-drive mappings from the registry.
+        # In non-interactive sessions (e.g. scheduled tasks) GetLogicalDrives
+        # and 'net use' see nothing; HKCU\Network always has them.
+        registry_drives: Dict[str, str] = {}  # letter -> UNC
+        try:
+            import winreg
+            net_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Network")
+            idx = 0
+            while True:
+                try:
+                    subkey_name = winreg.EnumKey(net_key, idx)
+                    idx += 1
+                except OSError:
+                    break
+                try:
+                    sk = winreg.OpenKey(net_key, subkey_name)
+                    remote_path, _ = winreg.QueryValueEx(sk, "RemotePath")
+                    winreg.CloseKey(sk)
+                    if remote_path:
+                        registry_drives[subkey_name.upper()] = remote_path
+                except OSError:
+                    pass
+            winreg.CloseKey(net_key)
+        except Exception:
+            pass
+
         mapped_uncs = set(drive_to_unc.values())
         drives: List[Dict[str, str]] = []
+        live_letters: set = set()
         bitmask = ctypes.windll.kernel32.GetLogicalDrives()
         for i, letter in enumerate(string.ascii_uppercase):
             if not (bitmask & (1 << i)):
                 continue
+            live_letters.add(letter)
             drive = f"{letter}:\\"
             dtype = GetDriveTypeW(drive)
             # Skip removable / CD-ROM drives that have no media inserted
@@ -1217,9 +1245,23 @@ class ConversionService:
                 except OSError:
                     continue
             key = f"{letter}:"
-            unc = drive_to_unc.get(key)
+            unc = drive_to_unc.get(key) or registry_drives.get(letter)
             name = f"{drive} ({unc})" if unc else drive
             drives.append({"name": name, "path": drive})
+
+        # Include persistent network drives from the registry that are
+        # not visible to GetLogicalDrives (common in non-interactive sessions).
+        for letter, unc in registry_drives.items():
+            if letter in live_letters:
+                continue
+            drive = f"{letter}:\\"
+            # Try accessing via the UNC path to verify it's reachable
+            try:
+                os.listdir(unc)
+            except OSError:
+                continue
+            name = f"{drive} ({unc})"
+            drives.append({"name": name, "path": unc})
 
         # Add UNC shares not already mapped to a drive letter
         for unc in unmapped_uncs:

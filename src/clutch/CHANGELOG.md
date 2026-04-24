@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.16] - 2026-04-24
+
+### Fixed in 1.8.16
+
+- **Folder browser missing network drives in scheduled tasks**: the "Choose source/destination folder" dialog now also reads persistent network drive mappings from the Windows registry (`HKCU\Network`), matching the fix already applied to the dashboard disk stats.
+
 ## [1.8.15] - 2026-04-24
 
 ### Fixed in 1.8.15
