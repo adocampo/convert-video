@@ -319,12 +319,39 @@ def _collect_system_stats() -> Dict[str, object]:
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
+            # Read persistent network drive mappings from the registry.
+            # These survive reboots but are NOT auto-mounted in non-interactive
+            # sessions (e.g. scheduled tasks running AtStartup).
+            registry_drives: dict = {}  # letter -> UNC
+            try:
+                import winreg
+                net_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Network")
+                idx = 0
+                while True:
+                    try:
+                        subkey_name = winreg.EnumKey(net_key, idx)
+                        idx += 1
+                    except OSError:
+                        break
+                    try:
+                        sub = winreg.OpenKey(net_key, subkey_name)
+                        remote_path, _ = winreg.QueryValueEx(sub, "RemotePath")
+                        winreg.CloseKey(sub)
+                        registry_drives[subkey_name.upper()] = remote_path
+                    except OSError:
+                        pass
+                winreg.CloseKey(net_key)
+            except OSError:
+                pass
+
             mapped_uncs = set(drive_to_unc.values())
 
             bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            live_letters = set()
             for i, letter in enumerate(string.ascii_uppercase):
                 if not (bitmask & (1 << i)):
                     continue
+                live_letters.add(letter)
                 drive = f"{letter}:\\"
                 dtype = GetDriveTypeW(drive)
                 key = f"{letter}:"
@@ -375,6 +402,32 @@ def _collect_system_stats() -> Dict[str, object]:
                     disks.append({
                         "mount": unc,
                         "device": unc,
+                        "total": None,
+                        "used": None,
+                        "free": None,
+                    })
+
+            # Include persistent network drives from the registry that are
+            # not currently mounted (common in scheduled-task sessions).
+            all_known_uncs = mapped_uncs | set(unmapped_uncs)
+            for letter, unc in registry_drives.items():
+                if letter in live_letters:
+                    continue  # already listed above
+                mount_label = f"{letter}:\\"
+                device_label = unc
+                try:
+                    usage = shutil.disk_usage(unc)
+                    disks.append({
+                        "mount": mount_label,
+                        "device": device_label,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                    })
+                except OSError:
+                    disks.append({
+                        "mount": mount_label,
+                        "device": device_label,
                         "total": None,
                         "used": None,
                         "free": None,
