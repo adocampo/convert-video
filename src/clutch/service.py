@@ -144,6 +144,8 @@ class ConversionService:
             self.log_retention_days = 30
             self.default_date_format = ""
             self.listen_port = 8765
+            self.upload_dir = ""
+            self.max_upload_size_bytes = 0
             schedule_cfg = ScheduleConfig.from_dict(initial_schedule_config)
             self.scheduler.update_config(schedule_cfg)
             # Auto-detect binaries on first run
@@ -160,6 +162,8 @@ class ConversionService:
                 self.default_date_format,
                 self.listen_port,
                 self.binary_paths,
+                self.upload_dir,
+                self.max_upload_size_bytes,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -178,6 +182,8 @@ class ConversionService:
             self.log_retention_days = int(persisted_config.get("log_retention_days") or 30)
             self.default_date_format = str(persisted_config.get("default_date_format") or "")
             self.listen_port = int(persisted_config.get("listen_port") or 8765)
+            self.upload_dir = str(persisted_config.get("upload_dir") or "")
+            self.max_upload_size_bytes = int(persisted_config.get("max_upload_size_bytes") or 0)
             schedule_raw = persisted_config.get("schedule_config") or {}
             self.scheduler.update_config(ScheduleConfig.from_dict(schedule_raw))
             # Merge: auto-detect first, then overlay user-configured paths
@@ -209,6 +215,7 @@ class ConversionService:
 
     def start(self):
         self._service_started = True
+        self._clean_upload_tmp_files()
         self._prime_recoverable_jobs()
         self._sync_worker_pool()
         self._start_update_monitor()
@@ -260,6 +267,16 @@ class ConversionService:
                 break
             for worker in workers:
                 worker.thread.join()
+
+    def _clean_upload_tmp_files(self):
+        if not self.upload_dir or not os.path.isdir(self.upload_dir):
+            return
+        for name in os.listdir(self.upload_dir):
+            if name.endswith(".tmp"):
+                try:
+                    os.remove(os.path.join(self.upload_dir, name))
+                except OSError:
+                    pass
 
     def _prime_recoverable_jobs(self):
         records = self.store.list_recoverable_jobs()
@@ -942,6 +959,20 @@ class ConversionService:
                     self.binary_paths[name] = val
                 set_binary_paths(self.binary_paths)
 
+        # Update upload settings if present in payload
+        if "upload_dir" in payload:
+            ud = str(payload.get("upload_dir") or "").strip()
+            if ud and not os.path.isabs(ud):
+                raise ValueError("upload_dir must be an absolute path.")
+            if ud:
+                os.makedirs(ud, exist_ok=True)
+            self.upload_dir = ud
+        if "max_upload_size_bytes" in payload:
+            try:
+                self.max_upload_size_bytes = max(0, int(payload.get("max_upload_size_bytes") or 0))
+            except (TypeError, ValueError):
+                pass
+
         self.store.save_service_config(
             self.allowed_roots,
             self.default_job_settings,
@@ -953,6 +984,8 @@ class ConversionService:
             self.default_date_format,
             self.listen_port,
             self.binary_paths,
+            self.upload_dir,
+            self.max_upload_size_bytes,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -977,7 +1010,10 @@ class ConversionService:
         require_directory: bool = False,
     ):
         normalized = normalize_path(path)
-        if self.allowed_roots and not path_within_roots(normalized, self.allowed_roots):
+        effective_roots = list(self.allowed_roots)
+        if self.upload_dir:
+            effective_roots.append(os.path.abspath(self.upload_dir))
+        if effective_roots and not path_within_roots(normalized, effective_roots):
             raise ValueError(f"Path is outside allowed roots: {normalized}")
         if not allow_missing and not os.path.exists(normalized):
             raise ValueError(f"Path does not exist on this machine: {normalized}")
@@ -1552,6 +1588,8 @@ class ConversionService:
             "listen_port": self.listen_port,
             "binary_paths": dict(self.binary_paths),
             "missing_binaries": get_missing_binaries(),
+            "upload_dir": self.upload_dir,
+            "max_upload_size_bytes": self.max_upload_size_bytes,
         }
 
     def _request_running_job_pause(self, job_id: str) -> Optional[Dict[str, object]]:

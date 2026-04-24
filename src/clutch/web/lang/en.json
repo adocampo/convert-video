@@ -855,5 +855,27 @@
   "jobs.hint_file": "Selected source file. Only this item will be queued.",
 
   "system.users.new_user": "New User",
-  "system.users.edit_user": "Edit User"
+  "system.users.edit_user": "Edit User",
+
+  "upload.title": "Upload & Convert",
+  "upload.description": "Upload video files from your device to the server for conversion.",
+  "upload.source_label": "Source",
+  "upload.choose_files": "Choose files",
+  "upload.choose_directory": "Choose directory",
+  "upload.filter_label": "Filter pattern",
+  "upload.filter_placeholder": "e.g. *.mkv",
+  "upload.filter_help": "Glob pattern to filter files. Leave empty for all video files.",
+  "upload.options_legend": "Options",
+  "upload.submit": "Upload & queue",
+  "upload.uploading": "Uploading…",
+  "upload.complete": "{ok} uploaded, {fail} failed",
+
+  "settings.general.upload_legend": "File Upload",
+  "settings.general.upload_dir_label": "Upload directory",
+  "settings.general.upload_dir_placeholder": "/data/clutch/inbox",
+  "settings.general.upload_dir_title": "Absolute path where uploaded files are stored.",
+  "settings.general.upload_dir_help": "Absolute path on the server where uploaded files are stored. Leave empty to disable uploads.",
+  "settings.general.max_upload_label": "Max upload size (MB)",
+  "settings.general.max_upload_title": "Maximum file size for uploads in MB. 0 = unlimited.",
+  "settings.general.max_upload_help": "Maximum upload file size in megabytes. Set to 0 for no limit."
 }

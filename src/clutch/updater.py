@@ -101,9 +101,27 @@ def load_update_state() -> dict[str, object]:
 
 
 def _parse_version_tuple(version: str) -> tuple:
-    """Convert a version string like '1.2.0' into a comparable tuple of ints."""
+    """Convert a version string into a comparable tuple.
+
+    Supports PEP 440 pre-release markers: ``2.0.0a1``, ``2.0.0b2``,
+    ``2.0.0rc1``.  The returned tuple compares correctly:
+    ``1.8.16 < 2.0.0a1 < 2.0.0b1 < 2.0.0rc1 < 2.0.0``.
+    """
+    _PRE_ORDER = {"a": -3, "b": -2, "rc": -1}
     try:
-        return tuple(int(part) for part in version.split("."))
+        parts = version.split(".")
+        nums: list[int] = []
+        pre_kind = 0  # 0 = final release (sorts highest)
+        pre_num = 0
+        for part in parts:
+            m = re.match(r"^(\d+)(a|b|rc)(\d+)$", part)
+            if m:
+                nums.append(int(m.group(1)))
+                pre_kind = _PRE_ORDER[m.group(2)]
+                pre_num = int(m.group(3))
+            else:
+                nums.append(int(part))
+        return (*nums, pre_kind, pre_num)
     except (ValueError, AttributeError):
         return (0,)
 

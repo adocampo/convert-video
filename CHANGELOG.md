@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0a1] - 2026-04-24
+
+### Added in 2.0.0a1
+
+- **Client-server file upload**: Clutch can now act as a remote client, uploading local video files to a Clutch server for conversion via `--remote-server <HOST:PORT>`.
+- **CLI remote mode**: new `--remote-server`, `--token`, and `--upload-workers` flags for sending files to a remote Clutch instance with parallel uploads and live progress polling.
+- **Web file upload**: the dashboard now supports uploading files directly from the browser (Upload File / Upload Directory buttons) with per-file progress bars and glob pattern filtering.
+- **Server upload infrastructure**: new `POST /upload` and `POST /upload-and-convert` endpoints for receiving file uploads via multipart/form-data with streaming writes.
+- **Upload settings**: configurable `upload_dir` (inbox directory) and `max_upload_size` (per-file limit) in server settings.
+- **Remote client module**: new `clutch.remote.RemoteClient` class for programmatic interaction with a Clutch server.
+
 ## [1.8.16] - 2026-04-24
 
 ### Fixed in 1.8.16

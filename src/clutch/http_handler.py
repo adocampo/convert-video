@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import signal as _signal
+import tempfile
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Dict, List, Optional
@@ -82,6 +84,8 @@ def _read_changelog() -> str:
 
 class ConversionHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
+    # Maximum bytes to buffer in memory when scanning for multipart boundaries.
+    MULTIPART_CHUNK_SIZE = 65536
 
     def __init__(self, server_address, request_handler_class, service: ConversionService):
         super().__init__(server_address, request_handler_class)
@@ -168,6 +172,183 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             return {}
         parsed = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
         return {key: values[-1] if len(values) == 1 else values for key, values in parsed.items()}
+
+    def _is_multipart_request(self) -> bool:
+        ct = self.headers.get("Content-Type") or ""
+        return ct.startswith("multipart/form-data")
+
+    def _parse_multipart(self, *, max_file_bytes: int = 0, upload_dir: str = "") -> dict:
+        """Parse a multipart/form-data request, streaming the file part to disk.
+
+        Returns ``{"fields": {name: value, ...}, "file_path": str, "file_name": str, "file_size": int}``
+        where *file_path* is the absolute path of the saved file on disk.
+        Raises ``ValueError`` on protocol errors or size violations.
+        """
+        ct = self.headers.get("Content-Type") or ""
+        if "boundary=" not in ct:
+            raise ValueError("Missing multipart boundary.")
+        boundary = ct.split("boundary=", 1)[1].strip()
+        if boundary.startswith('"') and boundary.endswith('"'):
+            boundary = boundary[1:-1]
+        boundary_bytes = ("--" + boundary).encode("utf-8")
+        end_boundary = boundary_bytes + b"--"
+        content_length = int(self.headers.get("Content-Length") or "0")
+
+        # Read entire body (simple upload mode — no chunked resume).
+        # We stream through it scanning for boundaries to avoid holding
+        # the whole payload in a single Python bytes object when writing the file.
+        remaining = content_length
+        CHUNK = self.server.MULTIPART_CHUNK_SIZE
+
+        def _read(n: int) -> bytes:
+            nonlocal remaining
+            to_read = min(n, remaining)
+            if to_read <= 0:
+                return b""
+            data = self.rfile.read(to_read)
+            remaining -= len(data)
+            return data
+
+        # Helper: read until we see a full line (CRLF terminated)
+        buf = b""
+
+        def _readline() -> bytes:
+            nonlocal buf
+            while b"\r\n" not in buf:
+                chunk = _read(CHUNK)
+                if not chunk:
+                    line = buf
+                    buf = b""
+                    return line
+                buf += chunk
+            idx = buf.index(b"\r\n")
+            line = buf[:idx + 2]
+            buf = buf[idx + 2:]
+            return line
+
+        # Skip preamble until first boundary
+        while True:
+            line = _readline()
+            if not line:
+                raise ValueError("Unexpected end of multipart stream.")
+            if line.rstrip(b"\r\n") == boundary_bytes:
+                break
+
+        fields: Dict[str, str] = {}
+        file_path = ""
+        file_name = ""
+        file_size = 0
+
+        while True:
+            # Parse headers for this part
+            part_headers: Dict[str, str] = {}
+            while True:
+                hline = _readline()
+                if hline in (b"\r\n", b"", b"\n"):
+                    break
+                if b":" in hline:
+                    hname, hval = hline.decode("utf-8", errors="replace").split(":", 1)
+                    part_headers[hname.strip().lower()] = hval.strip()
+
+            disposition = part_headers.get("content-disposition", "")
+            # Extract name
+            name = ""
+            if 'name="' in disposition:
+                name = disposition.split('name="', 1)[1].split('"', 1)[0]
+
+            # Detect file part
+            is_file = 'filename="' in disposition
+            if is_file:
+                file_name = disposition.split('filename="', 1)[1].split('"', 1)[0]
+                # Sanitize: strip directory components
+                file_name = os.path.basename(file_name)
+                if not file_name:
+                    raise ValueError("Uploaded file has no filename.")
+
+                dest_name = f"{uuid.uuid4().hex[:12]}_{file_name}"
+                tmp_path = os.path.join(upload_dir, dest_name + ".tmp")
+                final_path = os.path.join(upload_dir, dest_name)
+                written = 0
+
+                try:
+                    with open(tmp_path, "wb") as fout:
+                        # Stream body bytes, scanning for next boundary
+                        while True:
+                            # Ensure buf has enough data to detect boundary
+                            while len(buf) < len(boundary_bytes) + 4 + CHUNK:
+                                chunk = _read(CHUNK)
+                                if not chunk:
+                                    break
+                                buf += chunk
+
+                            # Check for boundary in buffer
+                            bpos = buf.find(b"\r\n" + boundary_bytes)
+                            if bpos != -1:
+                                # Write everything before the boundary
+                                fout.write(buf[:bpos])
+                                written += bpos
+                                buf = buf[bpos + 2 + len(boundary_bytes):]
+                                break
+                            else:
+                                # Safe to write everything except the tail that might contain a partial boundary
+                                safe = len(buf) - (len(boundary_bytes) + 4)
+                                if safe > 0:
+                                    if max_file_bytes and written + safe > max_file_bytes:
+                                        raise ValueError(
+                                            f"File exceeds maximum upload size ({max_file_bytes} bytes)."
+                                        )
+                                    fout.write(buf[:safe])
+                                    written += safe
+                                    buf = buf[safe:]
+                                elif not buf:
+                                    break
+
+                    if max_file_bytes and written > max_file_bytes:
+                        raise ValueError(
+                            f"File exceeds maximum upload size ({max_file_bytes} bytes)."
+                        )
+                    os.rename(tmp_path, final_path)
+                    file_path = final_path
+                    file_size = written
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
+            else:
+                # Regular form field — collect value from body until boundary
+                value_parts = []
+                while True:
+                    while len(buf) < len(boundary_bytes) + 4 + CHUNK:
+                        chunk = _read(CHUNK)
+                        if not chunk:
+                            break
+                        buf += chunk
+                    bpos = buf.find(b"\r\n" + boundary_bytes)
+                    if bpos != -1:
+                        value_parts.append(buf[:bpos])
+                        buf = buf[bpos + 2 + len(boundary_bytes):]
+                        break
+                    else:
+                        safe = len(buf) - (len(boundary_bytes) + 4)
+                        if safe > 0:
+                            value_parts.append(buf[:safe])
+                            buf = buf[safe:]
+                        elif not buf:
+                            break
+                fields[name] = b"".join(value_parts).decode("utf-8", errors="replace")
+
+            # After the boundary, check for end marker or continue
+            peek_line = _readline()
+            stripped = peek_line.rstrip(b"\r\n")
+            if stripped == b"--" or stripped == end_boundary:
+                break
+            # Otherwise it's CRLF and next part headers follow
+
+        # Drain any remaining body bytes
+        while remaining > 0:
+            _read(CHUNK)
+
+        return {"fields": fields, "file_path": file_path, "file_name": file_name, "file_size": file_size}
 
     def _get_request_parts(self) -> tuple[str, Dict[str, object]]:
         parsed = urlparse(self.path)
@@ -1103,6 +1284,82 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(201, watcher)
             else:
                 self._redirect_with_message(notice=f"Watcher added: {watcher['directory']}")
+            return
+
+        # ── File upload endpoint ────────────────────────────────────────
+        if path == "/upload":
+            user = self._require_role("operator")
+            if not user:
+                return
+            svc = self.server.service
+            if not svc.upload_dir:
+                self._send_json(409, {"error": "Upload directory is not configured on this server."})
+                return
+            if not self._is_multipart_request():
+                self._send_json(400, {"error": "Expected multipart/form-data request."})
+                return
+            try:
+                result = self._parse_multipart(
+                    max_file_bytes=svc.max_upload_size_bytes,
+                    upload_dir=svc.upload_dir,
+                )
+            except ValueError as exc:
+                self._send_json(413 if "exceeds" in str(exc).lower() else 400, {"error": str(exc)})
+                return
+            except OSError as exc:
+                self._send_json(500, {"error": f"Failed to save uploaded file: {exc}"})
+                return
+            self._send_json(201, {
+                "path": result["file_path"],
+                "filename": result["file_name"],
+                "size": result["file_size"],
+            })
+            return
+
+        # ── Upload and convert in one step ──────────────────────────────
+        if path == "/upload-and-convert":
+            user = self._require_role("operator")
+            if not user:
+                return
+            svc = self.server.service
+            if not svc.upload_dir:
+                self._send_json(409, {"error": "Upload directory is not configured on this server."})
+                return
+            if not self._is_multipart_request():
+                self._send_json(400, {"error": "Expected multipart/form-data request."})
+                return
+            try:
+                result = self._parse_multipart(
+                    max_file_bytes=svc.max_upload_size_bytes,
+                    upload_dir=svc.upload_dir,
+                )
+            except ValueError as exc:
+                self._send_json(413 if "exceeds" in str(exc).lower() else 400, {"error": str(exc)})
+                return
+            except OSError as exc:
+                self._send_json(500, {"error": f"Failed to save uploaded file: {exc}"})
+                return
+
+            fields = result["fields"]
+            payload = {
+                "input_file": result["file_path"],
+                "output_dir": fields.get("output_dir", "").strip() or svc.upload_dir,
+                "codec": fields.get("codec", "").strip() or "nvenc_h265",
+                "encode_speed": fields.get("encode_speed", "").strip() or "normal",
+                "audio_passthrough": fields.get("audio_passthrough", "").lower() in ("true", "1", "on"),
+                "delete_source": fields.get("delete_source", "").lower() in ("true", "1", "on"),
+                "verbose": fields.get("verbose", "").lower() in ("true", "1", "on"),
+                "force": fields.get("force", "").lower() in ("true", "1", "on"),
+            }
+            try:
+                record = svc.submit_jobs_from_payload(payload, source="upload")
+            except ValueError as exc:
+                # Clean up the uploaded file if job submission fails
+                if result["file_path"] and os.path.exists(result["file_path"]):
+                    os.unlink(result["file_path"])
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(201, record)
             return
 
         if path != "/jobs":

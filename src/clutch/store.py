@@ -295,6 +295,14 @@ class JobStore:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN binary_paths_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "upload_dir" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN upload_dir TEXT NOT NULL DEFAULT ''"
+                )
+            if "max_upload_size_bytes" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN max_upload_size_bytes INTEGER NOT NULL DEFAULT 0"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS watchers (
@@ -581,7 +589,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -616,6 +624,8 @@ class JobStore:
             "default_date_format": str(row["default_date_format"] or ""),
             "listen_port": int(row["listen_port"] or 8765),
             "binary_paths": binary_paths,
+            "upload_dir": str(row["upload_dir"] or ""),
+            "max_upload_size_bytes": int(row["max_upload_size_bytes"] or 0),
         }
 
     def save_service_config(
@@ -630,12 +640,14 @@ class JobStore:
         default_date_format: str = "",
         listen_port: int = 8765,
         binary_paths: Optional[Dict[str, str]] = None,
+        upload_dir: str = "",
+        max_upload_size_bytes: int = 0,
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
@@ -646,7 +658,9 @@ class JobStore:
                     log_retention_days = excluded.log_retention_days,
                     default_date_format = excluded.default_date_format,
                     listen_port = excluded.listen_port,
-                    binary_paths_json = excluded.binary_paths_json
+                    binary_paths_json = excluded.binary_paths_json,
+                    upload_dir = excluded.upload_dir,
+                    max_upload_size_bytes = excluded.max_upload_size_bytes
                 """,
                 (
                     json.dumps(list(allowed_roots)),
@@ -659,6 +673,8 @@ class JobStore:
                     str(default_date_format),
                     int(listen_port),
                     json.dumps(binary_paths or {}),
+                    str(upload_dir),
+                    int(max_upload_size_bytes),
                 ),
             )
 

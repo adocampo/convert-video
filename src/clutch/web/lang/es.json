@@ -856,5 +856,27 @@
   "jobs.hint_file": "Archivo de origen seleccionado. Solo este elemento se añadirá a la cola.",
 
   "system.users.new_user": "Nuevo usuario",
-  "system.users.edit_user": "Editar usuario"
+  "system.users.edit_user": "Editar usuario",
+
+  "upload.title": "Subir y convertir",
+  "upload.description": "Sube archivos de vídeo desde tu dispositivo al servidor para convertirlos.",
+  "upload.source_label": "Origen",
+  "upload.choose_files": "Elegir archivos",
+  "upload.choose_directory": "Elegir directorio",
+  "upload.filter_label": "Patrón de filtro",
+  "upload.filter_placeholder": "ej. *.mkv",
+  "upload.filter_help": "Patrón glob para filtrar archivos. Déjalo vacío para todos los vídeos.",
+  "upload.options_legend": "Opciones",
+  "upload.submit": "Subir y encolar",
+  "upload.uploading": "Subiendo…",
+  "upload.complete": "{ok} subidos, {fail} fallidos",
+
+  "settings.general.upload_legend": "Subida de archivos",
+  "settings.general.upload_dir_label": "Directorio de subida",
+  "settings.general.upload_dir_placeholder": "/data/clutch/inbox",
+  "settings.general.upload_dir_title": "Ruta absoluta donde se almacenan los archivos subidos.",
+  "settings.general.upload_dir_help": "Ruta absoluta en el servidor donde se almacenan los archivos subidos. Déjalo vacío para desactivar la subida.",
+  "settings.general.max_upload_label": "Tamaño máximo de subida (MB)",
+  "settings.general.max_upload_title": "Tamaño máximo de archivo para subidas en MB. 0 = sin límite.",
+  "settings.general.max_upload_help": "Tamaño máximo de subida en megabytes. Pon 0 para sin límite."
 }

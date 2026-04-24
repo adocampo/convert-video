@@ -741,6 +741,15 @@ def main():
     beh_group.add_argument("--server-url", default="",
                            help="Submit matching jobs to a remote clutch service instead of converting locally.")
 
+    # ── Remote upload client ─────────────────
+    remote_group = parser.add_argument_group("remote upload")
+    remote_group.add_argument("--remote-server", default="",
+                              help="Upload files and submit jobs to a remote Clutch server (e.g. 192.168.1.10:8765).")
+    remote_group.add_argument("--token", default="",
+                              help="API token for the remote server. Also reads CLUTCH_TOKEN env var.")
+    remote_group.add_argument("--upload-workers", type=int, default=2,
+                              help="Number of parallel file uploads (default: 2).")
+
     service_group = parser.add_argument_group("service")
     service_group.add_argument("--serve", action="store_true",
                                help="Run the HTTP conversion service on this machine.")
@@ -938,13 +947,18 @@ def main():
     if args.mkvmerge:
         _cli_bins["mkvmerge"] = args.mkvmerge
 
-    # Runtime dependency checks (only needed for actual conversion)
-    if not args.server_url:
+    # Mutual exclusion: --remote-server vs --server-url
+    if args.remote_server and args.server_url:
+        error("--remote-server and --server-url are mutually exclusive.")
+        sys.exit(1)
+
+    # Runtime dependency checks (only needed for actual local conversion)
+    if not args.server_url and not args.remote_server:
         check_dependencies(_cli_bins or None)
     elif _cli_bins:
         set_binary_paths(_cli_bins)
 
-    if not args.server_url:
+    if not args.server_url and not args.remote_server:
         print(f"Using {args.workers} worker(s) for local transcoding.")
         if args.gpu_devices:
             print(f"Using NVENC GPU device(s): {', '.join(str(device) for device in args.gpu_devices)}")
@@ -1034,6 +1048,142 @@ def main():
                 error(str(exc))
                 sys.exit(1)
             success(f"Remote job submitted: {record['id']} -> {record['input_file']}")
+        sys.exit(0)
+
+    # ── Remote upload mode (--remote-server) ─────────────────────────
+    if args.remote_server:
+        from clutch.remote import RemoteClient
+
+        token = args.token or os.environ.get("CLUTCH_TOKEN", "")
+        client = RemoteClient(args.remote_server, token=token or None)
+
+        # Verify connectivity
+        try:
+            client.health()
+        except RuntimeError as exc:
+            error(f"Cannot reach remote server: {exc}")
+            sys.exit(1)
+
+        # Verify upload is configured
+        try:
+            config = client.get_config()
+        except RuntimeError as exc:
+            error(f"Cannot read server config: {exc}")
+            sys.exit(1)
+        if not config.get("upload_dir"):
+            error("Remote server does not have an upload directory configured.")
+            sys.exit(1)
+
+        max_size = config.get("max_upload_size_bytes", 0)
+        job_settings = {
+            "codec": args.codec,
+            "encode_speed": speed,
+            "audio_passthrough": str(args.audio_passthrough).lower(),
+            "delete_source": str(args.delete_source).lower(),
+            "verbose": str(args.verbose).lower(),
+            "force": str(args.force).lower(),
+        }
+        if args.output:
+            job_settings["output_dir"] = args.output
+
+        upload_workers = max(1, args.upload_workers)
+        submitted_ids: list[str] = []
+        failed_uploads: list[tuple[str, str]] = []
+        stop_flag = threading.Event()
+
+        def _upload_one(filepath: str) -> tuple[str, dict | None, str]:
+            """Upload a single file. Returns (filepath, record_or_None, error_msg)."""
+            if stop_flag.is_set():
+                return filepath, None, "Cancelled"
+            basename = os.path.basename(filepath)
+            fsize = os.path.getsize(filepath)
+            if max_size and fsize > max_size:
+                return filepath, None, f"File too large ({fsize} bytes, limit {max_size})"
+            bar = tqdm(
+                total=fsize,
+                unit="B",
+                unit_scale=True,
+                desc=basename[:40],
+                leave=True,
+                position=None,
+            )
+            def _progress(sent: int, total: int):
+                bar.n = sent
+                bar.refresh()
+            try:
+                record = client.upload_and_convert(filepath, job_settings, progress_callback=_progress)
+                bar.close()
+                return filepath, record, ""
+            except RuntimeError as exc:
+                bar.close()
+                return filepath, None, str(exc)
+
+        print(f"Uploading {len(input_files)} file(s) to {args.remote_server} ({upload_workers} parallel)...")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=upload_workers) as pool:
+            futures = {pool.submit(_upload_one, f): f for f in input_files}
+            try:
+                for future in concurrent.futures.as_completed(futures):
+                    filepath, record, err = future.result()
+                    if record:
+                        jid = record.get("id", "?")
+                        submitted_ids.append(jid)
+                        success(f"Uploaded & queued: {os.path.basename(filepath)} -> job {jid}")
+                    else:
+                        failed_uploads.append((filepath, err))
+                        error(f"Failed: {os.path.basename(filepath)}: {err}")
+            except KeyboardInterrupt:
+                stop_flag.set()
+                print("\nUpload interrupted. Waiting for in-progress uploads...")
+                pool.shutdown(wait=True, cancel_futures=True)
+
+        if failed_uploads:
+            print(f"\n{len(failed_uploads)} upload(s) failed:")
+            for fp, err in failed_uploads:
+                print(f"  {os.path.basename(fp)}: {err}")
+
+        if not submitted_ids:
+            error("No jobs were submitted.")
+            sys.exit(1)
+
+        # Poll for job progress
+        print(f"\nWaiting for {len(submitted_ids)} job(s) to complete (Ctrl+C to stop polling)...")
+        poll_stop = threading.Event()
+
+        def _on_update(records: list[dict]):
+            parts = []
+            for r in records:
+                status = r.get("status", "?")
+                progress = r.get("progress_percent")
+                name = os.path.basename(r.get("input_file", r.get("id", "?")))
+                if progress is not None and status == "running":
+                    parts.append(f"{name}: {status} ({progress:.0f}%)")
+                else:
+                    parts.append(f"{name}: {status}")
+            sys.stdout.write("\r" + " | ".join(parts) + "    ")
+            sys.stdout.flush()
+
+        try:
+            final = client.poll_jobs(
+                submitted_ids,
+                interval=2.0,
+                on_update=_on_update,
+                stop_check=lambda: poll_stop.is_set(),
+            )
+        except KeyboardInterrupt:
+            poll_stop.set()
+            final = []
+            print("\nPolling stopped. Jobs continue on the server.")
+
+        # Summary
+        if final:
+            print("\n\nResults:")
+            for r in final:
+                name = os.path.basename(r.get("input_file", r.get("id", "?")))
+                status = r.get("status", "?")
+                msg = r.get("message", "")
+                print(f"  {name}: {status}" + (f" - {msg}" if msg else ""))
+
         sys.exit(0)
 
     # Validate output directory

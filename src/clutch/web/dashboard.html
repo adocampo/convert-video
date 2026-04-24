@@ -449,6 +449,82 @@
                     </div>
                     <div class="status-line" id="form-status"></div>
                 </form>
+
+                <!-- ── Upload & Convert section ── -->
+                <details id="upload-section" class="upload-section" hidden>
+                    <summary class="upload-section-title" data-i18n="upload.title">Upload &amp; Convert</summary>
+                    <p class="small" data-i18n="upload.description">Upload video files from your device to the server for conversion.</p>
+
+                    <div class="field-row">
+                        <label class="field-row-label" data-i18n="upload.source_label">Source</label>
+                        <div class="field-row-control">
+                            <div class="actions">
+                                <button class="secondary" type="button" id="upload-file-btn"
+                                    data-i18n="upload.choose_files">Choose files</button>
+                                <button class="secondary" type="button" id="upload-dir-btn"
+                                    data-i18n="upload.choose_directory">Choose directory</button>
+                            </div>
+                            <input type="file" id="upload-file-input" accept="video/*" multiple hidden>
+                            <input type="file" id="upload-dir-input" webkitdirectory hidden>
+                        </div>
+                    </div>
+
+                    <div class="field-row" id="upload-pattern-row" hidden>
+                        <label class="field-row-label" data-i18n="upload.filter_label">Filter pattern</label>
+                        <div class="field-row-control">
+                            <input id="upload-filter-pattern" type="text" placeholder="e.g. *.mkv"
+                                data-i18n-placeholder="upload.filter_placeholder">
+                            <p class="field-row-help" data-i18n="upload.filter_help">Glob pattern to filter files. Leave empty for all video files.</p>
+                        </div>
+                    </div>
+
+                    <fieldset class="options-section">
+                        <legend data-i18n="upload.options_legend">Options</legend>
+                        <div class="field-row">
+                            <label class="field-row-label" data-i18n="jobs.codec_label">Codec</label>
+                            <div class="field-row-control">
+                                <select id="upload-codec">
+                                    <option value="nvenc_h265">nvenc_h265</option>
+                                    <option value="nvenc_h264">nvenc_h264</option>
+                                    <option value="av1">av1</option>
+                                    <option value="x265">x265</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" data-i18n="jobs.speed_label">Speed</label>
+                            <div class="field-row-control">
+                                <select id="upload-speed">
+                                    <option value="normal" data-i18n="speed.normal">normal</option>
+                                    <option value="slow" data-i18n="speed.slow">slow</option>
+                                    <option value="fast" data-i18n="speed.fast">fast</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" data-i18n="jobs.audio_passthrough_label">Audio passthrough</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"><input type="checkbox" id="upload-audio-passthrough">
+                                    <span data-i18n="jobs.audio_passthrough_check">Keep original audio tracks</span></label>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="field-row-label" data-i18n="jobs.delete_source_label">Delete source</label>
+                            <div class="field-row-control">
+                                <label class="check check-inline"><input type="checkbox" id="upload-delete-source">
+                                    <span data-i18n="jobs.delete_source_check">Delete source file on success</span></label>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <div id="upload-file-list" class="upload-file-list" hidden></div>
+
+                    <div class="actions actions-centered">
+                        <button class="primary" type="button" id="upload-submit-btn" disabled
+                            data-i18n="upload.submit">Upload &amp; queue</button>
+                    </div>
+                    <div class="status-line" id="upload-status"></div>
+                </details>
             </div>
         </section>
 
@@ -835,6 +911,28 @@
                                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                                 <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                             </select>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset class="options-section">
+                    <legend data-i18n="settings.general.upload_legend">File Upload</legend>
+                    <div class="field-row">
+                        <label class="field-row-label" data-i18n="settings.general.upload_dir_label">Upload directory</label>
+                        <div class="field-row-control">
+                            <input id="general-upload-dir" type="text" placeholder="/data/clutch/inbox"
+                                data-i18n-placeholder="settings.general.upload_dir_placeholder"
+                                data-i18n-title="settings.general.upload_dir_title"
+                                title="Absolute path where uploaded files are stored.">
+                            <p class="field-row-help" data-i18n="settings.general.upload_dir_help">Absolute path on the server where uploaded files are stored. Leave empty to disable uploads.</p>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <label class="field-row-label" data-i18n="settings.general.max_upload_label">Max upload size (MB)</label>
+                        <div class="field-row-control">
+                            <input id="general-max-upload-size" type="number" min="0" step="1" value="0"
+                                data-i18n-title="settings.general.max_upload_title"
+                                title="Maximum file size for uploads in MB. 0 = unlimited.">
+                            <p class="field-row-help" data-i18n="settings.general.max_upload_help">Maximum upload file size in megabytes. Set to 0 for no limit.</p>
                         </div>
                     </div>
                 </fieldset>

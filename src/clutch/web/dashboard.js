@@ -2112,6 +2112,15 @@
         if (dateFormatEl && summary.default_date_format) dateFormatEl.value = summary.default_date_format;
         state.dateFormat = summary.default_date_format || 'YYYY-MM-DD';
 
+        // Upload settings
+        var uploadDirEl = document.getElementById('general-upload-dir');
+        if (uploadDirEl) uploadDirEl.value = summary.upload_dir || '';
+        var maxUploadEl = document.getElementById('general-max-upload-size');
+        if (maxUploadEl) maxUploadEl.value = summary.max_upload_size_bytes ? Math.round(summary.max_upload_size_bytes / (1024 * 1024)) : 0;
+        // Show/hide upload section based on whether upload is configured
+        var uploadSection = document.getElementById('upload-section');
+        if (uploadSection) uploadSection.hidden = !summary.upload_dir;
+
         populateBiddingZones(summary.bidding_zones || []);
         applyScheduleToForm(summary.schedule_config, summary.schedule_status);
         syncAllCustomSelects();
@@ -4938,10 +4947,14 @@
             var authEl = document.getElementById('general-auth-enabled');
             var dateEl = document.getElementById('general-date-format');
             var portEl = document.getElementById('general-listen-port');
+            var uploadDirEl = document.getElementById('general-upload-dir');
+            var maxUploadEl = document.getElementById('general-max-upload-size');
             var payload = {
                 auth_enabled: authEl ? authEl.checked : undefined,
                 default_date_format: dateEl ? dateEl.value : undefined,
                 listen_port: portEl ? Number(portEl.value) : undefined,
+                upload_dir: uploadDirEl ? uploadDirEl.value.trim() : undefined,
+                max_upload_size_bytes: maxUploadEl ? Number(maxUploadEl.value || 0) * 1024 * 1024 : undefined,
             };
             var oldPort = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80);
             var newPort = portEl ? Number(portEl.value) : oldPort;
@@ -5295,4 +5308,182 @@
             showToast(err.message, 'error');
         }
     };
+
+    // ── Upload & Convert ────────────────────────────────────────────
+    (function initUpload() {
+        var fileInput = document.getElementById('upload-file-input');
+        var dirInput = document.getElementById('upload-dir-input');
+        var fileBtn = document.getElementById('upload-file-btn');
+        var dirBtn = document.getElementById('upload-dir-btn');
+        var submitBtn = document.getElementById('upload-submit-btn');
+        var fileList = document.getElementById('upload-file-list');
+        var patternRow = document.getElementById('upload-pattern-row');
+        var patternInput = document.getElementById('upload-filter-pattern');
+        var statusEl = document.getElementById('upload-status');
+
+        if (!fileInput || !dirInput || !submitBtn) return;
+
+        var pendingFiles = [];
+        var isDirectory = false;
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        function globToRegex(pattern) {
+            if (!pattern) return null;
+            var re = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '.*')
+                .replace(/\?/g, '.');
+            return new RegExp('^' + re + '$', 'i');
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            fileList.hidden = pendingFiles.length === 0;
+            pendingFiles.forEach(function (f, idx) {
+                var item = document.createElement('div');
+                item.className = 'upload-file-item';
+                item.id = 'upload-item-' + idx;
+                item.innerHTML = '<span class="name" title="' + f.name + '">' + f.name + '</span>'
+                    + '<span class="size">' + formatSize(f.size) + '</span>'
+                    + '<div class="upload-progress-bar"><div class="fill" style="width:0%"></div></div>'
+                    + '<span class="status"></span>';
+                fileList.appendChild(item);
+            });
+            submitBtn.disabled = pendingFiles.length === 0;
+        }
+
+        function filterByPattern(files) {
+            var pattern = patternInput ? patternInput.value.trim() : '';
+            if (!pattern) return files;
+            var re = globToRegex(pattern);
+            if (!re) return files;
+            return files.filter(function (f) { return re.test(f.name); });
+        }
+
+        fileBtn.addEventListener('click', function () { fileInput.click(); });
+        dirBtn.addEventListener('click', function () { dirInput.click(); });
+
+        fileInput.addEventListener('change', function () {
+            isDirectory = false;
+            if (patternRow) patternRow.hidden = true;
+            pendingFiles = Array.from(fileInput.files || []);
+            renderFileList();
+        });
+
+        dirInput.addEventListener('change', function () {
+            isDirectory = true;
+            if (patternRow) patternRow.hidden = false;
+            var all = Array.from(dirInput.files || []);
+            pendingFiles = filterByPattern(all);
+            renderFileList();
+        });
+
+        if (patternInput) {
+            patternInput.addEventListener('input', function () {
+                if (!isDirectory) return;
+                var all = Array.from(dirInput.files || []);
+                pendingFiles = filterByPattern(all);
+                renderFileList();
+            });
+        }
+
+        function uploadFile(file, idx, settings) {
+            return new Promise(function (resolve) {
+                var formData = new FormData();
+                formData.append('file', file);
+                Object.keys(settings).forEach(function (k) { formData.append(k, settings[k]); });
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '/upload-and-convert', true);
+                if (state.auth && state.auth.token) {
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + state.auth.token);
+                }
+
+                var progressBar = document.querySelector('#upload-item-' + idx + ' .upload-progress-bar .fill');
+                var statusSpan = document.querySelector('#upload-item-' + idx + ' .status');
+
+                xhr.upload.addEventListener('progress', function (e) {
+                    if (e.lengthComputable && progressBar) {
+                        progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+                    }
+                });
+
+                xhr.addEventListener('load', function () {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        if (progressBar) progressBar.style.width = '100%';
+                        if (statusSpan) { statusSpan.textContent = '✓'; statusSpan.className = 'status ok'; }
+                        try { resolve({ ok: true, data: JSON.parse(xhr.responseText) }); }
+                        catch (_) { resolve({ ok: true, data: {} }); }
+                    } else {
+                        if (statusSpan) { statusSpan.className = 'status fail'; }
+                        try {
+                            var err = JSON.parse(xhr.responseText);
+                            if (statusSpan) statusSpan.textContent = err.error || 'Error';
+                            resolve({ ok: false, error: err.error || 'Upload failed' });
+                        } catch (_) {
+                            if (statusSpan) statusSpan.textContent = 'Error';
+                            resolve({ ok: false, error: 'Upload failed' });
+                        }
+                    }
+                });
+
+                xhr.addEventListener('error', function () {
+                    if (statusSpan) { statusSpan.textContent = 'Network error'; statusSpan.className = 'status fail'; }
+                    resolve({ ok: false, error: 'Network error' });
+                });
+
+                xhr.send(formData);
+            });
+        }
+
+        submitBtn.addEventListener('click', async function () {
+            if (pendingFiles.length === 0) return;
+            submitBtn.disabled = true;
+            if (statusEl) setStatus(statusEl, i18n.t('upload.uploading') || 'Uploading…');
+
+            var codecEl = document.getElementById('upload-codec');
+            var speedEl = document.getElementById('upload-speed');
+            var apEl = document.getElementById('upload-audio-passthrough');
+            var dsEl = document.getElementById('upload-delete-source');
+
+            var settings = {
+                codec: codecEl ? codecEl.value : 'nvenc_h265',
+                encode_speed: speedEl ? speedEl.value : 'normal',
+                audio_passthrough: apEl && apEl.checked ? 'true' : 'false',
+                delete_source: dsEl && dsEl.checked ? 'true' : 'false',
+            };
+
+            var CONCURRENT = 2;
+            var queue = pendingFiles.slice();
+            var succeeded = 0;
+            var failed = 0;
+            var idx = 0;
+
+            async function worker() {
+                while (queue.length > 0) {
+                    var file = queue.shift();
+                    var i = idx++;
+                    var result = await uploadFile(file, i, settings);
+                    if (result.ok) succeeded++; else failed++;
+                }
+            }
+
+            var workers = [];
+            for (var w = 0; w < Math.min(CONCURRENT, queue.length); w++) {
+                workers.push(worker());
+            }
+            await Promise.all(workers);
+
+            var msg = i18n.t('upload.complete', { ok: succeeded, fail: failed })
+                || succeeded + ' uploaded, ' + failed + ' failed';
+            if (statusEl) setStatus(statusEl, msg, failed > 0 ? 'error' : 'ok');
+            submitBtn.disabled = false;
+            await refreshJobs();
+        });
+    })();
 }());
