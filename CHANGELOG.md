@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.15] - 2026-04-24
+
+### Fixed in 1.8.15
+
+- **Windows network drives not visible in scheduled task sessions**: the dashboard now reads persistent network drive mappings from the Windows registry (`HKCU\Network`) so drives appear even in non-interactive sessions (e.g. AtStartup scheduled tasks) where `GetLogicalDrives` and `net use` see nothing.
+- **Windows `clutch --upgrade` now shows live progress**: replaced the silent background upgrade helper with an in-place pip install that streams output to the terminal, so you see download/build/install progress and a clear success or failure message instead of being returned to the prompt immediately.
+
 ## [1.8.14] - 2026-04-24
 
 ### Changed in 1.8.14

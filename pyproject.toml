@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clutch"
-version = "1.8.14"
+version = "1.8.15"
 description = "Clutch transcodes video files through HandBrakeCLI with smart codec detection"
 readme = "README.md"
 license = "MIT"
