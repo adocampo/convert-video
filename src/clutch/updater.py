@@ -355,6 +355,42 @@ def _windows_deferred_install(
     return log_path
 
 
+def _pip_upgrade_in_place(
+    source: str,
+    *,
+    on_progress: "Callable[[str], None] | None" = None,
+) -> subprocess.CompletedProcess:
+    """Upgrade the package in-place using pip inside the running venv.
+
+    Unlike ``pipx install --force``, this does not recreate the virtual
+    environment, so it succeeds even when the venv interpreter is locked
+    by the current process (common on Windows).
+    """
+    if _pipx_package_installed(LEGACY_APP_NAME):
+        if on_progress:
+            on_progress(f"Removing legacy package ({LEGACY_APP_NAME})\u2026")
+        subprocess.run(["pipx", "uninstall", LEGACY_APP_NAME], capture_output=True)
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "pip", "install", source],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    output_lines: list[str] = []
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        line = raw_line.strip()
+        if line:
+            output_lines.append(line)
+            if on_progress:
+                on_progress(line)
+    returncode = proc.wait()
+    return subprocess.CompletedProcess(
+        proc.args, returncode, stdout="\n".join(output_lines), stderr="",
+    )
+
+
 def install_latest_version(
     *,
     target_version: str | None = None,
@@ -418,22 +454,17 @@ def upgrade():
     print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} ...")
 
     # On Windows the running python.exe in the pipx venv is locked by the
-    # current process, so pipx cannot recreate the venv.  Use a detached
-    # helper script that waits for this process to die then runs pipx.
+    # current process, so pipx cannot recreate the venv.  Use pip directly
+    # inside the venv to upgrade the package in-place.
     if sys.platform == "win32":
         source = _build_install_source(remote_ver)
-        log_path = _windows_deferred_install(source, on_progress=lambda line: print(f"  {line}"))
-        info(
-            f"Upgrade to {remote_ver} will complete in the background.\n"
-            "  The current process must exit first so the installer can replace the environment.\n"
-            f"  Log file: {log_path}"
+        result = _pip_upgrade_in_place(source, on_progress=lambda line: print(f"  {line}"))
+    else:
+        result = install_latest_version(
+            target_version=remote_ver,
+            on_progress=lambda line: print(f"  {line}"),
         )
-        sys.exit(0)
 
-    result = install_latest_version(
-        target_version=remote_ver,
-        on_progress=lambda line: print(f"  {line}"),
-    )
     if result.returncode == 0:
         mark_update_installed(remote_ver)
         info(f"Successfully upgraded to {remote_ver}.")
