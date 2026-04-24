@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.17] - 2026-04-24
+
+### Fixed in 1.8.17
+
+- **Windows installer fails with "Permission denied" on existing venv**: the installer now kills any remaining clutch processes holding file locks on the pipx venv before attempting reinstallation. It also cleans up orphan venv directories left behind by failed uninstalls, and checks both `clutch` and `convert-video` (legacy) scheduled tasks.
+
 ## [1.8.16] - 2026-04-24
 
 ### Fixed in 1.8.16
