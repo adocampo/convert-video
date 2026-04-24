@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.14] - 2026-04-24
+
+### Changed in 1.8.14
+
+- Test release for validating the Windows CLI upgrade mechanism.
+
 ## [1.8.13] - 2026-04-24
 
 ### Fixed in 1.8.13
