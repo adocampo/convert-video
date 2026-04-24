@@ -177,6 +177,31 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         ct = self.headers.get("Content-Type") or ""
         return ct.startswith("multipart/form-data")
 
+    def _drain_request_body(self):
+        """Read and discard remaining request body to prevent client connection resets.
+
+        When a POST handler sends an error response without consuming the body,
+        the leftover bytes confuse the HTTP keep-alive loop and cause the server
+        to close the connection.  The client (still sending) then gets a
+        connection-abort error instead of reading the error response.
+
+        Call this after sending an error response on upload endpoints.
+        """
+        try:
+            self.wfile.flush()
+        except Exception:
+            pass
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+            while length > 0:
+                chunk = self.rfile.read(min(length, 65536))
+                if not chunk:
+                    break
+                length -= len(chunk)
+        except Exception:
+            pass
+        self.close_connection = True
+
     def _parse_multipart(self, *, max_file_bytes: int = 0, upload_dir: str = "") -> dict:
         """Parse a multipart/form-data request, streaming the file part to disk.
 
@@ -227,128 +252,141 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             return line
 
         # Skip preamble until first boundary
-        while True:
-            line = _readline()
-            if not line:
-                raise ValueError("Unexpected end of multipart stream.")
-            if line.rstrip(b"\r\n") == boundary_bytes:
-                break
-
-        fields: Dict[str, str] = {}
-        file_path = ""
-        file_name = ""
-        file_size = 0
-
-        while True:
-            # Parse headers for this part
-            part_headers: Dict[str, str] = {}
+        try:
             while True:
-                hline = _readline()
-                if hline in (b"\r\n", b"", b"\n"):
+                line = _readline()
+                if not line:
+                    raise ValueError("Unexpected end of multipart stream.")
+                if line.rstrip(b"\r\n") == boundary_bytes:
                     break
-                if b":" in hline:
-                    hname, hval = hline.decode("utf-8", errors="replace").split(":", 1)
-                    part_headers[hname.strip().lower()] = hval.strip()
 
-            disposition = part_headers.get("content-disposition", "")
-            # Extract name
-            name = ""
-            if 'name="' in disposition:
-                name = disposition.split('name="', 1)[1].split('"', 1)[0]
+            fields: Dict[str, str] = {}
+            file_path = ""
+            file_name = ""
+            file_size = 0
 
-            # Detect file part
-            is_file = 'filename="' in disposition
-            if is_file:
-                file_name = disposition.split('filename="', 1)[1].split('"', 1)[0]
-                # Sanitize: strip directory components
-                file_name = os.path.basename(file_name)
-                if not file_name:
-                    raise ValueError("Uploaded file has no filename.")
-
-                dest_name = f"{uuid.uuid4().hex[:12]}_{file_name}"
-                tmp_path = os.path.join(upload_dir, dest_name + ".tmp")
-                final_path = os.path.join(upload_dir, dest_name)
-                written = 0
-
-                try:
-                    with open(tmp_path, "wb") as fout:
-                        # Stream body bytes, scanning for next boundary
-                        while True:
-                            # Ensure buf has enough data to detect boundary
-                            while len(buf) < len(boundary_bytes) + 4 + CHUNK:
-                                chunk = _read(CHUNK)
-                                if not chunk:
-                                    break
-                                buf += chunk
-
-                            # Check for boundary in buffer
-                            bpos = buf.find(b"\r\n" + boundary_bytes)
-                            if bpos != -1:
-                                # Write everything before the boundary
-                                fout.write(buf[:bpos])
-                                written += bpos
-                                buf = buf[bpos + 2 + len(boundary_bytes):]
-                                break
-                            else:
-                                # Safe to write everything except the tail that might contain a partial boundary
-                                safe = len(buf) - (len(boundary_bytes) + 4)
-                                if safe > 0:
-                                    if max_file_bytes and written + safe > max_file_bytes:
-                                        raise ValueError(
-                                            f"File exceeds maximum upload size ({max_file_bytes} bytes)."
-                                        )
-                                    fout.write(buf[:safe])
-                                    written += safe
-                                    buf = buf[safe:]
-                                elif not buf:
-                                    break
-
-                    if max_file_bytes and written > max_file_bytes:
-                        raise ValueError(
-                            f"File exceeds maximum upload size ({max_file_bytes} bytes)."
-                        )
-                    os.rename(tmp_path, final_path)
-                    file_path = final_path
-                    file_size = written
-                except Exception:
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-                    raise
-            else:
-                # Regular form field — collect value from body until boundary
-                value_parts = []
+            while True:
+                # Parse headers for this part
+                part_headers: Dict[str, str] = {}
                 while True:
-                    while len(buf) < len(boundary_bytes) + 4 + CHUNK:
-                        chunk = _read(CHUNK)
-                        if not chunk:
-                            break
-                        buf += chunk
-                    bpos = buf.find(b"\r\n" + boundary_bytes)
-                    if bpos != -1:
-                        value_parts.append(buf[:bpos])
-                        buf = buf[bpos + 2 + len(boundary_bytes):]
+                    hline = _readline()
+                    if hline in (b"\r\n", b"", b"\n"):
                         break
-                    else:
-                        safe = len(buf) - (len(boundary_bytes) + 4)
-                        if safe > 0:
-                            value_parts.append(buf[:safe])
-                            buf = buf[safe:]
-                        elif not buf:
+                    if b":" in hline:
+                        hname, hval = hline.decode("utf-8", errors="replace").split(":", 1)
+                        part_headers[hname.strip().lower()] = hval.strip()
+
+                disposition = part_headers.get("content-disposition", "")
+                # Extract name
+                name = ""
+                if 'name="' in disposition:
+                    name = disposition.split('name="', 1)[1].split('"', 1)[0]
+
+                # Detect file part
+                is_file = 'filename="' in disposition
+                if is_file:
+                    file_name = disposition.split('filename="', 1)[1].split('"', 1)[0]
+                    # Sanitize: strip directory components
+                    file_name = os.path.basename(file_name)
+                    if not file_name:
+                        raise ValueError("Uploaded file has no filename.")
+
+                    dest_name = f"{uuid.uuid4().hex[:12]}_{file_name}"
+                    tmp_path = os.path.join(upload_dir, dest_name + ".tmp")
+                    final_path = os.path.join(upload_dir, dest_name)
+                    written = 0
+
+                    try:
+                        with open(tmp_path, "wb") as fout:
+                            # Stream body bytes, scanning for next boundary
+                            while True:
+                                # Ensure buf has enough data to detect boundary
+                                while len(buf) < len(boundary_bytes) + 4 + CHUNK:
+                                    chunk = _read(CHUNK)
+                                    if not chunk:
+                                        break
+                                    buf += chunk
+
+                                # Check for boundary in buffer
+                                bpos = buf.find(b"\r\n" + boundary_bytes)
+                                if bpos != -1:
+                                    # Write everything before the boundary
+                                    fout.write(buf[:bpos])
+                                    written += bpos
+                                    buf = buf[bpos + 2 + len(boundary_bytes):]
+                                    break
+                                else:
+                                    # Safe to write everything except the tail that might contain a partial boundary
+                                    safe = len(buf) - (len(boundary_bytes) + 4)
+                                    if safe > 0:
+                                        if max_file_bytes and written + safe > max_file_bytes:
+                                            raise ValueError(
+                                                f"File exceeds maximum upload size ({max_file_bytes} bytes)."
+                                            )
+                                        fout.write(buf[:safe])
+                                        written += safe
+                                        buf = buf[safe:]
+                                    elif not buf:
+                                        break
+
+                        if max_file_bytes and written > max_file_bytes:
+                            raise ValueError(
+                                f"File exceeds maximum upload size ({max_file_bytes} bytes)."
+                            )
+                        os.rename(tmp_path, final_path)
+                        file_path = final_path
+                        file_size = written
+                    except Exception:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                        raise
+                else:
+                    # Regular form field — collect value from body until boundary
+                    value_parts = []
+                    while True:
+                        while len(buf) < len(boundary_bytes) + 4 + CHUNK:
+                            chunk = _read(CHUNK)
+                            if not chunk:
+                                break
+                            buf += chunk
+                        bpos = buf.find(b"\r\n" + boundary_bytes)
+                        if bpos != -1:
+                            value_parts.append(buf[:bpos])
+                            buf = buf[bpos + 2 + len(boundary_bytes):]
                             break
-                fields[name] = b"".join(value_parts).decode("utf-8", errors="replace")
+                        else:
+                            safe = len(buf) - (len(boundary_bytes) + 4)
+                            if safe > 0:
+                                value_parts.append(buf[:safe])
+                                buf = buf[safe:]
+                            elif not buf:
+                                break
+                    fields[name] = b"".join(value_parts).decode("utf-8", errors="replace")
 
-            # After the boundary, check for end marker or continue
-            peek_line = _readline()
-            stripped = peek_line.rstrip(b"\r\n")
-            if stripped == b"--" or stripped == end_boundary:
-                break
-            # Otherwise it's CRLF and next part headers follow
+                # After the boundary, check for end marker or continue
+                peek_line = _readline()
+                stripped = peek_line.rstrip(b"\r\n")
+                if stripped == b"--" or stripped == end_boundary:
+                    break
+                # Otherwise it's CRLF and next part headers follow
 
-        # Drain any remaining body bytes
-        while remaining > 0:
-            _read(CHUNK)
+            # Drain any remaining body bytes
+            while remaining > 0:
+                _read(CHUNK)
 
-        return {"fields": fields, "file_path": file_path, "file_name": file_name, "file_size": file_size}
+            return {"fields": fields, "file_path": file_path, "file_name": file_name, "file_size": file_size}
+
+        except Exception:
+            # Drain remaining body so the error response can reach the client
+            # instead of causing a connection abort (WinError 10053 etc.)
+            while remaining > 0:
+                try:
+                    if not _read(CHUNK):
+                        break
+                except Exception:
+                    break
+            self.close_connection = True
+            raise
 
     def _get_request_parts(self) -> tuple[str, Dict[str, object]]:
         parsed = urlparse(self.path)
@@ -1323,13 +1361,16 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if path == "/upload":
             user = self._require_role("operator")
             if not user:
+                self._drain_request_body()
                 return
             svc = self.server.service
             if not svc.upload_dir:
                 self._send_json(409, {"error": "Upload directory is not configured on this server."})
+                self._drain_request_body()
                 return
             if not self._is_multipart_request():
                 self._send_json(400, {"error": "Expected multipart/form-data request."})
+                self._drain_request_body()
                 return
             try:
                 result = self._parse_multipart(
@@ -1353,13 +1394,16 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if path == "/upload-and-convert":
             user = self._require_role("operator")
             if not user:
+                self._drain_request_body()
                 return
             svc = self.server.service
             if not svc.upload_dir:
                 self._send_json(409, {"error": "Upload directory is not configured on this server."})
+                self._drain_request_body()
                 return
             if not self._is_multipart_request():
                 self._send_json(400, {"error": "Expected multipart/form-data request."})
+                self._drain_request_body()
                 return
             try:
                 result = self._parse_multipart(

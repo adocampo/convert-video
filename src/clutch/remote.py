@@ -223,6 +223,12 @@ class RemoteClient:
                 payload = {"error": raw or str(exc)}
             raise RuntimeError(payload.get("error") or str(exc)) from exc
         except error.URLError as exc:
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, ConnectionError):
+                raise RuntimeError(
+                    f"Connection lost during upload to '{self.server_url}'. "
+                    "The server may have rejected the request — check the server log for details."
+                ) from exc
             raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
         finally:
             body.close()
