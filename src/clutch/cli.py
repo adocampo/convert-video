@@ -749,6 +749,8 @@ def main():
                               help="API token for the remote server. Also reads CLUTCH_TOKEN env var.")
     remote_group.add_argument("--upload-workers", type=int, default=2,
                               help="Number of parallel file uploads (default: 2).")
+    remote_group.add_argument("--download", action="store_true",
+                              help="Download converted files back to the local machine after completion.")
 
     service_group = parser.add_argument_group("service")
     service_group.add_argument("--serve", action="store_true",
@@ -1183,6 +1185,39 @@ def main():
                 status = r.get("status", "?")
                 msg = r.get("message", "")
                 print(f"  {name}: {status}" + (f" - {msg}" if msg else ""))
+
+        # Download converted files back to local machine
+        if args.download and final:
+            succeeded = [r for r in final if r.get("status") == "succeeded" and r.get("output_file")]
+            if succeeded:
+                download_dir = args.output or os.getcwd()
+                print(f"\nDownloading {len(succeeded)} converted file(s) to {download_dir}...")
+                for r in succeeded:
+                    remote_out = r["output_file"]
+                    local_name = os.path.basename(remote_out)
+                    local_dest = os.path.join(download_dir, local_name)
+                    out_size = r.get("output_size_bytes", 0)
+                    bar = tqdm(
+                        total=out_size or None,
+                        unit="B",
+                        unit_scale=True,
+                        desc=local_name[:40],
+                        leave=True,
+                    )
+                    def _dl_progress(downloaded: int, total: int, _bar=bar):
+                        _bar.n = downloaded
+                        if total and not _bar.total:
+                            _bar.total = total
+                        _bar.refresh()
+                    try:
+                        client.download_file(remote_out, local_dest, progress_callback=_dl_progress)
+                        bar.close()
+                        success(f"Downloaded: {local_name}")
+                    except RuntimeError as exc:
+                        bar.close()
+                        error(f"Download failed for {local_name}: {exc}")
+            elif not any(r.get("status") == "succeeded" for r in final):
+                print("\nNo succeeded jobs to download.")
 
         sys.exit(0)
 

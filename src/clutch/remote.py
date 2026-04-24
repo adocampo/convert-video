@@ -219,3 +219,46 @@ class RemoteClient:
             if stop_check and stop_check():
                 return records
             time.sleep(interval)
+
+    def download_file(
+        self,
+        remote_path: str,
+        local_path: str,
+        *,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> str:
+        """Download a file from the server via GET /download.
+
+        Returns the local file path written.
+        """
+        from urllib.parse import quote
+
+        url = f"{self.server_url}/download?path={quote(remote_path, safe='')}"
+        hdrs = self._headers()
+        req = request.Request(url, headers=hdrs, method="GET")
+
+        try:
+            with request.urlopen(req, timeout=600) as resp:
+                # Read Content-Length if available
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
+                with open(local_path, "wb") as fobj:
+                    while True:
+                        chunk = resp.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        fobj.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback:
+                            progress_callback(downloaded, total)
+                return local_path
+        except error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"error": raw or str(exc)}
+            raise RuntimeError(payload.get("error") or str(exc)) from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Download failed: {exc}") from exc
