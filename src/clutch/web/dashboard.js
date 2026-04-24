@@ -2595,8 +2595,11 @@
             const clearButton = (job.status !== 'running' && job.status !== 'paused' && job.status !== 'cancelling')
                 ? '<button class="inline-button" type="button" data-clear-id="' + job.id + '" title="' + escapeHtml(i18n.t('job_action.clear_title')) + '">' + i18n.t('job_action.clear') + '</button>'
                 : '';
+            const downloadButton = (job.status === 'succeeded' && job.output_file)
+                ? '<a class="inline-button inline-button-download" href="/download?path=' + encodeURIComponent(job.output_file) + (state.auth.token ? '&token=' + encodeURIComponent(state.auth.token) : '') + '" title="' + escapeHtml(i18n.t('job_action.download_title')) + '" download>' + i18n.t('job_action.download') + '</a>'
+                : '';
 
-            var actionBtns = [moveNextButton, pauseButton, cancelButton, retryButton, clearButton].filter(Boolean).join(' ');
+            var actionBtns = [moveNextButton, pauseButton, cancelButton, retryButton, downloadButton, clearButton].filter(Boolean).join(' ');
 
             var isChecked = state.selectedJobs.has(job.id) ? ' checked' : '';
 

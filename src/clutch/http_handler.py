@@ -912,6 +912,39 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, record)
             return
 
+        if path == "/download":
+            file_path = str(query.get("path") or "").strip()
+            if not file_path:
+                self._send_json(400, {"error": "Missing path parameter."})
+                return
+            try:
+                self.server.service._validate_path(file_path, require_file=True)
+            except ValueError as exc:
+                self._send_json(403, {"error": str(exc)})
+                return
+            resolved = os.path.abspath(file_path)
+            try:
+                file_size = os.path.getsize(resolved)
+            except OSError:
+                self._send_json(404, {"error": "File not found."})
+                return
+            import mimetypes
+            content_type = mimetypes.guess_type(resolved)[0] or "application/octet-stream"
+            safe_name = os.path.basename(resolved).replace('"', '\\"')
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+            self.send_header("Content-Length", str(file_size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with open(resolved, "rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+            return
+
         if path == "/schedule/prices":
             prices = self.server.service.scheduler.get_cached_prices_list()
             self._send_json(200, {"prices": prices})

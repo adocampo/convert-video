@@ -1601,6 +1601,17 @@ button:disabled {
     color: var(--warn);
 }
 
+.inline-button-download {
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    background: var(--accent-soft, rgba(88, 166, 255, 0.12));
+    color: var(--accent);
+    text-decoration: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-block;
+}
+
 .empty {
     color: var(--muted);
     padding: 22px 4px 8px;

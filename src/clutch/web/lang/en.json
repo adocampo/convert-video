@@ -847,6 +847,8 @@
   "job_action.convert_next": "Convert next",
   "job_action.next": "Next",
   "job_action.moving": "Moving…",
+  "job_action.download": "Download",
+  "job_action.download_title": "Download converted file",
   "job_action.clear": "Clear",
   "job_action.clear_title": "Remove from queue",
 

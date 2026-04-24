@@ -848,6 +848,8 @@
   "job_action.convert_next": "Convertir siguiente",
   "job_action.next": "Siguiente",
   "job_action.moving": "Moviendo…",
+  "job_action.download": "Descargar",
+  "job_action.download_title": "Descargar archivo convertido",
   "job_action.clear": "Eliminar",
   "job_action.clear_title": "Eliminar de la cola",
 
