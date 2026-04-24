@@ -484,13 +484,39 @@ Write-Host ''
 
 # Stop the running scheduled task if it exists (the service locks python.exe)
 $script:TaskWasRunning = $false
-$existingTask = Get-ScheduledTask -TaskName $AppName -ErrorAction SilentlyContinue
-if ($existingTask -and $existingTask.State -eq 'Running') {
-    Write-Warn "Stopping running '$AppName' scheduled task so the venv can be replaced..."
-    Stop-ScheduledTask -TaskName $AppName
-    # Give the process a moment to release file locks
-    Start-Sleep -Seconds 2
-    $script:TaskWasRunning = $true
+foreach ($tn in @($AppName, $LegacyAppName)) {
+    $existingTask = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+    if ($existingTask -and $existingTask.State -eq 'Running') {
+        Write-Warn "Stopping running '$tn' scheduled task so the venv can be replaced..."
+        Stop-ScheduledTask -TaskName $tn
+        $script:TaskWasRunning = $true
+    }
+}
+
+# Kill any remaining processes running from the pipx venv
+# (Stop-ScheduledTask may not terminate child processes immediately,
+#  or the user may have started clutch manually)
+$script:VenvDir = $null
+foreach ($base in @(
+    (Join-Path $env:USERPROFILE "pipx\venvs"),
+    (Join-Path $env:USERPROFILE ".local\pipx\venvs"),
+    (Join-Path $env:LOCALAPPDATA "pipx\venvs")
+)) {
+    $candidate = Join-Path $base $AppName
+    if (Test-Path $candidate) { $script:VenvDir = $candidate; break }
+}
+if ($script:VenvDir) {
+    $locked = Get-Process | Where-Object {
+        try { $_.Path -and $_.Path.StartsWith($script:VenvDir, [StringComparison]::OrdinalIgnoreCase) }
+        catch { $false }
+    }
+    foreach ($proc in $locked) {
+        Write-Warn "Killing process $($proc.Name) (PID $($proc.Id)) that locks the venv..."
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+if ($script:TaskWasRunning -or ($script:VenvDir -and $locked)) {
+    Start-Sleep -Seconds 3
 }
 
 # Remove legacy or existing installation
@@ -505,6 +531,15 @@ if ($pipxList -match [regex]::Escape($AppName)) {
     & pipx uninstall $AppName 2>&1 | Out-Null
 }
 $ErrorActionPreference = $prev
+
+# Remove orphan venv directory if the uninstall left it behind (locked files, partial state)
+if ($script:VenvDir -and (Test-Path $script:VenvDir)) {
+    Write-Warn "Removing leftover venv directory..."
+    Remove-Item -Recurse -Force $script:VenvDir -ErrorAction SilentlyContinue
+    if (Test-Path $script:VenvDir) {
+        Write-Fail "Cannot remove $($script:VenvDir) — a process is still locking files. Close all clutch instances and try again."
+    }
+}
 
 Write-Info "Installing $AppName via pipx..."
 & pipx install $sourceDir --force
