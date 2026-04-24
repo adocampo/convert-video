@@ -1185,6 +1185,7 @@ class ConversionService:
         try:
             import subprocess as _sp
             result = _sp.run(["net", "use"], capture_output=True, text=True, timeout=5)
+            debug(f"[browse-drives] net use rc={result.returncode}, lines={len(result.stdout.splitlines())}")
             for line in result.stdout.splitlines():
                 parts = line.split()
                 local = None
@@ -1199,8 +1200,10 @@ class ConversionService:
                         drive_to_unc[local] = remote
                     else:
                         unmapped_uncs.append(remote)
-        except Exception:
-            pass
+        except Exception as exc:
+            debug(f"[browse-drives] net use failed: {exc}")
+
+        debug(f"[browse-drives] net use mapped: {drive_to_unc}, unmapped UNCs: {unmapped_uncs}")
 
         # Read persistent network-drive mappings from the registry.
         # In non-interactive sessions (e.g. scheduled tasks) GetLogicalDrives
@@ -1225,13 +1228,16 @@ class ConversionService:
                 except OSError:
                     pass
             winreg.CloseKey(net_key)
-        except Exception:
-            pass
+        except Exception as exc:
+            debug(f"[browse-drives] registry HKCU\\Network read failed: {exc}")
+
+        debug(f"[browse-drives] registry drives: {registry_drives}")
 
         mapped_uncs = set(drive_to_unc.values())
         drives: List[Dict[str, str]] = []
         live_letters: set = set()
         bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+        debug(f"[browse-drives] GetLogicalDrives bitmask=0x{bitmask:08X}")
         for i, letter in enumerate(string.ascii_uppercase):
             if not (bitmask & (1 << i)):
                 continue
@@ -1243,31 +1249,42 @@ class ConversionService:
                 try:
                     os.listdir(drive)
                 except OSError:
+                    debug(f"[browse-drives] {drive} type={dtype} skipped (no media)")
                     continue
             key = f"{letter}:"
             unc = drive_to_unc.get(key) or registry_drives.get(letter)
             name = f"{drive} ({unc})" if unc else drive
             drives.append({"name": name, "path": drive})
+            debug(f"[browse-drives] live drive {drive} type={dtype} unc={unc}")
+
+        debug(f"[browse-drives] live_letters={sorted(live_letters)}")
 
         # Include persistent network drives from the registry that are
         # not visible to GetLogicalDrives (common in non-interactive sessions).
         for letter, unc in registry_drives.items():
             if letter in live_letters:
+                debug(f"[browse-drives] registry {letter}: already live, skip")
                 continue
             drive = f"{letter}:\\"
-            # Try accessing via the UNC path to verify it's reachable
+            # Try accessing via the UNC path to verify it's reachable;
+            # show the drive even if unreachable so the user sees it.
+            reachable = False
             try:
                 os.listdir(unc)
-            except OSError:
-                continue
+                reachable = True
+            except OSError as exc:
+                debug(f"[browse-drives] registry {letter}: UNC {unc} unreachable: {exc}")
             name = f"{drive} ({unc})"
-            drives.append({"name": name, "path": unc})
+            nav_path = unc if reachable else drive
+            drives.append({"name": name, "path": nav_path})
+            debug(f"[browse-drives] registry drive {drive} unc={unc} reachable={reachable} path={nav_path}")
 
         # Add UNC shares not already mapped to a drive letter
         for unc in unmapped_uncs:
             if unc not in mapped_uncs:
                 drives.append({"name": unc, "path": unc})
 
+        debug(f"[browse-drives] final count={len(drives)}: {[d['name'] for d in drives]}")
         return drives
 
     def _is_windows_drive_root(self, path: str) -> bool:
