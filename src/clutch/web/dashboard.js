@@ -5189,6 +5189,7 @@
     // General settings
     setupIdsDirtyTracking('general-settings', [
         'general-auth-enabled', 'general-date-format', 'general-listen-port',
+        'general-upload-dir', 'general-max-upload-size',
     ], document.getElementById('general-settings-save'));
 
     // Log settings
