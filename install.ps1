@@ -537,7 +537,7 @@ if ($script:VenvDir -and (Test-Path $script:VenvDir)) {
     Write-Warn "Removing leftover venv directory..."
     Remove-Item -Recurse -Force $script:VenvDir -ErrorAction SilentlyContinue
     if (Test-Path $script:VenvDir) {
-        Write-Fail "Cannot remove $($script:VenvDir) — a process is still locking files. Close all clutch instances and try again."
+        Write-Fail "Cannot remove $($script:VenvDir) -- a process is still locking files. Close all clutch instances and try again."
     }
 }
 

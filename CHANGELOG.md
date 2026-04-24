@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.18] - 2026-04-24
+
+### Fixed in 1.8.18
+
+- **Windows installer parse error on PowerShell 5.1**: replaced Unicode em dash with ASCII double-dash in a string literal that caused PS5.1 to fail parsing the script with LF line endings.
+
 ## [1.8.17] - 2026-04-24
 
 ### Fixed in 1.8.17
