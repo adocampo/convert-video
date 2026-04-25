@@ -43,7 +43,6 @@ def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 
     handler = TimedRotatingFileHandler(
         log_path, when="midnight", backupCount=_retention_days, utc=True, encoding="utf-8",
     )
-    handler.suffix = "%Y-%m-%d"
     handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",

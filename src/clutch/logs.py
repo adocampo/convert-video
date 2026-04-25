@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+
+# Matches: 2026-04-14T12:34:56 [INFO ] clutch: message
+# Handles padded level names like [INFO ] (%-5s formatting).
+_LOG_LINE_RE = re.compile(
+    r'^(\S+)\s+\[(\w+)\s*\]\s+(\S+?):\s*(.*)'
+)
 
 
 def _list_log_files() -> List[Dict[str, object]]:
@@ -109,6 +116,15 @@ def _read_log_entries(
     if not os.path.isfile(target):
         return {"entries": [], "total": 0, "page": page, "limit": limit}
 
+    # Include file metadata so the dashboard can detect stale log files
+    try:
+        st = os.stat(target)
+        file_modified = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+        file_size = st.st_size
+    except OSError:
+        file_modified = None
+        file_size = None
+
     entries: List[Dict[str, str]] = []
     valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     exact_level = level.upper() if level else ""
@@ -121,18 +137,18 @@ def _read_log_entries(
                 if not line:
                     continue
                 # Expected format: 2026-04-14T12:34:56 [INFO ] clutch: message
-                parts = line.split(" ", 3)
-                if len(parts) < 4:
-                    entry_level = "INFO"
+                m = _LOG_LINE_RE.match(line)
+                if m:
+                    entry_ts = m.group(1)
+                    raw_level = m.group(2).upper()
+                    entry_level = raw_level if raw_level in valid_levels else "INFO"
+                    entry_source = m.group(3)
+                    entry_msg = m.group(4)
+                else:
                     entry_ts = ""
+                    entry_level = "INFO"
                     entry_source = ""
                     entry_msg = line
-                else:
-                    entry_ts = parts[0]
-                    bracket = parts[1].strip("[]").strip()
-                    entry_level = bracket if bracket in valid_levels else "INFO"
-                    entry_source = parts[2].rstrip(":")
-                    entry_msg = parts[3] if len(parts) > 3 else ""
 
                 if exact_level and entry_level != exact_level:
                     continue
@@ -153,7 +169,10 @@ def _read_log_entries(
     entries.reverse()
     start = (page - 1) * limit
     page_entries = entries[start:start + limit]
-    return {"entries": page_entries, "total": total, "page": page, "limit": limit}
+    return {
+        "entries": page_entries, "total": total, "page": page, "limit": limit,
+        "file_modified": file_modified, "file_size": file_size,
+    }
 
 
 def _collect_system_stats() -> Dict[str, object]:

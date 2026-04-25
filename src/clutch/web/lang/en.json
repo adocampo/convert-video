@@ -529,6 +529,7 @@
   "system.logs.refresh_title": "Refresh",
   "system.logs.clear_old": "Clear old logs",
   "system.logs.clear_old_title": "Delete all rotated log files",
+  "system.logs.stale_warning": "Log file last updated {{time}} ({{ago}} ago) — the service may have stopped.",
 
   "system.tasks.title": "Tasks",
   "system.tasks.status_all": "All statuses",

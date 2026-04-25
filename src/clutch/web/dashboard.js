@@ -3250,6 +3250,7 @@
     var logAutoRefresh = document.getElementById('log-auto-refresh');
     var logEntriesEl = document.getElementById('log-entries');
     var logPagination = document.getElementById('log-pagination');
+    var logStaleWarning = document.getElementById('log-stale-warning');
     var logTimer = null;
     var logCurrentPage = 1;
     var logPageSize = 200;
@@ -3281,6 +3282,7 @@
             if (!data) return;
             renderLogEntries(data.entries || []);
             renderLogPagination(data.total || 0, data.page || 1, data.limit || logPageSize);
+            renderLogStaleWarning(data.file_modified);
         });
     }
 
@@ -3308,6 +3310,38 @@
         html += '<span>' + i18n.t('pagination.page_info', { page: page, totalPages: totalPages, total: total }) + '</span>';
         html += '<button type="button"' + (page >= totalPages ? ' disabled' : '') + ' data-logpage="' + (page + 1) + '">' + i18n.t('pagination.next') + ' &raquo;</button>';
         logPagination.innerHTML = html;
+    }
+
+    function renderLogStaleWarning(fileModified) {
+        if (!logStaleWarning || !fileModified) {
+            if (logStaleWarning) logStaleWarning.hidden = true;
+            return;
+        }
+        var modDate = new Date(fileModified);
+        if (Number.isNaN(modDate.getTime())) {
+            logStaleWarning.hidden = true;
+            return;
+        }
+        var ageMs = Date.now() - modDate.getTime();
+        var STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+        if (ageMs > STALE_THRESHOLD) {
+            var agoMinutes = Math.floor(ageMs / 60000);
+            var agoText;
+            if (agoMinutes < 60) {
+                agoText = agoMinutes + 'm';
+            } else if (agoMinutes < 1440) {
+                agoText = Math.floor(agoMinutes / 60) + 'h ' + (agoMinutes % 60) + 'm';
+            } else {
+                agoText = Math.floor(agoMinutes / 1440) + 'd ' + Math.floor((agoMinutes % 1440) / 60) + 'h';
+            }
+            logStaleWarning.innerHTML = '&#x26A0; ' + i18n.t('system.logs.stale_warning', {
+                time: formatIsoTimestamp(fileModified),
+                ago: agoText,
+            });
+            logStaleWarning.hidden = false;
+        } else {
+            logStaleWarning.hidden = true;
+        }
     }
 
     logPagination.addEventListener('click', function (e) {

@@ -2286,6 +2286,16 @@ body.modal-open {
     white-space: nowrap;
 }
 
+.log-stale-warning {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: var(--radius);
+    background: var(--warn-bg, #fff3cd);
+    color: var(--warn-text, #856404);
+    border: 1px solid var(--warn-border, #ffc107);
+    font-size: 0.85rem;
+}
+
 .log-entries {
     border: 1px solid var(--border);
     border-radius: var(--radius);
