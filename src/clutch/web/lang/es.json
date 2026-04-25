@@ -530,7 +530,7 @@
   "system.logs.refresh_title": "Actualizar",
   "system.logs.clear_old": "Limpiar logs antiguos",
   "system.logs.clear_old_title": "Eliminar todos los archivos de log rotados",
-  "system.logs.stale_warning": "Último log escrito el {{time}} (hace {{ago}}) — es posible que el servicio se haya detenido.",
+  "system.logs.stale_warning": "Último log escrito el {time} (hace {ago}) — es posible que el servicio se haya detenido.",
 
   "system.tasks.title": "Tareas",
   "system.tasks.status_all": "Todos los estados",
