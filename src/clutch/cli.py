@@ -751,6 +751,8 @@ def main():
                               help="Number of parallel file uploads (default: 2).")
     remote_group.add_argument("--download", action="store_true",
                               help="Download converted files back to the local machine after completion.")
+    remote_group.add_argument("--stream", action="store_true",
+                              help="Stream-convert mode: upload, convert on server, and stream result back in one step.")
 
     service_group = parser.add_argument_group("service")
     service_group.add_argument("--serve", action="store_true",
@@ -1087,6 +1089,87 @@ def main():
         }
         if args.output:
             job_settings["output_dir"] = args.output
+
+        # ── Stream-convert mode ──────────────────────────────────────
+        if args.stream:
+            download_dir = args.output or os.getcwd()
+            print(f"Stream-converting {len(input_files)} file(s) via {args.remote_server}...")
+            stream_ok = 0
+            stream_fail = 0
+            for filepath in input_files:
+                basename = os.path.basename(filepath)
+                fsize = os.path.getsize(filepath)
+                if max_size and fsize > max_size:
+                    error(f"Skipped {basename}: file too large ({fsize} bytes, limit {max_size})")
+                    stream_fail += 1
+                    continue
+
+                # Upload progress bar
+                upload_bar = tqdm(
+                    total=fsize, unit="B", unit_scale=True,
+                    desc=f"↑ {basename[:40]}", leave=False,
+                )
+                def _upload_prog(sent: int, total: int, _b=upload_bar):
+                    _b.n = sent
+                    _b.refresh()
+
+                # Conversion progress (text line)
+                last_detail = [""]
+                def _convert_prog(percent: float, detail: str):
+                    last_detail[0] = detail
+                    sys.stdout.write(f"\r  Converting: {detail}    ")
+                    sys.stdout.flush()
+
+                # Download progress bar (created after we know the output size)
+                dl_bar_ref: list = [None]
+                def _download_prog(downloaded: int, total: int):
+                    bar = dl_bar_ref[0]
+                    if bar is None:
+                        bar = tqdm(
+                            total=total or None, unit="B", unit_scale=True,
+                            desc=f"↓ {basename[:40]}", leave=True,
+                        )
+                        dl_bar_ref[0] = bar
+                    bar.n = downloaded
+                    if total and not bar.total:
+                        bar.total = total
+                    bar.refresh()
+
+                local_dest = os.path.join(download_dir, os.path.splitext(basename)[0] + "_converted.mkv")
+                try:
+                    result_path = client.stream_convert(
+                        filepath,
+                        local_dest,
+                        job_settings=job_settings,
+                        upload_callback=_upload_prog,
+                        progress_callback=_convert_prog,
+                        download_callback=_download_prog,
+                    )
+                    upload_bar.close()
+                    if dl_bar_ref[0]:
+                        dl_bar_ref[0].close()
+                    # Clear the conversion progress line
+                    sys.stdout.write("\r" + " " * 80 + "\r")
+                    sys.stdout.flush()
+                    success(f"Done: {basename} -> {os.path.basename(result_path)}")
+                    stream_ok += 1
+                except (RuntimeError, FileNotFoundError, OSError) as exc:
+                    upload_bar.close()
+                    if dl_bar_ref[0]:
+                        dl_bar_ref[0].close()
+                    sys.stdout.write("\r" + " " * 80 + "\r")
+                    sys.stdout.flush()
+                    error(f"Failed: {basename}: {exc}")
+                    stream_fail += 1
+                except KeyboardInterrupt:
+                    upload_bar.close()
+                    if dl_bar_ref[0]:
+                        dl_bar_ref[0].close()
+                    print("\nInterrupted.")
+                    break
+
+            print(f"\nStream-convert complete: {stream_ok} succeeded, {stream_fail} failed.")
+            sys.exit(0 if stream_fail == 0 else 1)
 
         upload_workers = max(1, args.upload_workers)
         submitted_ids: list[str] = []

@@ -235,6 +235,156 @@ class RemoteClient:
         finally:
             body.close()
 
+    def stream_convert(
+        self,
+        local_path: str,
+        local_dest: str,
+        job_settings: Optional[Dict[str, Any]] = None,
+        upload_callback: Optional[Callable[[int, int], None]] = None,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        download_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> str:
+        """Upload a file, wait for server-side conversion, and stream the result back.
+
+        Uses the ``/stream-convert`` endpoint.  The server converts the file
+        synchronously and streams the output back in a single HTTP response.
+
+        *upload_callback(sent, total)* — called during the upload phase.
+        *progress_callback(percent, detail)* — called with server conversion progress.
+        *download_callback(downloaded, total)* — called during the download phase.
+
+        Returns the local destination path on success.
+        Raises ``RuntimeError`` on server-side errors.
+        """
+        if not os.path.isfile(local_path):
+            raise FileNotFoundError(f"File not found: {local_path}")
+
+        file_size = os.path.getsize(local_path)
+        filename = os.path.basename(local_path)
+        settings = job_settings or {}
+
+        boundary = uuid.uuid4().hex
+        boundary_bytes = f"--{boundary}".encode("utf-8")
+
+        # Build multipart preamble
+        parts: list[bytes] = []
+        for key, value in settings.items():
+            if value is None:
+                continue
+            parts.append(boundary_bytes + b"\r\n")
+            parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+            parts.append(f"{value}\r\n".encode("utf-8"))
+
+        file_header = (
+            boundary_bytes + b"\r\n"
+            + f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode("utf-8")
+            + b"Content-Type: application/octet-stream\r\n\r\n"
+        )
+        file_footer = b"\r\n" + boundary_bytes + b"--\r\n"
+        preamble = b"".join(parts) + file_header
+        total_body_size = len(preamble) + file_size + len(file_footer)
+
+        url = f"{self.server_url}/stream-convert"
+        hdrs = self._headers({
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        })
+
+        req = request.Request(url, method="POST", headers=hdrs)
+        stream_body = _StreamingMultipartBody(
+            preamble, local_path, file_size, file_footer,
+            callback=upload_callback,
+        )
+        req.data = stream_body
+        req.add_unredirected_header("Content-length", str(total_body_size))
+
+        try:
+            resp = request.urlopen(req)  # no timeout — conversion can take hours
+        except error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"error": raw or str(exc)}
+            raise RuntimeError(payload.get("error") or str(exc)) from exc
+        except error.URLError as exc:
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, ConnectionError):
+                raise RuntimeError(
+                    f"Connection lost during upload to '{self.server_url}'. "
+                    "The server may have rejected the request — check the server log."
+                ) from exc
+            raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
+        finally:
+            stream_body.close()
+
+        # Read the NDJSON+binary response
+        try:
+            return self._read_stream_response(resp, local_dest, progress_callback, download_callback)
+        finally:
+            resp.close()
+
+    def _read_stream_response(
+        self,
+        resp,
+        local_dest: str,
+        progress_callback: Optional[Callable[[float, str], None]],
+        download_callback: Optional[Callable[[int, int], None]],
+    ) -> str:
+        """Parse the stream-convert response: NDJSON progress lines then raw file bytes."""
+        te = (resp.headers.get("Transfer-Encoding") or "").lower()
+        # urllib transparently decodes chunked TE, so we just read from resp.
+
+        buf = b""
+        file_size = 0
+
+        # Phase 1: read NDJSON lines until we get a "file" or "error" event
+        while True:
+            chunk = resp.read(8192)
+            if not chunk:
+                raise RuntimeError("Server closed connection before sending the converted file.")
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                etype = event.get("type", "")
+                if etype == "progress":
+                    if progress_callback:
+                        progress_callback(event.get("percent", 0.0), event.get("detail", ""))
+                elif etype == "status":
+                    if progress_callback:
+                        progress_callback(0.0, event.get("detail", ""))
+                elif etype == "error":
+                    raise RuntimeError(event.get("detail", "Server error during conversion."))
+                elif etype == "file":
+                    file_size = event.get("size", 0)
+                    # Remaining bytes in buf are the start of the file data
+                    os.makedirs(os.path.dirname(local_dest) or ".", exist_ok=True)
+                    downloaded = 0
+                    with open(local_dest, "wb") as fobj:
+                        if buf:
+                            fobj.write(buf)
+                            downloaded += len(buf)
+                            if download_callback:
+                                download_callback(downloaded, file_size)
+                            buf = b""
+                        while True:
+                            data = resp.read(1024 * 1024)
+                            if not data:
+                                break
+                            fobj.write(data)
+                            downloaded += len(data)
+                            if download_callback:
+                                download_callback(downloaded, file_size)
+                    return local_dest
+
+        raise RuntimeError("Unexpected end of stream-convert response.")
+
     def poll_jobs(
         self,
         job_ids: List[str],

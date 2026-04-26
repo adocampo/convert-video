@@ -13,8 +13,10 @@ from urllib.parse import parse_qs, quote, urlparse
 from clutch import APP_NAME, get_version
 from clutch.auth import has_role
 from clutch.converter import (
+    convert_video,
     get_visible_nvidia_gpus,
     parse_gpu_devices,
+    uses_nvenc_encoder,
 )
 from clutch.iso import display_titles, is_iso_file, scan_iso
 from clutch.logs import (
@@ -1512,6 +1514,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(201, record)
             return
 
+        # ── Stream-convert: upload, convert, stream result back ─────────
+        if path == "/stream-convert":
+            self._handle_stream_convert()
+            return
+
         if path != "/jobs":
             self._send_json(404, {"error": "Not found."})
             return
@@ -1539,6 +1546,208 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(201, record)
         else:
             self._redirect_with_message(notice=str(record.get("message") or f"Queued job {record['id']}"))
+
+    # ── Stream-convert handler ──────────────────────────────────────
+    def _handle_stream_convert(self):
+        """Upload a file, convert it synchronously, and stream the result back.
+
+        Protocol: the response body is NDJSON progress lines followed by
+        the raw output file bytes.  Each progress line is a JSON object
+        terminated by ``\\n``.  The final progress-phase line has
+        ``"type": "file"`` and contains the output filename and size.
+        Everything after that line is raw binary data of exactly *size*
+        bytes.
+        """
+        import time as _time
+
+        ct = self.headers.get("Content-Type", "")
+        cl = self.headers.get("Content-Length", "")
+        te = self.headers.get("Transfer-Encoding", "")
+        debug(
+            f"stream-convert: Content-Type={ct!r} "
+            f"Content-Length={cl or '<missing>'} "
+            f"Transfer-Encoding={te or '<none>'} "
+            f"from {self.address_string()}"
+        )
+
+        user = self._require_role("operator")
+        if not user:
+            self._drain_request_body()
+            return
+
+        svc = self.server.service
+        if not svc.upload_dir:
+            self._send_json(409, {"error": "Upload directory is not configured on this server."})
+            self._drain_request_body()
+            return
+
+        if not self._is_multipart_request():
+            self._send_json(400, {"error": "Expected multipart/form-data request."})
+            self._drain_request_body()
+            return
+
+        # Parse the multipart upload
+        try:
+            result = self._parse_multipart(
+                max_file_bytes=svc.max_upload_size_bytes,
+                upload_dir=svc.upload_dir,
+            )
+        except ValueError as exc:
+            self._send_json(413 if "exceeds" in str(exc).lower() else 400, {"error": str(exc)})
+            return
+        except OSError as exc:
+            self._send_json(500, {"error": f"Failed to save uploaded file: {exc}"})
+            return
+
+        fields = result["fields"]
+        input_file = result["file_path"]
+        output_dir = fields.get("output_dir", "").strip() or svc.upload_dir
+        codec = fields.get("codec", "").strip() or "nvenc_h265"
+        encode_speed = fields.get("encode_speed", "").strip() or "normal"
+        audio_passthrough = fields.get("audio_passthrough", "").lower() in ("true", "1", "on")
+        verbose = fields.get("verbose", "").lower() in ("true", "1", "on")
+        force = fields.get("force", "").lower() in ("true", "1", "on")
+
+        if not input_file:
+            self._send_json(400, {"error": "No file was uploaded."})
+            return
+
+        # Select GPU if applicable
+        gpu_device = svc._select_gpu_device(codec, encode_speed)
+
+        # Send response headers — from this point we cannot send a JSON error,
+        # so errors are reported as NDJSON {"type":"error"} lines.
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-clutch-stream")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+
+        def _write_event(obj: dict):
+            """Write a single NDJSON line using HTTP chunked encoding."""
+            line = json.dumps(obj, separators=(",", ":")) + "\n"
+            chunk = line.encode("utf-8")
+            self.wfile.write(f"{len(chunk):x}\r\n".encode("ascii"))
+            self.wfile.write(chunk)
+            self.wfile.write(b"\r\n")
+            self.wfile.flush()
+
+        def _write_raw_chunk(data: bytes):
+            """Write a raw binary chunk using HTTP chunked encoding."""
+            self.wfile.write(f"{len(data):x}\r\n".encode("ascii"))
+            self.wfile.write(data)
+            self.wfile.write(b"\r\n")
+
+        def _write_final_chunk():
+            """Write the chunked transfer-encoding terminator."""
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+
+        _write_event({"type": "status", "detail": "Upload complete. Starting conversion."})
+
+        # Build a progress callback that streams progress events
+        last_bucket = -1
+        last_update_at = 0.0
+        started_at = _time.monotonic()
+
+        def _progress_callback(percent: float, _detail: str):
+            nonlocal last_bucket, last_update_at
+            bucket = int(percent)
+            now = _time.time()
+            # Throttle: update every 2 seconds or on new integer percent
+            if bucket == last_bucket and now - last_update_at < 2.0 and percent < 100.0:
+                return
+            last_bucket = bucket
+            last_update_at = now
+            message = f"Encoding {percent:.1f}%"
+            if 0.0 < percent < 100.0:
+                elapsed = max(0.0, _time.monotonic() - started_at)
+                eta_seconds = (elapsed * (100.0 - percent) / percent) if elapsed > 0.0 else 0.0
+                if eta_seconds > 0.0:
+                    minutes, secs = divmod(int(eta_seconds), 60)
+                    hours, minutes = divmod(minutes, 60)
+                    if hours:
+                        message = f"{message} - ETA {hours}h{minutes:02d}m"
+                    elif minutes:
+                        message = f"{message} - ETA {minutes}m{secs:02d}s"
+                    else:
+                        message = f"{message} - ETA {secs}s"
+            try:
+                _write_event({"type": "progress", "percent": round(percent, 1), "detail": message})
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        output_path = ""
+        try:
+            output_path = convert_video(
+                input_file,
+                output_dir,
+                codec,
+                encode_speed,
+                audio_passthrough,
+                verbose,
+                show_progress=False,
+                gpu_device=gpu_device,
+                progress_callback=_progress_callback,
+                emit_logs=True,
+            )
+        except Exception as exc:
+            error(f"stream-convert: conversion failed: {exc}")
+            try:
+                _write_event({"type": "error", "detail": f"Conversion failed: {exc}"})
+                _write_final_chunk()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            # Clean up uploaded file
+            try:
+                if os.path.isfile(input_file):
+                    os.unlink(input_file)
+            except OSError:
+                pass
+            return
+
+        if not output_path or not os.path.isfile(output_path):
+            try:
+                _write_event({"type": "error", "detail": "Conversion produced no output."})
+                _write_final_chunk()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            try:
+                if os.path.isfile(input_file):
+                    os.unlink(input_file)
+            except OSError:
+                pass
+            return
+
+        # Stream the converted file back
+        try:
+            output_size = os.path.getsize(output_path)
+            output_name = os.path.basename(output_path)
+            _write_event({
+                "type": "file",
+                "filename": output_name,
+                "size": output_size,
+            })
+            with open(output_path, "rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    _write_raw_chunk(chunk)
+            _write_final_chunk()
+        except (BrokenPipeError, ConnectionResetError):
+            debug("stream-convert: client disconnected during file transfer")
+        except Exception as exc:
+            error(f"stream-convert: error streaming output: {exc}")
+
+        # Clean up temporary files
+        for path_to_clean in (input_file, output_path):
+            try:
+                if path_to_clean and os.path.isfile(path_to_clean):
+                    os.unlink(path_to_clean)
+            except OSError:
+                pass
 
     def do_PUT(self):
         path, _query = self._get_request_parts()
