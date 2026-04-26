@@ -99,6 +99,46 @@ class ConversionHTTPServer(ThreadingHTTPServer):
         error(f"Exception handling request from {client_address}:\n{traceback.format_exc()}")
 
 
+class _ChunkedReader:
+    """Wraps a raw socket rfile and decodes HTTP chunked Transfer-Encoding on the fly."""
+
+    def __init__(self, rfile):
+        self._rfile = rfile
+        self._chunk_remaining = 0
+        self._done = False
+
+    def read(self, n: int) -> bytes:
+        if self._done:
+            return b""
+        result = bytearray()
+        while len(result) < n and not self._done:
+            if self._chunk_remaining == 0:
+                # Read the next chunk-size line (hex + optional extension + CRLF)
+                line = self._rfile.readline(256)
+                if not line:
+                    self._done = True
+                    break
+                size_str = line.split(b";", 1)[0].strip()
+                try:
+                    chunk_size = int(size_str, 16)
+                except ValueError:
+                    self._done = True
+                    break
+                if chunk_size == 0:
+                    self._rfile.readline(256)  # trailing CRLF after last chunk
+                    self._done = True
+                    break
+                self._chunk_remaining = chunk_size
+            to_read = min(n - len(result), self._chunk_remaining)
+            data = self._rfile.read(to_read)
+            if not data:
+                self._done = True
+                break
+            result.extend(data)
+            self._chunk_remaining -= len(data)
+            if self._chunk_remaining == 0:
+                self._rfile.readline(256)  # CRLF after chunk data
+        return bytes(result)
 
 
 class ServiceRequestHandler(BaseHTTPRequestHandler):
@@ -195,12 +235,18 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
         try:
-            length = int(self.headers.get("Content-Length") or "0")
-            while length > 0:
-                chunk = self.rfile.read(min(length, 65536))
-                if not chunk:
-                    break
-                length -= len(chunk)
+            te = (self.headers.get("Transfer-Encoding") or "").lower()
+            if "chunked" in te:
+                reader = _ChunkedReader(self.rfile)
+                while reader.read(65536):
+                    pass
+            else:
+                length = int(self.headers.get("Content-Length") or "0")
+                while length > 0:
+                    chunk = self.rfile.read(min(length, 65536))
+                    if not chunk:
+                        break
+                    length -= len(chunk)
         except Exception:
             pass
         self.close_connection = True
@@ -221,11 +267,25 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         boundary_bytes = ("--" + boundary).encode("utf-8")
         end_boundary = boundary_bytes + b"--"
         content_length = int(self.headers.get("Content-Length") or "0")
+        te = (self.headers.get("Transfer-Encoding") or "").lower()
 
-        # Read entire body (simple upload mode — no chunked resume).
-        # We stream through it scanning for boundaries to avoid holding
+        # Determine body source: Content-Length framing or chunked TE.
+        # Python's urllib may send chunked TE even when the caller sets
+        # Content-Length (bpo-16464), so we must handle both.
+        if content_length > 0:
+            rfile = self.rfile
+            remaining = content_length
+        elif "chunked" in te:
+            rfile = _ChunkedReader(self.rfile)
+            remaining = max_file_bytes or (10 * 1024 * 1024 * 1024)  # 10 GiB cap
+        else:
+            raise ValueError(
+                "Missing Content-Length header and no chunked Transfer-Encoding. "
+                "The client may be too old — update it or check the request."
+            )
+
+        # We stream through the body scanning for boundaries to avoid holding
         # the whole payload in a single Python bytes object when writing the file.
-        remaining = content_length
         CHUNK = self.server.MULTIPART_CHUNK_SIZE
 
         def _read(n: int) -> bytes:
@@ -233,7 +293,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             to_read = min(n, remaining)
             if to_read <= 0:
                 return b""
-            data = self.rfile.read(to_read)
+            data = rfile.read(to_read)
             remaining -= len(data)
             return data
 
@@ -375,7 +435,8 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
             # Drain any remaining body bytes
             while remaining > 0:
-                _read(CHUNK)
+                if not _read(CHUNK):
+                    break
 
             return {"fields": fields, "file_path": file_path, "file_name": file_name, "file_size": file_size}
 
@@ -1397,7 +1458,13 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if path == "/upload-and-convert":
             ct = self.headers.get("Content-Type", "")
             cl = self.headers.get("Content-Length", "")
-            debug(f"upload-and-convert: Content-Type={ct!r} Content-Length={cl} from {self.address_string()}")
+            te = self.headers.get("Transfer-Encoding", "")
+            debug(
+                f"upload-and-convert: Content-Type={ct!r} "
+                f"Content-Length={cl or '<missing>'} "
+                f"Transfer-Encoding={te or '<none>'} "
+                f"from {self.address_string()}"
+            )
             user = self._require_role("operator")
             if not user:
                 self._drain_request_body()

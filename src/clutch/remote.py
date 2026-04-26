@@ -200,7 +200,6 @@ class RemoteClient:
         url = f"{self.server_url}/upload-and-convert"
         hdrs = self._headers({
             "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(total_body_size),
         })
 
         req = request.Request(url, method="POST", headers=hdrs)
@@ -210,6 +209,9 @@ class RemoteClient:
             callback=progress_callback,
         )
         req.data = body
+        # Set Content-Length AFTER assigning data — Python's Request.data
+        # setter removes any existing Content-Length header (bpo-16464).
+        req.add_unredirected_header("Content-length", str(total_body_size))
 
         try:
             with request.urlopen(req, timeout=600) as resp:
