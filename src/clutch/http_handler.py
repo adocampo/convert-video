@@ -116,6 +116,9 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
 
     def _send_json(self, status_code: int, payload: Dict[str, object]):
+        if status_code >= 400:
+            msg = payload.get("error", "") if isinstance(payload, dict) else ""
+            debug(f"HTTP {self.command} {self.path} {self.address_string()} -> {status_code}: {msg}")
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
@@ -1392,6 +1395,9 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
 
         # ── Upload and convert in one step ──────────────────────────────
         if path == "/upload-and-convert":
+            ct = self.headers.get("Content-Type", "")
+            cl = self.headers.get("Content-Length", "")
+            debug(f"upload-and-convert: Content-Type={ct!r} Content-Length={cl} from {self.address_string()}")
             user = self._require_role("operator")
             if not user:
                 self._drain_request_body()
