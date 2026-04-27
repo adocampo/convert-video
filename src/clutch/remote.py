@@ -330,58 +330,49 @@ class RemoteClient:
         progress_callback: Optional[Callable[[float, str], None]],
         download_callback: Optional[Callable[[int, int], None]],
     ) -> str:
-        """Parse the stream-convert response: NDJSON progress lines then raw file bytes."""
-        te = (resp.headers.get("Transfer-Encoding") or "").lower()
-        # urllib transparently decodes chunked TE, so we just read from resp.
+        """Parse the stream-convert response: NDJSON progress lines then raw file bytes.
 
-        buf = b""
-        file_size = 0
-
-        # Phase 1: read NDJSON lines until we get a "file" or "error" event
+        Uses readline() for the NDJSON phase so that progress events are
+        delivered in real time instead of buffering in read(N) blocks.
+        """
+        # Phase 1: read NDJSON lines until we get a "file" or "error" event.
+        # readline() returns as soon as a '\n' arrives, giving us real-time
+        # progress instead of blocking until the read buffer fills.
         while True:
-            chunk = resp.read(8192)
-            if not chunk:
+            raw_line = resp.readline()
+            if not raw_line:
                 raise RuntimeError("Server closed connection before sending the converted file.")
-            buf += chunk
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    continue
-                etype = event.get("type", "")
-                if etype == "progress":
-                    if progress_callback:
-                        progress_callback(event.get("percent", 0.0), event.get("detail", ""))
-                elif etype == "status":
-                    if progress_callback:
-                        progress_callback(0.0, event.get("detail", ""))
-                elif etype == "error":
-                    raise RuntimeError(event.get("detail", "Server error during conversion."))
-                elif etype == "file":
-                    file_size = event.get("size", 0)
-                    # Remaining bytes in buf are the start of the file data
-                    os.makedirs(os.path.dirname(local_dest) or ".", exist_ok=True)
-                    downloaded = 0
-                    with open(local_dest, "wb") as fobj:
-                        if buf:
-                            fobj.write(buf)
-                            downloaded += len(buf)
-                            if download_callback:
-                                download_callback(downloaded, file_size)
-                            buf = b""
-                        while True:
-                            data = resp.read(1024 * 1024)
-                            if not data:
-                                break
-                            fobj.write(data)
-                            downloaded += len(data)
-                            if download_callback:
-                                download_callback(downloaded, file_size)
-                    return local_dest
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                event = json.loads(raw_line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            etype = event.get("type", "")
+            if etype == "progress":
+                if progress_callback:
+                    progress_callback(event.get("percent", 0.0), event.get("detail", ""))
+            elif etype == "status":
+                if progress_callback:
+                    progress_callback(0.0, event.get("detail", ""))
+            elif etype == "error":
+                raise RuntimeError(event.get("detail", "Server error during conversion."))
+            elif etype == "file":
+                # Phase 2: stream binary file data
+                file_size = event.get("size", 0)
+                os.makedirs(os.path.dirname(local_dest) or ".", exist_ok=True)
+                downloaded = 0
+                with open(local_dest, "wb") as fobj:
+                    while True:
+                        data = resp.read(1024 * 1024)
+                        if not data:
+                            break
+                        fobj.write(data)
+                        downloaded += len(data)
+                        if download_callback:
+                            download_callback(downloaded, file_size)
+                return local_dest
 
         raise RuntimeError("Unexpected end of stream-convert response.")
 
