@@ -143,6 +143,39 @@ class _ChunkedReader:
         return bytes(result)
 
 
+class _StreamWriter:
+    """Writes HTTP chunked Transfer-Encoding frames to a socket wfile.
+
+    Used by the stream-convert protocol to interleave NDJSON event lines
+    and raw binary file chunks within a single HTTP response.
+    """
+
+    def __init__(self, wfile):
+        self._wfile = wfile
+
+    def event(self, obj: dict):
+        """Write one NDJSON event line as a single chunked frame."""
+        line = json.dumps(obj, separators=(",", ":")) + "\n"
+        data = line.encode("utf-8")
+        self._wfile.write(f"{len(data):x}\r\n".encode("ascii"))
+        self._wfile.write(data)
+        self._wfile.write(b"\r\n")
+        self._wfile.flush()
+
+    def raw_chunk(self, data: bytes):
+        """Write raw binary bytes as a single chunked frame."""
+        if not data:
+            return
+        self._wfile.write(f"{len(data):x}\r\n".encode("ascii"))
+        self._wfile.write(data)
+        self._wfile.write(b"\r\n")
+
+    def terminator(self):
+        """Write the chunked transfer-encoding end marker."""
+        self._wfile.write(b"0\r\n\r\n")
+        self._wfile.flush()
+
+
 class ServiceRequestHandler(BaseHTTPRequestHandler):
     server: ConversionHTTPServer
 
@@ -1049,6 +1082,10 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk)
             return
 
+        if path == "/stream-convert/cached":
+            self._handle_stream_convert_cached(query)
+            return
+
         if path == "/schedule/prices":
             prices = self.server.service.scheduler.get_cached_prices_list()
             self._send_json(200, {"prices": prices})
@@ -1519,6 +1556,11 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._handle_stream_convert()
             return
 
+        # ── Stream-convert cache check ──────────────────────────────────
+        if path == "/stream-convert/check":
+            self._handle_stream_convert_check()
+            return
+
         if path != "/jobs":
             self._send_json(404, {"error": "Not found."})
             return
@@ -1548,16 +1590,130 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._redirect_with_message(notice=str(record.get("message") or f"Queued job {record['id']}"))
 
     # ── Stream-convert handler ──────────────────────────────────────
-    def _handle_stream_convert(self):
-        """Upload a file, convert it synchronously, and stream the result back.
+    _STREAM_CACHE_DIRNAME = ".clutch_cache"
 
-        Protocol: the response body is NDJSON progress lines followed by
-        the raw output file bytes.  Each progress line is a JSON object
-        terminated by ``\\n``.  The final progress-phase line has
-        ``"type": "file"`` and contains the output filename and size.
-        Everything after that line is raw binary data of exactly *size*
-        bytes.
+    def _stream_cache_dir(self) -> str:
+        """Return the cache directory path (under upload_dir)."""
+        svc = self.server.service
+        return os.path.join(svc.upload_dir, self._STREAM_CACHE_DIRNAME) if svc.upload_dir else ""
+
+    def _stream_cache_id(self, sha256: str, codec: str, encode_speed: str, audio_passthrough: bool) -> str:
+        """Build a cache identifier (filename) from input hash + conversion settings."""
+        passthrough_flag = "ap" if audio_passthrough else "ae"
+        # Sanitize codec/speed for filesystem safety
+        safe_codec = "".join(c for c in codec if c.isalnum() or c in "_-")
+        safe_speed = "".join(c for c in encode_speed if c.isalnum() or c in "_-")
+        safe_sha = "".join(c for c in sha256 if c in "0123456789abcdefABCDEF")
+        return f"{safe_sha}_{safe_codec}_{safe_speed}_{passthrough_flag}.mkv"
+
+    def _handle_stream_convert_check(self):
+        """Check whether a converted file is already cached on the server.
+
+        Request: JSON ``{sha256, codec, encode_speed, audio_passthrough}``.
+        Response: ``{cached: bool, size: int, cache_id: str}``.
         """
+        user = self._require_role("operator")
+        if not user:
+            return
+        try:
+            payload = self._read_json()
+        except json.JSONDecodeError as exc:
+            self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+            return
+
+        sha256 = str(payload.get("sha256") or "").strip().lower()
+        codec = str(payload.get("codec") or "").strip() or "nvenc_h265"
+        encode_speed = str(payload.get("encode_speed") or "").strip() or "normal"
+        passthrough = bool(payload.get("audio_passthrough"))
+        if isinstance(payload.get("audio_passthrough"), str):
+            passthrough = payload["audio_passthrough"].lower() in ("true", "1", "on")
+
+        if not sha256 or len(sha256) < 32:
+            self._send_json(400, {"error": "Missing or invalid 'sha256' field."})
+            return
+
+        cache_dir = self._stream_cache_dir()
+        if not cache_dir:
+            self._send_json(200, {"cached": False, "size": 0, "cache_id": ""})
+            return
+
+        cache_id = self._stream_cache_id(sha256, codec, encode_speed, passthrough)
+        cache_path = os.path.join(cache_dir, cache_id)
+        if os.path.isfile(cache_path):
+            self._send_json(200, {
+                "cached": True,
+                "size": os.path.getsize(cache_path),
+                "cache_id": cache_id,
+            })
+        else:
+            self._send_json(200, {"cached": False, "size": 0, "cache_id": cache_id})
+
+    def _handle_stream_convert_cached(self, query: dict):
+        """Stream a previously-cached converted file using the stream-convert protocol."""
+        user = self._require_role("operator")
+        if not user:
+            return
+
+        cache_id = str(query.get("cache_id") or "").strip()
+        if not cache_id or "/" in cache_id or "\\" in cache_id or ".." in cache_id:
+            self._send_json(400, {"error": "Invalid cache_id."})
+            return
+
+        cache_dir = self._stream_cache_dir()
+        if not cache_dir:
+            self._send_json(404, {"error": "Cache not configured."})
+            return
+
+        cache_path = os.path.join(cache_dir, cache_id)
+        if not os.path.isfile(cache_path):
+            self._send_json(404, {"error": "Cached file not found."})
+            return
+
+        # Send response headers
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-clutch-stream")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+
+        writer = _StreamWriter(self.wfile)
+        try:
+            file_size = os.path.getsize(cache_path)
+            writer.event({"type": "status", "detail": "Cache hit. Streaming cached file."})
+            writer.event({"type": "file", "filename": cache_id, "size": file_size})
+            with open(cache_path, "rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    writer.event({"type": "binary", "size": len(chunk)})
+                    writer.raw_chunk(chunk)
+            writer.event({"type": "end", "size": file_size})
+            writer.terminator()
+        except (BrokenPipeError, ConnectionResetError):
+            debug("stream-convert/cached: client disconnected")
+
+    def _handle_stream_convert(self):
+        """Upload a file, convert it, and stream the result back as it is produced.
+
+        Tail-stream protocol (multiplexed JSON+binary frames):
+
+          - The body is a sequence of NDJSON frames separated by ``\\n``.
+          - ``{"type":"status",...}``      — informational text.
+          - ``{"type":"progress",...}``    — encoding progress.
+          - ``{"type":"file","size":-1}``  — output is starting; size unknown.
+          - ``{"type":"binary","size":N}`` — the next exactly N raw bytes
+            after the newline are file data; then NDJSON resumes.
+          - ``{"type":"end","size":N}``    — successful completion.
+          - ``{"type":"error",...}``       — failure.
+
+        Conversion runs in a background thread; the main thread tails the
+        HandBrake temp file and forwards new bytes as binary frames while
+        also forwarding progress events from a queue.
+        """
+        import queue as _queue
+        import threading as _threading
         import time as _time
 
         ct = self.headers.get("Content-Type", "")
@@ -1606,17 +1762,16 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         encode_speed = fields.get("encode_speed", "").strip() or "normal"
         audio_passthrough = fields.get("audio_passthrough", "").lower() in ("true", "1", "on")
         verbose = fields.get("verbose", "").lower() in ("true", "1", "on")
-        force = fields.get("force", "").lower() in ("true", "1", "on")
+        sha256 = fields.get("sha256", "").strip().lower()
 
         if not input_file:
             self._send_json(400, {"error": "No file was uploaded."})
             return
 
-        # Select GPU if applicable
         gpu_device = svc._select_gpu_device(codec, encode_speed)
 
-        # Send response headers — from this point we cannot send a JSON error,
-        # so errors are reported as NDJSON {"type":"error"} lines.
+        # Send response headers — from this point we cannot send a JSON
+        # error response; failures are reported via {"type":"error"} frames.
         self.send_response(200)
         self.send_header("Content-Type", "application/x-clutch-stream")
         self.send_header("Transfer-Encoding", "chunked")
@@ -1624,29 +1779,14 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
 
-        def _write_event(obj: dict):
-            """Write a single NDJSON line using HTTP chunked encoding."""
-            line = json.dumps(obj, separators=(",", ":")) + "\n"
-            chunk = line.encode("utf-8")
-            self.wfile.write(f"{len(chunk):x}\r\n".encode("ascii"))
-            self.wfile.write(chunk)
-            self.wfile.write(b"\r\n")
-            self.wfile.flush()
+        writer = _StreamWriter(self.wfile)
+        writer.event({"type": "status", "detail": "Upload complete. Starting conversion."})
 
-        def _write_raw_chunk(data: bytes):
-            """Write a raw binary chunk using HTTP chunked encoding."""
-            self.wfile.write(f"{len(data):x}\r\n".encode("ascii"))
-            self.wfile.write(data)
-            self.wfile.write(b"\r\n")
+        # ── Set up shared state between threads ────────────────────────
+        event_queue: _queue.Queue = _queue.Queue()
+        runtime_info: Dict[str, object] = {"temp_file": "", "final_output": ""}
+        result_box: Dict[str, object] = {"output_path": "", "error": None}
 
-        def _write_final_chunk():
-            """Write the chunked transfer-encoding terminator."""
-            self.wfile.write(b"0\r\n\r\n")
-            self.wfile.flush()
-
-        _write_event({"type": "status", "detail": "Upload complete. Starting conversion."})
-
-        # Build a progress callback that streams progress events
         last_bucket = -1
         last_update_at = 0.0
         started_at = _time.monotonic()
@@ -1655,7 +1795,6 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             nonlocal last_bucket, last_update_at
             bucket = int(percent)
             now = _time.time()
-            # Throttle: update every 2 seconds or on new integer percent
             if bucket == last_bucket and now - last_update_at < 2.0 and percent < 100.0:
                 return
             last_bucket = bucket
@@ -1673,75 +1812,223 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                         message = f"{message} - ETA {minutes}m{secs:02d}s"
                     else:
                         message = f"{message} - ETA {secs}s"
-            try:
-                _write_event({"type": "progress", "percent": round(percent, 1), "detail": message})
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+            event_queue.put({"type": "progress", "percent": round(percent, 1), "detail": message})
 
-        output_path = ""
-        try:
-            output_path = convert_video(
-                input_file,
-                output_dir,
-                codec,
-                encode_speed,
-                audio_passthrough,
-                verbose,
-                show_progress=False,
-                gpu_device=gpu_device,
-                progress_callback=_progress_callback,
-                emit_logs=True,
-            )
-        except Exception as exc:
-            error(f"stream-convert: conversion failed: {exc}")
-            try:
-                _write_event({"type": "error", "detail": f"Conversion failed: {exc}"})
-                _write_final_chunk()
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-            # Clean up uploaded file
-            try:
-                if os.path.isfile(input_file):
-                    os.unlink(input_file)
-            except OSError:
-                pass
-            return
+        def _runtime_callback(runtime: dict):
+            tf = runtime.get("temp_file") or ""
+            if tf:
+                runtime_info["temp_file"] = tf
 
-        if not output_path or not os.path.isfile(output_path):
+        def _convert_thread():
             try:
-                _write_event({"type": "error", "detail": "Conversion produced no output."})
-                _write_final_chunk()
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-            try:
-                if os.path.isfile(input_file):
-                    os.unlink(input_file)
-            except OSError:
-                pass
-            return
+                output_path = convert_video(
+                    input_file,
+                    output_dir,
+                    codec,
+                    encode_speed,
+                    audio_passthrough,
+                    verbose,
+                    show_progress=False,
+                    gpu_device=gpu_device,
+                    progress_callback=_progress_callback,
+                    runtime_callback=_runtime_callback,
+                    emit_logs=True,
+                )
+                result_box["output_path"] = output_path or ""
+                if output_path:
+                    runtime_info["final_output"] = output_path
+            except Exception as exc:
+                result_box["error"] = exc
 
-        # Stream the converted file back
-        try:
-            output_size = os.path.getsize(output_path)
-            output_name = os.path.basename(output_path)
-            _write_event({
-                "type": "file",
-                "filename": output_name,
-                "size": output_size,
-            })
-            with open(output_path, "rb") as fh:
+        worker = _threading.Thread(target=_convert_thread, daemon=True)
+        worker.start()
+
+        # ── Drain progress events while waiting for the temp file ──────
+        wait_started = _time.monotonic()
+        while not runtime_info["temp_file"] and worker.is_alive():
+            try:
                 while True:
-                    chunk = fh.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    _write_raw_chunk(chunk)
-            _write_final_chunk()
-        except (BrokenPipeError, ConnectionResetError):
-            debug("stream-convert: client disconnected during file transfer")
-        except Exception as exc:
-            error(f"stream-convert: error streaming output: {exc}")
+                    writer.event(event_queue.get_nowait())
+            except _queue.Empty:
+                pass
+            if _time.monotonic() - wait_started > 120:
+                # Conversion did not produce a temp file in 2 minutes; abort
+                break
+            _time.sleep(0.2)
 
-        # Clean up temporary files
+        # ── If the conversion finished extremely fast (no tail needed) ─
+        if not runtime_info["temp_file"]:
+            worker.join()
+            self._stream_finalize(
+                writer, event_queue, input_file, sha256,
+                codec, encode_speed, audio_passthrough,
+                result_box, total_streamed=0, file_event_sent=False,
+            )
+            return
+
+        # Open the temp file with retries (HandBrake may still be initialising)
+        temp_file = str(runtime_info["temp_file"])
+        fd = None
+        open_attempts = 0
+        while open_attempts < 50 and worker.is_alive():
+            try:
+                fd = open(temp_file, "rb")
+                break
+            except OSError:
+                open_attempts += 1
+                _time.sleep(0.1)
+
+        if fd is None:
+            worker.join()
+            self._stream_finalize(
+                writer, event_queue, input_file, sha256,
+                codec, encode_speed, audio_passthrough,
+                result_box, total_streamed=0, file_event_sent=False,
+            )
+            return
+
+        # File event with size=-1 — we don't know the final size yet
+        try:
+            writer.event({"type": "file", "filename": "output.mkv", "size": -1})
+        except (BrokenPipeError, ConnectionResetError):
+            fd.close()
+            worker.join()
+            return
+
+        # ── Tail loop: forward new bytes + progress events ─────────────
+        total_streamed = 0
+        idle_iterations = 0
+        try:
+            while True:
+                # Drain any pending progress events
+                try:
+                    while True:
+                        writer.event(event_queue.get_nowait())
+                except _queue.Empty:
+                    pass
+
+                # Read whatever new bytes are available
+                data = fd.read(1024 * 1024)
+                if data:
+                    writer.event({"type": "binary", "size": len(data)})
+                    writer.raw_chunk(data)
+                    total_streamed += len(data)
+                    idle_iterations = 0
+                else:
+                    if not worker.is_alive():
+                        # Final drain — file may have been renamed; the open
+                        # fd still points to the same inode, so read() works.
+                        final_data = fd.read()
+                        while final_data:
+                            writer.event({"type": "binary", "size": len(final_data)})
+                            writer.raw_chunk(final_data)
+                            total_streamed += len(final_data)
+                            final_data = fd.read()
+                        break
+                    idle_iterations += 1
+                    _time.sleep(0.2 if idle_iterations < 50 else 0.5)
+        except (BrokenPipeError, ConnectionResetError):
+            debug("stream-convert: client disconnected during tail-stream")
+            try:
+                fd.close()
+            except OSError:
+                pass
+            worker.join()
+            # Best-effort cleanup of the uploaded file
+            try:
+                if os.path.isfile(input_file):
+                    os.unlink(input_file)
+            except OSError:
+                pass
+            return
+        finally:
+            try:
+                fd.close()
+            except OSError:
+                pass
+
+        worker.join()
+        self._stream_finalize(
+            writer, event_queue, input_file, sha256,
+            codec, encode_speed, audio_passthrough,
+            result_box, total_streamed=total_streamed, file_event_sent=True,
+        )
+
+    def _stream_finalize(
+        self,
+        writer: "_StreamWriter",
+        event_queue,
+        input_file: str,
+        sha256: str,
+        codec: str,
+        encode_speed: str,
+        audio_passthrough: bool,
+        result_box: Dict[str, object],
+        *,
+        total_streamed: int,
+        file_event_sent: bool,
+    ):
+        """Send remaining progress events, end/error frame, and clean up."""
+        import queue as _queue
+
+        # Drain any remaining progress events
+        try:
+            while True:
+                writer.event(event_queue.get_nowait())
+        except _queue.Empty:
+            pass
+
+        output_path = str(result_box.get("output_path") or "")
+        err = result_box.get("error")
+
+        try:
+            if err:
+                writer.event({"type": "error", "detail": f"Conversion failed: {err}"})
+            elif not output_path:
+                writer.event({"type": "error", "detail": "Conversion produced no output."})
+            else:
+                # If we never sent the file event (very fast conversion path),
+                # send file + bytes now.
+                if not file_event_sent and os.path.isfile(output_path):
+                    file_size = os.path.getsize(output_path)
+                    writer.event({"type": "file", "filename": os.path.basename(output_path), "size": file_size})
+                    with open(output_path, "rb") as fh:
+                        while True:
+                            chunk = fh.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            writer.event({"type": "binary", "size": len(chunk)})
+                            writer.raw_chunk(chunk)
+                            total_streamed += len(chunk)
+                writer.event({
+                    "type": "end",
+                    "size": total_streamed,
+                    "filename": os.path.basename(output_path),
+                })
+            writer.terminator()
+        except (BrokenPipeError, ConnectionResetError):
+            debug("stream-convert: client disconnected during finalize")
+
+        # Cache the result if requested and conversion succeeded
+        if output_path and sha256 and not err and os.path.isfile(output_path):
+            try:
+                cache_dir = self._stream_cache_dir()
+                if cache_dir:
+                    os.makedirs(cache_dir, exist_ok=True)
+                    cache_id = self._stream_cache_id(sha256, codec, encode_speed, audio_passthrough)
+                    cache_path = os.path.join(cache_dir, cache_id)
+                    if not os.path.isfile(cache_path):
+                        try:
+                            os.link(output_path, cache_path)
+                        except OSError:
+                            # Different filesystems; fall back to copy
+                            import shutil
+                            shutil.copy2(output_path, cache_path)
+                        debug(f"stream-convert: cached output as {cache_id}")
+            except Exception as exc:
+                debug(f"stream-convert: failed to cache output: {exc}")
+
+        # Clean up uploaded input + (non-cached) output
         for path_to_clean in (input_file, output_path):
             try:
                 if path_to_clean and os.path.isfile(path_to_clean):

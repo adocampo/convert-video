@@ -1104,6 +1104,76 @@ def main():
                     stream_fail += 1
                     continue
 
+                local_dest = os.path.join(download_dir, os.path.splitext(basename)[0] + "_converted.mkv")
+
+                # ── Hash-based cache check (skips upload+convert if cached) ──
+                file_sha256 = ""
+                cache_info = {"cached": False}
+                try:
+                    hash_bar = tqdm(
+                        total=fsize, unit="B", unit_scale=True,
+                        desc=f"# {basename[:40]}", leave=False,
+                    )
+                    def _hash_prog(read: int, total: int, _b=hash_bar):
+                        _b.n = read
+                        _b.refresh()
+                    file_sha256 = client.compute_sha256(filepath, callback=_hash_prog)
+                    hash_bar.close()
+                    cache_info = client.check_cached(
+                        file_sha256,
+                        args.codec,
+                        speed,
+                        args.audio_passthrough,
+                    )
+                except Exception as exc:
+                    try:
+                        hash_bar.close()
+                    except Exception:
+                        pass
+                    warning(f"Cache check failed for {basename} (continuing without cache): {exc}")
+
+                # ── Cache hit: download cached file directly ─────────
+                if cache_info.get("cached"):
+                    cached_size = int(cache_info.get("size") or 0)
+                    cache_id = cache_info.get("cache_id", "")
+                    info(f"Cache hit for {basename} — downloading converted result.")
+                    dl_bar_ref: list = [None]
+                    def _dl_prog_cached(downloaded: int, total: int, _ref=dl_bar_ref):
+                        bar = _ref[0]
+                        if bar is None:
+                            bar = tqdm(
+                                total=cached_size or total or None, unit="B", unit_scale=True,
+                                desc=f"↓ {basename[:40]}", leave=True,
+                            )
+                            _ref[0] = bar
+                        bar.n = downloaded
+                        bar.refresh()
+                    try:
+                        result_path = client.download_cached(
+                            cache_id,
+                            local_dest,
+                            download_callback=_dl_prog_cached,
+                        )
+                        if dl_bar_ref[0]:
+                            dl_bar_ref[0].close()
+                        success(f"Done (cached): {basename} -> {os.path.basename(result_path)}")
+                        stream_ok += 1
+                        continue
+                    except (RuntimeError, FileNotFoundError, OSError) as exc:
+                        if dl_bar_ref[0]:
+                            dl_bar_ref[0].close()
+                        error(f"Cached download failed for {basename}: {exc} — falling back to upload.")
+                    except KeyboardInterrupt:
+                        if dl_bar_ref[0]:
+                            dl_bar_ref[0].close()
+                        print("\nInterrupted.")
+                        break
+
+                # ── Cache miss: upload + convert + stream back ──────
+                this_settings = dict(job_settings)
+                if file_sha256:
+                    this_settings["sha256"] = file_sha256
+
                 # Upload progress bar
                 upload_bar = tqdm(
                     total=fsize, unit="B", unit_scale=True,
@@ -1135,12 +1205,11 @@ def main():
                         bar.total = total
                     bar.refresh()
 
-                local_dest = os.path.join(download_dir, os.path.splitext(basename)[0] + "_converted.mkv")
                 try:
                     result_path = client.stream_convert(
                         filepath,
                         local_dest,
-                        job_settings=job_settings,
+                        job_settings=this_settings,
                         upload_callback=_upload_prog,
                         progress_callback=_convert_prog,
                         download_callback=_download_prog,
