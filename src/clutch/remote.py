@@ -1,6 +1,7 @@
 """Remote client for uploading files and submitting jobs to a Clutch server."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -234,6 +235,243 @@ class RemoteClient:
             raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
         finally:
             body.close()
+
+    @staticmethod
+    def compute_sha256(local_path: str, callback: Optional[Callable[[int, int], None]] = None) -> str:
+        """Compute the SHA-256 hex digest of *local_path*, reporting read progress."""
+        if not os.path.isfile(local_path):
+            raise FileNotFoundError(f"File not found: {local_path}")
+        total = os.path.getsize(local_path)
+        h = hashlib.sha256()
+        read = 0
+        with open(local_path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 1024)
+                if not chunk:
+                    break
+                h.update(chunk)
+                read += len(chunk)
+                if callback:
+                    callback(read, total)
+        return h.hexdigest()
+
+    def check_cached(
+        self,
+        sha256: str,
+        codec: str,
+        encode_speed: str,
+        audio_passthrough: bool,
+    ) -> Dict[str, Any]:
+        """Ask the server whether a converted file is already cached.
+
+        Returns ``{cached: bool, size: int, cache_id: str}``.
+        """
+        body = json.dumps({
+            "sha256": sha256,
+            "codec": codec,
+            "encode_speed": encode_speed,
+            "audio_passthrough": audio_passthrough,
+        }).encode("utf-8")
+        return self._request(
+            "POST", "/stream-convert/check",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+
+    def download_cached(
+        self,
+        cache_id: str,
+        local_dest: str,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        download_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> str:
+        """Download a cached converted file via the stream-convert protocol."""
+        from urllib.parse import quote
+
+        url = f"{self.server_url}/stream-convert/cached?cache_id={quote(cache_id, safe='')}"
+        hdrs = self._headers()
+        req = request.Request(url, headers=hdrs, method="GET")
+        try:
+            resp = request.urlopen(req)
+        except error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"error": raw or str(exc)}
+            raise RuntimeError(payload.get("error") or str(exc)) from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
+
+        try:
+            return self._read_stream_response(resp, local_dest, progress_callback, download_callback)
+        finally:
+            resp.close()
+
+    def stream_convert(
+        self,
+        local_path: str,
+        local_dest: str,
+        job_settings: Optional[Dict[str, Any]] = None,
+        upload_callback: Optional[Callable[[int, int], None]] = None,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        download_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> str:
+        """Upload a file, wait for server-side conversion, and stream the result back.
+
+        Uses the ``/stream-convert`` endpoint.  The server converts the file
+        synchronously and streams the output back in a single HTTP response.
+
+        *upload_callback(sent, total)* — called during the upload phase.
+        *progress_callback(percent, detail)* — called with server conversion progress.
+        *download_callback(downloaded, total)* — called during the download phase.
+
+        Returns the local destination path on success.
+        Raises ``RuntimeError`` on server-side errors.
+        """
+        if not os.path.isfile(local_path):
+            raise FileNotFoundError(f"File not found: {local_path}")
+
+        file_size = os.path.getsize(local_path)
+        filename = os.path.basename(local_path)
+        settings = job_settings or {}
+
+        boundary = uuid.uuid4().hex
+        boundary_bytes = f"--{boundary}".encode("utf-8")
+
+        # Build multipart preamble
+        parts: list[bytes] = []
+        for key, value in settings.items():
+            if value is None:
+                continue
+            parts.append(boundary_bytes + b"\r\n")
+            parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+            parts.append(f"{value}\r\n".encode("utf-8"))
+
+        file_header = (
+            boundary_bytes + b"\r\n"
+            + f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode("utf-8")
+            + b"Content-Type: application/octet-stream\r\n\r\n"
+        )
+        file_footer = b"\r\n" + boundary_bytes + b"--\r\n"
+        preamble = b"".join(parts) + file_header
+        total_body_size = len(preamble) + file_size + len(file_footer)
+
+        url = f"{self.server_url}/stream-convert"
+        hdrs = self._headers({
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        })
+
+        req = request.Request(url, method="POST", headers=hdrs)
+        stream_body = _StreamingMultipartBody(
+            preamble, local_path, file_size, file_footer,
+            callback=upload_callback,
+        )
+        req.data = stream_body
+        req.add_unredirected_header("Content-length", str(total_body_size))
+
+        try:
+            resp = request.urlopen(req)  # no timeout — conversion can take hours
+        except error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"error": raw or str(exc)}
+            raise RuntimeError(payload.get("error") or str(exc)) from exc
+        except error.URLError as exc:
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, ConnectionError):
+                raise RuntimeError(
+                    f"Connection lost during upload to '{self.server_url}'. "
+                    "The server may have rejected the request — check the server log."
+                ) from exc
+            raise RuntimeError(f"Could not reach server '{self.server_url}': {exc}") from exc
+        finally:
+            stream_body.close()
+
+        # Read the NDJSON+binary response
+        try:
+            return self._read_stream_response(resp, local_dest, progress_callback, download_callback)
+        finally:
+            resp.close()
+
+    def _read_stream_response(
+        self,
+        resp,
+        local_dest: str,
+        progress_callback: Optional[Callable[[float, str], None]],
+        download_callback: Optional[Callable[[int, int], None]],
+    ) -> str:
+        """Parse the multiplexed stream-convert response.
+
+        The response body is a sequence of NDJSON lines.  Some lines are
+        followed by raw binary data:
+
+          * ``{"type":"binary","size":N}`` — read exactly N bytes after
+            the newline as raw file data, then resume reading NDJSON.
+          * ``{"type":"file","size":-1}``  — output is starting; size unknown.
+          * ``{"type":"end","size":N}``    — successful completion.
+          * ``{"type":"error",...}``       — failure.
+        """
+        os.makedirs(os.path.dirname(local_dest) or ".", exist_ok=True)
+
+        fobj = None
+        downloaded = 0
+        file_size = -1
+        try:
+            while True:
+                raw_line = resp.readline()
+                if not raw_line:
+                    raise RuntimeError("Server closed connection before completing the response.")
+                raw_line = raw_line.rstrip(b"\r\n")
+                if not raw_line:
+                    continue
+                try:
+                    event = json.loads(raw_line.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+
+                etype = event.get("type", "")
+                if etype == "progress":
+                    if progress_callback:
+                        progress_callback(event.get("percent", 0.0), event.get("detail", ""))
+                elif etype == "status":
+                    if progress_callback:
+                        progress_callback(0.0, event.get("detail", ""))
+                elif etype == "error":
+                    raise RuntimeError(event.get("detail", "Server error during conversion."))
+                elif etype == "file":
+                    file_size = event.get("size", -1)
+                    if fobj is None:
+                        fobj = open(local_dest, "wb")
+                elif etype == "binary":
+                    n = int(event.get("size", 0))
+                    if n <= 0:
+                        continue
+                    if fobj is None:
+                        fobj = open(local_dest, "wb")
+                    # Read exactly n raw bytes
+                    remaining = n
+                    while remaining > 0:
+                        chunk = resp.read(min(remaining, 1024 * 1024))
+                        if not chunk:
+                            raise RuntimeError("Server closed connection mid-binary-frame.")
+                        fobj.write(chunk)
+                        downloaded += len(chunk)
+                        remaining -= len(chunk)
+                        if download_callback:
+                            download_callback(downloaded, file_size if file_size > 0 else downloaded)
+                elif etype == "end":
+                    if fobj is None:
+                        # Server reported "end" without sending a file
+                        raise RuntimeError("Server reported completion but sent no file data.")
+                    return local_dest
+                # Unknown event types are ignored for forward compatibility
+        finally:
+            if fobj is not None:
+                fobj.close()
 
     def poll_jobs(
         self,
