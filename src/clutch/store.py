@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 
 from clutch.converter import RESUME_MIN_DURATION, is_conversion_process_alive
 from clutch.mediainfo import extract_media_summary, get_media_duration_seconds
-from clutch.output import info, warning
+from clutch.output import info, warning, debug
 
 
 def utc_now() -> str:
@@ -490,7 +490,8 @@ class JobStore:
             extra = {}
         try:
             input_summary = extract_media_summary(record["input_file"])
-        except Exception:
+        except Exception as exc:
+            debug(f"extract_media_summary failed for {record['input_file']}: {type(exc).__name__}: {exc}")
             input_summary = {}
         if input_summary:
             extra["input_media"] = input_summary

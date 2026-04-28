@@ -5,7 +5,7 @@ import subprocess
 from typing import List
 
 from clutch import get_binary_path
-from clutch.output import info, warning, error, skip
+from clutch.output import info, warning, error, debug, skip
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.ts', '.iso')
 
@@ -59,19 +59,35 @@ def _first_available_value(*values: object) -> str:
 
 def get_mediainfo_json(filepath: str) -> dict:
     """Get full mediainfo JSON output for a file."""
+    basename = os.path.basename(filepath)
     try:
+        cmd = [get_binary_path("mediainfo"), "--Output=JSON", filepath]
+        debug(f"Running mediainfo for {basename}: {' '.join(cmd)}")
         result = subprocess.run(
-            [get_binary_path("mediainfo"), "--Output=JSON", filepath],
+            cmd,
             capture_output=True, check=True, encoding="utf-8", errors="replace",
         )
         if not result.stdout:
             stderr_msg = (result.stderr or "").strip()
+            debug(f"mediainfo returned empty stdout for {basename}"
+                  + (f" (stderr: {stderr_msg})" if stderr_msg else ""))
             error(f"mediainfo returned no output for {filepath}"
                   + (f": {stderr_msg}" if stderr_msg else ""))
             return {}
+        debug(f"mediainfo OK for {basename} ({len(result.stdout)} bytes)")
         return json.loads(result.stdout)
-    except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError,
-            OSError) as e:
+    except subprocess.CalledProcessError as e:
+        stderr_msg = (e.stderr or "").strip() if e.stderr else ""
+        debug(f"mediainfo exited with code {e.returncode} for {basename}"
+              + (f" (stderr: {stderr_msg})" if stderr_msg else ""))
+        error(f"Error getting media info for {filepath}: {e}")
+        return {}
+    except json.JSONDecodeError as e:
+        debug(f"mediainfo returned invalid JSON for {basename}: {e}")
+        error(f"Error getting media info for {filepath}: {e}")
+        return {}
+    except (TypeError, OSError) as e:
+        debug(f"Unexpected error running mediainfo for {basename}: {type(e).__name__}: {e}")
         error(f"Error getting media info for {filepath}: {e}")
         return {}
 
@@ -173,6 +189,7 @@ def extract_media_summary(filepath: str) -> dict:
 
 
 def get_resolution(filepath: str) -> str:
+    basename = os.path.basename(filepath)
     try:
         result = subprocess.run(
             [get_binary_path("mediainfo"), "--Inform=Video;%Width%x%Height%", filepath],
@@ -180,11 +197,15 @@ def get_resolution(filepath: str) -> str:
         )
         res = (result.stdout or "").strip()
         if res:
+            debug(f"Resolution for {basename}: {res}")
             return res
+        debug(f"mediainfo returned empty resolution for {basename}")
     except (subprocess.CalledProcessError, OSError) as e:
+        debug(f"mediainfo resolution failed for {basename}: {type(e).__name__}: {e}")
         error(f"Error getting resolution for {filepath}: {e}")
 
     # Fallback: try HandBrakeCLI scan when mediainfo fails
+    debug(f"Trying HandBrakeCLI scan fallback for resolution of {basename}")
     try:
         scan = subprocess.run(
             [get_binary_path("HandBrakeCLI"), "-i", filepath, "-t", "1", "--scan"],
@@ -192,9 +213,12 @@ def get_resolution(filepath: str) -> str:
         )
         m = re.search(r'\+ size: (\d+x\d+)', scan.stderr or "")
         if m:
-            warning(f"Resolution for {os.path.basename(filepath)} obtained via HandBrakeCLI scan fallback")
+            debug(f"HandBrakeCLI scan found resolution {m.group(1)} for {basename}")
+            warning(f"Resolution for {basename} obtained via HandBrakeCLI scan fallback")
             return m.group(1)
+        debug(f"HandBrakeCLI scan did not find resolution for {basename}")
     except (subprocess.TimeoutExpired, OSError) as e:
+        debug(f"HandBrakeCLI scan fallback failed for {basename}: {type(e).__name__}: {e}")
         error(f"HandBrakeCLI scan fallback also failed for {filepath}: {e}")
     return ""
 
