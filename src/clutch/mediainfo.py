@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from typing import List
 
@@ -63,8 +64,14 @@ def get_mediainfo_json(filepath: str) -> dict:
             [get_binary_path("mediainfo"), "--Output=JSON", filepath],
             capture_output=True, check=True, text=True,
         )
+        if not result.stdout:
+            stderr_msg = (result.stderr or "").strip()
+            error(f"mediainfo returned no output for {filepath}"
+                  + (f": {stderr_msg}" if stderr_msg else ""))
+            return {}
         return json.loads(result.stdout)
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+    except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError,
+            OSError) as e:
         error(f"Error getting media info for {filepath}: {e}")
         return {}
 
@@ -171,10 +178,25 @@ def get_resolution(filepath: str) -> str:
             [get_binary_path("mediainfo"), "--Inform=Video;%Width%x%Height%", filepath],
             capture_output=True, check=True, text=True,
         )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
+        res = (result.stdout or "").strip()
+        if res:
+            return res
+    except (subprocess.CalledProcessError, OSError) as e:
         error(f"Error getting resolution for {filepath}: {e}")
-        return ""
+
+    # Fallback: try HandBrakeCLI scan when mediainfo fails
+    try:
+        scan = subprocess.run(
+            [get_binary_path("HandBrakeCLI"), "-i", filepath, "-t", "1", "--scan"],
+            capture_output=True, text=True, timeout=120,
+        )
+        m = re.search(r'\+ size: (\d+x\d+)', scan.stderr or "")
+        if m:
+            warning(f"Resolution for {os.path.basename(filepath)} obtained via HandBrakeCLI scan fallback")
+            return m.group(1)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        error(f"HandBrakeCLI scan fallback also failed for {filepath}: {e}")
+    return ""
 
 
 def get_audio_info(filepath: str) -> List[dict]:

@@ -488,7 +488,10 @@ class JobStore:
             extra = json.loads(record["extra_json"] or "{}")
         except json.JSONDecodeError:
             extra = {}
-        input_summary = extract_media_summary(record["input_file"])
+        try:
+            input_summary = extract_media_summary(record["input_file"])
+        except Exception:
+            input_summary = {}
         if input_summary:
             extra["input_media"] = input_summary
         record["extra_json"] = json.dumps(extra)
