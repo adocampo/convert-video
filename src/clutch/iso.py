@@ -34,7 +34,7 @@ def scan_iso(filepath: str) -> List[dict]:
     try:
         result = subprocess.run(
             [get_binary_path("HandBrakeCLI"), "-i", filepath, "-t", "0", "--scan"],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=300,
         )
         # HandBrakeCLI outputs scan info on stderr
         output = result.stderr

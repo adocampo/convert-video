@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-04-28
+
+### Added in 2.0.0
+
+- **Client-server file upload**: Clutch can now act as a remote client, uploading local video files to a Clutch server for conversion via `--remote-server <HOST:PORT>`.
+- **CLI remote mode**: new `--remote-server`, `--token`, and `--upload-workers` flags for sending files to a remote Clutch instance with parallel uploads and live progress polling.
+- **Stream convert** (`--stream`): new single-request upload+convert+download mode. The client sends the file, the server converts it with HandBrakeCLI in real time, and streams the converted MKV back in the same HTTP response using NDJSON progress events followed by raw bytes. No polling required.
+- **File download** (`--download`): after a remote job finishes, the CLI can fetch the converted file from the server with a single flag.
+- **Web file upload**: the dashboard supports uploading files directly from the browser (Upload File / Upload Directory buttons) with per-file progress bars and glob pattern filtering.
+- **Download button**: completed jobs in the dashboard show a download button to fetch the converted file directly from the browser.
+- **Server upload infrastructure**: new `POST /upload`, `POST /upload-and-convert`, and `POST /stream-convert` endpoints supporting multipart/form-data with streaming writes and chunked Transfer-Encoding.
+- **Upload settings**: configurable `upload_dir` (inbox directory) and `max_upload_size` (per-file limit) in server settings.
+- **Remote client module**: new `clutch.remote.RemoteClient` class for programmatic interaction with a Clutch server.
+
+### Fixed in 2.0.0
+
+- **Windows encoding crash with non-ASCII characters in metadata**: all `subprocess` calls to `mediainfo` and `HandBrakeCLI` now use `encoding='utf-8'` instead of the system default (cp1252), preventing crashes when file metadata contains characters like Ñ in subtitle track names.
+- **mediainfo failure no longer blocks job submission**: if `mediainfo` returns empty output or fails, the job is still enqueued and the conversion proceeds. A `HandBrakeCLI --scan` fallback is used to obtain the resolution when `mediainfo` cannot.
+- **Chunked Transfer-Encoding in uploads**: fixed handling of chunked requests that omit `Content-Length`.
+- **Stream uploads from disk**: replaced full in-memory buffering with streaming reads for large file uploads.
+- **Real-time progress in stream-convert client**: switched from `read(8192)` to `readline()` so NDJSON progress events are delivered immediately instead of waiting for the buffer to fill.
+- **Log line parser**: fixed stale log file detection and improved robustness of the progress log reader.
+- **i18n placeholder syntax**: fixed stale-warning strings that used double-brace `{{}}` instead of single-brace `{}`.
+
+
+## [1.8.18] - 2026-04-24
+
+### Fixed in 1.8.18
+
+- **Windows installer parse error on PowerShell 5.1**: replaced Unicode em dash with ASCII double-dash in a string literal that caused PS5.1 to fail parsing the script with LF line endings.
+
+## [1.8.17] - 2026-04-24
+
+### Fixed in 1.8.17
+
+- **Windows installer fails with "Permission denied" on existing venv**: the installer now kills any remaining clutch processes holding file locks on the pipx venv before attempting reinstallation. It also cleans up orphan venv directories left behind by failed uninstalls, and checks both `clutch` and `convert-video` (legacy) scheduled tasks.
+
 ## [1.8.16] - 2026-04-24
 
 ### Fixed in 1.8.16
@@ -41,6 +78,52 @@ All notable changes to this project will be documented in this file.
 
 - **Systemd service crash on WSL (exit code 226/NAMESPACE)**: both `install.sh` and `clutch --install-service` now detect WSL and strip mount-namespace hardening directives (`ProtectSystem`, `PrivateTmp`, `ReadWritePaths`) that WSL does not support. Native Linux keeps the full hardening.
 - **Service now listens on all interfaces**: changed `--listen-host` default from `127.0.0.1` to `0.0.0.0` so the dashboard is reachable from other machines on the network.
+
+## [1.8.11] - 2026-04-22
+
+### Added in 1.8.11
+
+- **Windows installer registers clutch as a scheduled task**: `install.ps1` now offers to register `clutch --serve` as a Windows scheduled task that starts at system startup (before any user logs in). The password prompt, result messages, and "start now?" question all happen in the main installer window; only a brief UAC elevation runs silently in the background.
+
+### Fixed in 1.8.11
+
+- **Windows installer PowerShell 5.1 compatibility**: replaced all non-ASCII characters (em dashes, box-drawing lines) with ASCII equivalents so the script parses correctly on PS5.1 regardless of file encoding or BOM.
+- **Windows installer PowerShell 5.1 syntax**: replaced `$var = if () {} else {}` ternary-style assignments (PS7-only) with classic `if/else` blocks.
+- **Windows installer here-string removal**: replaced here-strings with string arrays joined at runtime, avoiding PS5.1 parsing failures when the file has LF line endings instead of CRLF.
+
+## [1.8.10] - 2026-04-22
+
+### Changed in 1.8.10
+
+- Test release for validating the Windows web/dashboard upgrade mechanism.
+
+## [1.8.9] - 2026-04-22
+
+### Changed in 1.8.9
+
+- Test release for validating the Windows deferred upgrade mechanism.
+
+## [1.8.8] - 2026-04-22
+
+### Fixed in 1.8.8
+
+- **Windows deferred upgrade now actually works**: the `.cmd` helper used `timeout /t 1` for the wait loop, which requires a console and fails silently under `CREATE_NO_WINDOW`. Replaced with `ping -n 2 127.0.0.1` which works without a console.
+- **Resolve full pipx path before spawning helper**: the deferred `.cmd` now embeds the absolute path to `pipx` instead of relying on PATH lookup in the detached process.
+- **Upgrade log file**: all pipx output is now written to `%TEMP%\clutch-upgrade.log` for debugging. The log path is shown to the user after launching the upgrade.
+
+## [1.8.7] - 2026-04-22
+
+### Fixed in 1.8.7
+
+- **Windows service upgrade no longer opens a visible terminal**: the deferred upgrade helper now runs with `CREATE_NO_WINDOW` so no `cmd.exe` window pops up during the upgrade process.
+- **Windows service upgrade no longer hangs**: `os.execvp` on Windows spawns a child process and waits (keeping the original PID alive), which caused the deferred helper to wait forever. The service now calls `sys.exit(0)` so the PID actually dies and the helper can proceed.
+- **Correct service restart command**: the deferred helper now receives the real service arguments (e.g. `clutch --serve --listen-host 0.0.0.0 --listen-port 8765`) instead of the invalid `clutch --service`.
+
+## [1.8.6] - 2026-04-21
+
+### Fixed in 1.8.6
+
+- **Windows disk display in system monitor**: physical drives now show the drive letter (e.g. `C:\`) as the mount label and the device path from `QueryDosDeviceW` (e.g. `\Device\HarddiskVolume3`) as the detail line. Network drives show the drive letter as mount and the UNC path (e.g. `\\NAS01\DOWNLOADS`) as device. Previously both fields were identical, causing duplicated text in the dashboard.
 
 ## [1.8.5] - 2026-04-21
 

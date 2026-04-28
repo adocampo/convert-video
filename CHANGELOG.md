@@ -2,16 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.0.0a1] - 2026-04-24
+## [2.0.0] - 2026-04-28
 
-### Added in 2.0.0a1
+### Added in 2.0.0
 
 - **Client-server file upload**: Clutch can now act as a remote client, uploading local video files to a Clutch server for conversion via `--remote-server <HOST:PORT>`.
 - **CLI remote mode**: new `--remote-server`, `--token`, and `--upload-workers` flags for sending files to a remote Clutch instance with parallel uploads and live progress polling.
-- **Web file upload**: the dashboard now supports uploading files directly from the browser (Upload File / Upload Directory buttons) with per-file progress bars and glob pattern filtering.
-- **Server upload infrastructure**: new `POST /upload` and `POST /upload-and-convert` endpoints for receiving file uploads via multipart/form-data with streaming writes.
+- **Stream convert** (`--stream`): new single-request upload+convert+download mode. The client sends the file, the server converts it with HandBrakeCLI in real time, and streams the converted MKV back in the same HTTP response using NDJSON progress events followed by raw bytes. No polling required.
+- **File download** (`--download`): after a remote job finishes, the CLI can fetch the converted file from the server with a single flag.
+- **Web file upload**: the dashboard supports uploading files directly from the browser (Upload File / Upload Directory buttons) with per-file progress bars and glob pattern filtering.
+- **Download button**: completed jobs in the dashboard show a download button to fetch the converted file directly from the browser.
+- **Server upload infrastructure**: new `POST /upload`, `POST /upload-and-convert`, and `POST /stream-convert` endpoints supporting multipart/form-data with streaming writes and chunked Transfer-Encoding.
 - **Upload settings**: configurable `upload_dir` (inbox directory) and `max_upload_size` (per-file limit) in server settings.
 - **Remote client module**: new `clutch.remote.RemoteClient` class for programmatic interaction with a Clutch server.
+
+### Fixed in 2.0.0
+
+- **Windows encoding crash with non-ASCII characters in metadata**: all `subprocess` calls to `mediainfo` and `HandBrakeCLI` now use `encoding='utf-8'` instead of the system default (cp1252), preventing crashes when file metadata contains characters like Ñ in subtitle track names.
+- **mediainfo failure no longer blocks job submission**: if `mediainfo` returns empty output or fails, the job is still enqueued and the conversion proceeds. A `HandBrakeCLI --scan` fallback is used to obtain the resolution when `mediainfo` cannot.
+- **Chunked Transfer-Encoding in uploads**: fixed handling of chunked requests that omit `Content-Length`.
+- **Stream uploads from disk**: replaced full in-memory buffering with streaming reads for large file uploads.
+- **Real-time progress in stream-convert client**: switched from `read(8192)` to `readline()` so NDJSON progress events are delivered immediately instead of waiting for the buffer to fill.
+- **Log line parser**: fixed stale log file detection and improved robustness of the progress log reader.
+- **i18n placeholder syntax**: fixed stale-warning strings that used double-brace `{{}}` instead of single-brace `{}`.
+
+
+## [1.8.18] - 2026-04-24
+
+### Fixed in 1.8.18
+
+- **Windows installer parse error on PowerShell 5.1**: replaced Unicode em dash with ASCII double-dash in a string literal that caused PS5.1 to fail parsing the script with LF line endings.
+
+## [1.8.17] - 2026-04-24
+
+### Fixed in 1.8.17
+
+- **Windows installer fails with "Permission denied" on existing venv**: the installer now kills any remaining clutch processes holding file locks on the pipx venv before attempting reinstallation. It also cleans up orphan venv directories left behind by failed uninstalls, and checks both `clutch` and `convert-video` (legacy) scheduled tasks.
 
 ## [1.8.16] - 2026-04-24
 
