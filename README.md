@@ -16,6 +16,9 @@ Clutch manages video transcodes through HandBrakeCLI from the command line or fr
 - Skip wasteful re-encodes using codec-aware and muxer-aware detection.
 - Check for updates and upgrade in place with the built-in `--update` and `--upgrade` commands, plus daily release reminders in the CLI.
 - Expose an HTTP service with a built-in dashboard to inspect the queue and submit jobs remotely.
+- Upload local files directly to a remote clutch server with `--remote-server` from CLI or browser.
+- Stream-convert files in one step with `--stream` (upload + remote convert + immediate download).
+- Download completed remote jobs with `--download`.
 - Pause and resume running conversions from the dashboard or the HTTP API.
 - Survive service restarts: active conversions are detached on shutdown and automatically reattached on the next start when the encoder process is still alive.
 - Show a dashboard release icon with a badge when the service detects a newer version, including one-click upgrade and restart.
@@ -284,7 +287,10 @@ When you pass `--gpus`, `clutch` routes NVENC jobs through those GPU indices in 
 
 You can now run `clutch` as a service on machine A and submit jobs from another machine in the LAN.
 
-Important: in the first implementation, machine A must already be able to access the source and destination paths as normal filesystem paths. This works well with pre-mounted SMB or NFS shares. The service does not upload files from B to A and does not mount remote shares by itself.
+You can use two remote workflows:
+
+- **Path-based submission** with `--server-url`: machine A must already see the source/destination paths (for example SMB/NFS mounted on the server).
+- **Upload-based submission** with `--remote-server`: machine B uploads files to machine A directly, then polls for completion and can optionally download results back.
 
 #### Running as a systemd service (Linux)
 
@@ -393,6 +399,33 @@ clutch \
 ```
 
 If you omit `-o`, the service keeps the current behavior and writes the converted output next to the source file.
+
+#### Remote upload and stream workflows (2.0)
+
+Upload local files to a remote server and queue remote jobs:
+
+```bash
+clutch \
+  --remote-server machine-a:8765 \
+  --token YOUR_TOKEN \
+  --upload-workers 4 \
+  --download \
+  -o ./converted \
+  ./input/*.mkv
+```
+
+Run single-step stream conversion (upload + convert + download in one request):
+
+```bash
+clutch \
+  --remote-server machine-a:8765 \
+  --token YOUR_TOKEN \
+  --stream \
+  -o ./converted \
+  ./movie.mkv
+```
+
+Use `--server-url` and `--remote-server` as separate modes. They are mutually exclusive by design.
 
 Runtime service configuration is persisted in the service database (`--service-db`). This includes allowed roots, worker count, configured NVENC GPU indices, default job settings, and watched directories configured through the dashboard, so they survive service restarts. On first start, CLI service options seed that state; after that, the persisted state is restored from the database.
 
@@ -512,6 +545,18 @@ clutch watcher detects new files and enqueues conversion
 Conversion completes → hardlinks removed (delete_source)
 qBittorrent originals untouched → seeding continues
 ```
+
+### Full option reference and wiki
+
+The README focuses on practical workflows. The complete option-by-option reference is available in `docs/wiki/`:
+
+- [docs/wiki/Home.md](docs/wiki/Home.md)
+- [docs/wiki/CLI-Options-Reference.md](docs/wiki/CLI-Options-Reference.md)
+- [docs/wiki/Service-and-API.md](docs/wiki/Service-and-API.md)
+- [docs/wiki/Remote-Upload-and-Stream-Mode.md](docs/wiki/Remote-Upload-and-Stream-Mode.md)
+- [docs/wiki/Scheduling-and-Energy-Rules.md](docs/wiki/Scheduling-and-Energy-Rules.md)
+
+You can mirror these pages to GitHub Wiki at any time by enabling Wiki in repository settings and pushing to the `.wiki` repository.
 
 ### Advanced options
 
