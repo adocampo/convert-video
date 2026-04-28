@@ -62,7 +62,7 @@ def get_mediainfo_json(filepath: str) -> dict:
     try:
         result = subprocess.run(
             [get_binary_path("mediainfo"), "--Output=JSON", filepath],
-            capture_output=True, check=True, text=True,
+            capture_output=True, check=True, encoding="utf-8", errors="replace",
         )
         if not result.stdout:
             stderr_msg = (result.stderr or "").strip()
@@ -176,7 +176,7 @@ def get_resolution(filepath: str) -> str:
     try:
         result = subprocess.run(
             [get_binary_path("mediainfo"), "--Inform=Video;%Width%x%Height%", filepath],
-            capture_output=True, check=True, text=True,
+            capture_output=True, check=True, encoding="utf-8", errors="replace",
         )
         res = (result.stdout or "").strip()
         if res:
@@ -188,7 +188,7 @@ def get_resolution(filepath: str) -> str:
     try:
         scan = subprocess.run(
             [get_binary_path("HandBrakeCLI"), "-i", filepath, "-t", "1", "--scan"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=120,
         )
         m = re.search(r'\+ size: (\d+x\d+)', scan.stderr or "")
         if m:

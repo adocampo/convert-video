@@ -516,7 +516,7 @@ def _join_with_mkvmerge(partial_file: str, remainder_file: str, output_file: str
     try:
         result = subprocess.run(
             [get_binary_path("mkvmerge"), "-o", output_file, partial_file, "+", remainder_file],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         # mkvmerge returns 0 on success, 1 on warnings (still OK)
         return result.returncode in (0, 1)
