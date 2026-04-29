@@ -57,9 +57,25 @@ def _first_available_value(*values: object) -> str:
     return ""
 
 
+# In-process cache: (abspath, mtime) -> parsed JSON dict.
+# Avoids redundant subprocess calls when multiple functions probe the same file.
+_mediainfo_cache: dict[tuple[str, float], dict] = {}
+
+
 def get_mediainfo_json(filepath: str) -> dict:
-    """Get full mediainfo JSON output for a file."""
+    """Get full mediainfo JSON output for a file, using a per-mtime in-process cache."""
     basename = os.path.basename(filepath)
+    abspath = os.path.abspath(filepath)
+    try:
+        mtime = os.path.getmtime(abspath)
+    except OSError:
+        mtime = -1.0
+
+    cache_key = (abspath, mtime)
+    if cache_key in _mediainfo_cache:
+        debug(f"mediainfo cache hit for {basename}")
+        return _mediainfo_cache[cache_key]
+
     try:
         cmd = [get_binary_path("mediainfo"), "--Output=JSON", filepath]
         debug(f"Running mediainfo for {basename}: {' '.join(cmd)}")
@@ -75,7 +91,9 @@ def get_mediainfo_json(filepath: str) -> dict:
                   + (f": {stderr_msg}" if stderr_msg else ""))
             return {}
         debug(f"mediainfo OK for {basename} ({len(result.stdout)} bytes)")
-        return json.loads(result.stdout)
+        parsed = json.loads(result.stdout)
+        _mediainfo_cache[cache_key] = parsed
+        return parsed
     except subprocess.CalledProcessError as e:
         stderr_msg = (e.stderr or "").strip() if e.stderr else ""
         debug(f"mediainfo exited with code {e.returncode} for {basename}"

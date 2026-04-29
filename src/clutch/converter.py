@@ -149,6 +149,7 @@ def clear_current_conversion_state(thread_id: Optional[int] = None):
 
 
 def _spawn_conversion_process(args, *, stdout=None, stderr=None) -> subprocess.Popen:
+    debug(f"HandBrakeCLI command: {' '.join(str(a) for a in args)}")
     kwargs = {
         "stdout": stdout,
         "stderr": stderr,
@@ -555,14 +556,21 @@ RESUME_SAFETY_MARGIN = 5.0
 
 def _join_with_mkvmerge(partial_file: str, remainder_file: str, output_file: str) -> bool:
     """Join a partial encode with its remainder using mkvmerge append mode."""
+    cmd = [get_binary_path("mkvmerge"), "-o", output_file, partial_file, "+", remainder_file]
+    debug(f"mkvmerge join: {' '.join(cmd)}")
     try:
         result = subprocess.run(
-            [get_binary_path("mkvmerge"), "-o", output_file, partial_file, "+", remainder_file],
+            cmd,
             capture_output=True, encoding="utf-8", errors="replace",
         )
         # mkvmerge returns 0 on success, 1 on warnings (still OK)
-        return result.returncode in (0, 1)
-    except (FileNotFoundError, subprocess.SubprocessError):
+        ok = result.returncode in (0, 1)
+        if not ok:
+            stderr_text = (result.stderr or result.stdout or "").strip()
+            debug(f"mkvmerge join failed (exit {result.returncode})" + (f": {stderr_text}" if stderr_text else ""))
+        return ok
+    except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        debug(f"mkvmerge join raised {type(exc).__name__}: {exc}")
         return False
 
 
@@ -622,6 +630,8 @@ def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool 
                 capture_output=True, check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            stderr_text = (getattr(e, 'stderr', None) or b"").decode("utf-8", errors="replace").strip() if isinstance(getattr(e, 'stderr', None), bytes) else str(getattr(e, 'stderr', '') or '')
+            debug(f"mkvpropedit audio title track {track_num} failed: {type(e).__name__}: {e}" + (f" | stderr: {stderr_text}" if stderr_text else ""))
             if emit_logs:
                 warning(f"Could not set audio title for track {track_num}: {e}")
 
@@ -770,19 +780,24 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
     # Restore the original HandBrake writing-app so skip detection still works
     # on the next run (mkvmerge overwrites it with its own signature).
     if _original_writing_app:
+        propedit_cmd = [
+            get_binary_path("mkvpropedit"), output_file,
+            "--set", f"muxing-app={_original_writing_app}",
+            "--set", f"writing-app={_original_writing_app}",
+        ]
+        debug(f"mkvpropedit restore writing-app: {' '.join(propedit_cmd)}")
         try:
-            subprocess.run(
-                [
-                    get_binary_path("mkvpropedit"), output_file,
-                    "--set", f"muxing-app={_original_writing_app}",
-                    "--set", f"writing-app={_original_writing_app}",
-                ],
+            pe_result = subprocess.run(
+                propedit_cmd,
                 capture_output=True,
                 encoding="utf-8",
                 errors="replace",
             )
-        except (FileNotFoundError, subprocess.SubprocessError):
-            pass
+            if pe_result.returncode != 0:
+                stderr_text = (pe_result.stderr or pe_result.stdout or "").strip()
+                debug(f"mkvpropedit exited {pe_result.returncode}" + (f": {stderr_text}" if stderr_text else ""))
+        except (FileNotFoundError, subprocess.SubprocessError) as exc:
+            debug(f"mkvpropedit raised {type(exc).__name__}: {exc}")
 
 
 class ConversionDetached(RuntimeError):
