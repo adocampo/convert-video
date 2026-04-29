@@ -148,6 +148,41 @@ def clear_current_conversion_state(thread_id: Optional[int] = None):
         _conversion_states.pop(key, None)
 
 
+def _debug_run(
+    cmd: list,
+    *,
+    encoding: str = "utf-8",
+    errors: str = "replace",
+    check: bool = False,
+    timeout: Optional[float] = None,
+) -> subprocess.CompletedProcess:
+    """subprocess.run wrapper that always logs the command + full output at DEBUG level."""
+    debug(f"$ {' '.join(str(a) for a in cmd)}")
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        encoding=encoding,
+        errors=errors,
+        check=check,
+        **({"timeout": timeout} if timeout is not None else {}),
+    )
+    for stream_name, stream_text in (("stdout", result.stdout), ("stderr", result.stderr)):
+        text = (stream_text or "").strip()
+        if not text:
+            continue
+        lines = text.splitlines()
+        header = f"[exit {result.returncode}] {stream_name}"
+        if len(lines) > 50:
+            debug(f"{header} ({len(lines)} lines, showing last 50):")
+            for line in lines[-50:]:
+                debug(f"  {line}")
+        else:
+            debug(f"{header}:")
+            for line in lines:
+                debug(f"  {line}")
+    return result
+
+
 def _spawn_conversion_process(args, *, stdout=None, stderr=None) -> subprocess.Popen:
     debug(f"HandBrakeCLI command: {' '.join(str(a) for a in args)}")
     kwargs = {
@@ -455,10 +490,8 @@ def parse_gpu_devices(value: object) -> list[int]:
 def get_visible_nvidia_gpus() -> list[dict[str, object]]:
     """Return visible NVIDIA GPUs detected through nvidia-smi."""
     try:
-        result = subprocess.run(
+        result = _debug_run(
             ["nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
             check=True,
             timeout=5,
         )
@@ -557,18 +590,10 @@ RESUME_SAFETY_MARGIN = 5.0
 def _join_with_mkvmerge(partial_file: str, remainder_file: str, output_file: str) -> bool:
     """Join a partial encode with its remainder using mkvmerge append mode."""
     cmd = [get_binary_path("mkvmerge"), "-o", output_file, partial_file, "+", remainder_file]
-    debug(f"mkvmerge join: {' '.join(cmd)}")
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True, encoding="utf-8", errors="replace",
-        )
+        result = _debug_run(cmd)
         # mkvmerge returns 0 on success, 1 on warnings (still OK)
-        ok = result.returncode in (0, 1)
-        if not ok:
-            stderr_text = (result.stderr or result.stdout or "").strip()
-            debug(f"mkvmerge join failed (exit {result.returncode})" + (f": {stderr_text}" if stderr_text else ""))
-        return ok
+        return result.returncode in (0, 1)
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
         debug(f"mkvmerge join raised {type(exc).__name__}: {exc}")
         return False
@@ -623,15 +648,14 @@ def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool 
         title = track.get("Title", "Stereo")
         track_num = i + 1
         try:
-            subprocess.run(
+            _debug_run(
                 [get_binary_path("mkvpropedit"), output_file,
                  "--edit", f"track:a{track_num}",
                  "--set", f"name={title}"],
-                capture_output=True, check=True,
+                check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            stderr_text = (getattr(e, 'stderr', None) or b"").decode("utf-8", errors="replace").strip() if isinstance(getattr(e, 'stderr', None), bytes) else str(getattr(e, 'stderr', '') or '')
-            debug(f"mkvpropedit audio title track {track_num} failed: {type(e).__name__}: {e}" + (f" | stderr: {stderr_text}" if stderr_text else ""))
+            debug(f"mkvpropedit audio title track {track_num} failed: {type(e).__name__}: {e}")
             if emit_logs:
                 warning(f"Could not set audio title for track {track_num}: {e}")
 
@@ -738,13 +762,9 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
         command.extend(["--language", f"0:{language}", subtitle_path])
 
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        result = _debug_run(command)
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        debug(f"mkvmerge subtitle mux raised {type(exc).__name__}: {exc}")
         if emit_logs:
             warning(f"Could not add external subtitles (mkvmerge error): {exc}")
         try:
@@ -785,17 +805,8 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
             "--set", f"muxing-app={_original_writing_app}",
             "--set", f"writing-app={_original_writing_app}",
         ]
-        debug(f"mkvpropedit restore writing-app: {' '.join(propedit_cmd)}")
         try:
-            pe_result = subprocess.run(
-                propedit_cmd,
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if pe_result.returncode != 0:
-                stderr_text = (pe_result.stderr or pe_result.stdout or "").strip()
-                debug(f"mkvpropedit exited {pe_result.returncode}" + (f": {stderr_text}" if stderr_text else ""))
+            _debug_run(propedit_cmd)
         except (FileNotFoundError, subprocess.SubprocessError) as exc:
             debug(f"mkvpropedit raised {type(exc).__name__}: {exc}")
 
