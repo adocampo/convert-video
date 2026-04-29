@@ -639,9 +639,9 @@ def _find_external_subtitles(input_file: str) -> list[tuple[str, str]]:
         language = "und"
         if stem_folded == base_folded:
             language = "und"
-        elif stem_folded.startswith(f"{base_folded}."):
+        elif stem_folded.startswith(f"{base_folded}.") or stem_folded.startswith(f"{base_folded}_"):
             suffix = stem[len(base_name) + 1:]
-            if not suffix or "." in suffix:
+            if not suffix or "." in suffix or "_" in suffix:
                 continue
             language = _normalize_subtitle_language(suffix)
         else:

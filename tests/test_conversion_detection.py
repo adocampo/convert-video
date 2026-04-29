@@ -130,6 +130,32 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
                 ],
             )
 
+    def test_detects_language_suffix_with_underscore_separator(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = os.path.join(temp_dir, "movie.mp4")
+            with open(video, "w", encoding="utf-8") as handle:
+                handle.write("video")
+
+            subtitle_paths = [
+                os.path.join(temp_dir, "movie_es.srt"),
+                os.path.join(temp_dir, "movie_eng.ass"),
+                os.path.join(temp_dir, "movie.srt"),
+            ]
+            for path in subtitle_paths:
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("sub")
+
+            found = _find_external_subtitles(video)
+
+            self.assertEqual(
+                [(os.path.basename(path), lang) for path, lang in found],
+                [
+                    ("movie.srt", "und"),
+                    ("movie_eng.ass", "eng"),
+                    ("movie_es.srt", "spa"),
+                ],
+            )
+
     def test_ignores_non_matching_or_invalid_suffix_patterns(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             video = os.path.join(temp_dir, "movie.avi")
@@ -138,6 +164,7 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
 
             noise = [
                 "movie.en.us.srt",  # multiple dotted suffixes are invalid
+                "movie_en_us.srt",  # multiple underscored suffixes are invalid
                 "movie-extra.srt",  # different basename
                 "movie.txt",        # unsupported extension
             ]
