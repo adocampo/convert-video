@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 from typing import Callable, Optional
 
 if os.name != "nt":
@@ -28,6 +29,7 @@ EXTERNAL_SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".idx", ".sub"}
 LANGUAGE_CODE_ALIASES = {
     "en": "eng",
     "es": "spa",
+    "ca": "cat",
     "fr": "fra",
     "de": "deu",
     "it": "ita",
@@ -36,6 +38,32 @@ LANGUAGE_CODE_ALIASES = {
     "ko": "kor",
     "zh": "zho",
     "ru": "rus",
+}
+
+LANGUAGE_NAME_ALIASES = {
+    "castellano": "spa",
+    "espanol": "spa",
+    "spanish": "spa",
+    "ingles": "eng",
+    "english": "eng",
+    "catala": "cat",
+    "catalan": "cat",
+    "frances": "fra",
+    "french": "fra",
+    "aleman": "deu",
+    "german": "deu",
+    "italiano": "ita",
+    "italian": "ita",
+    "portugues": "por",
+    "portuguese": "por",
+    "japones": "jpn",
+    "japanese": "jpn",
+    "korean": "kor",
+    "coreano": "kor",
+    "chinese": "zho",
+    "chino": "zho",
+    "russian": "rus",
+    "ruso": "rus",
 }
 
 # Global references for cleanup on signal
@@ -602,7 +630,19 @@ def _normalize_subtitle_language(language_token: str) -> str:
     token = (language_token or "").strip().lower().replace("_", "-")
     if not token:
         return "und"
-    primary = token.split("-", 1)[0]
+
+    # Normalize accents so aliases like "castellano"/"español" map consistently.
+    folded = "".join(
+        ch for ch in unicodedata.normalize("NFKD", token) if not unicodedata.combining(ch)
+    )
+    folded = folded.replace("_", "-")
+
+    if folded in LANGUAGE_NAME_ALIASES:
+        return LANGUAGE_NAME_ALIASES[folded]
+
+    primary = folded.split("-", 1)[0]
+    if primary in LANGUAGE_NAME_ALIASES:
+        return LANGUAGE_NAME_ALIASES[primary]
     if len(primary) == 2 and primary.isalpha():
         return LANGUAGE_CODE_ALIASES.get(primary, primary)
     if len(primary) == 3 and primary.isalpha():
@@ -641,7 +681,7 @@ def _find_external_subtitles(input_file: str) -> list[tuple[str, str]]:
             language = "und"
         elif stem_folded.startswith(f"{base_folded}.") or stem_folded.startswith(f"{base_folded}_"):
             suffix = stem[len(base_name) + 1:]
-            if not suffix or "." in suffix or "_" in suffix:
+            if not suffix or "." in suffix:
                 continue
             language = _normalize_subtitle_language(suffix)
         else:

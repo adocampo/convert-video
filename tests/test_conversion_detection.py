@@ -139,6 +139,10 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
             subtitle_paths = [
                 os.path.join(temp_dir, "movie_es.srt"),
                 os.path.join(temp_dir, "movie_eng.ass"),
+                os.path.join(temp_dir, "movie_ca_ES.srt"),
+                os.path.join(temp_dir, "movie_es-ES.vtt"),
+                os.path.join(temp_dir, "movie_castellano.ass"),
+                os.path.join(temp_dir, "movie_english.srt"),
                 os.path.join(temp_dir, "movie.srt"),
             ]
             for path in subtitle_paths:
@@ -151,7 +155,11 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
                 [(os.path.basename(path), lang) for path, lang in found],
                 [
                     ("movie.srt", "und"),
+                    ("movie_ca_ES.srt", "cat"),
+                    ("movie_castellano.ass", "spa"),
                     ("movie_eng.ass", "eng"),
+                    ("movie_english.srt", "eng"),
+                    ("movie_es-ES.vtt", "spa"),
                     ("movie_es.srt", "spa"),
                 ],
             )
@@ -164,7 +172,6 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
 
             noise = [
                 "movie.en.us.srt",  # multiple dotted suffixes are invalid
-                "movie_en_us.srt",  # multiple underscored suffixes are invalid
                 "movie-extra.srt",  # different basename
                 "movie.txt",        # unsupported extension
             ]
@@ -197,8 +204,12 @@ class ExternalSubtitleDetectionTests(unittest.TestCase):
     def test_normalize_subtitle_language_defaults_to_und_for_unknown_tokens(self):
         self.assertEqual(_normalize_subtitle_language("es"), "spa")
         self.assertEqual(_normalize_subtitle_language("eng"), "eng")
+        self.assertEqual(_normalize_subtitle_language("es-ES"), "spa")
+        self.assertEqual(_normalize_subtitle_language("ca_ES"), "cat")
+        self.assertEqual(_normalize_subtitle_language("castellano"), "spa")
+        self.assertEqual(_normalize_subtitle_language("english"), "eng")
         self.assertEqual(_normalize_subtitle_language("   "), "und")
-        self.assertEqual(_normalize_subtitle_language("spanish"), "und")
+        self.assertEqual(_normalize_subtitle_language("spanish"), "spa")
 
 
 class StateDirectoryMigrationTests(unittest.TestCase):
