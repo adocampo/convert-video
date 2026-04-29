@@ -21,9 +21,9 @@ from tqdm import tqdm
 
 from clutch import get_binary_path
 from clutch.output import (
-    info, warning, error, success, skip,
+    info, warning, error, success, skip, debug,
 )
-from clutch.mediainfo import check_already_converted, get_resolution, get_audio_info
+from clutch.mediainfo import check_already_converted, get_resolution, get_audio_info, get_mediainfo_json
 
 EXTERNAL_SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".idx", ".sub"}
 LANGUAGE_CODE_ALIASES = {
@@ -699,8 +699,11 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
         return
 
     if emit_logs:
-        listed = ", ".join(os.path.basename(path) for path, _ in subtitles)
-        info(f"Adding external subtitles to output: {listed}")
+        info(f"Adding {len(subtitles)} external subtitle track(s) to output.")
+        listed = ", ".join(
+            f"{os.path.basename(path)}[{language}]" for path, language in subtitles
+        )
+        debug(f"External subtitle matches: {listed}")
 
     merged_output = f"{output_file}.subs.tmp.mkv"
     command = [get_binary_path("mkvmerge"), "-o", merged_output, output_file]
@@ -937,11 +940,16 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
 
     is_iso = title is not None
     is_resume = bool(resume_partial_file and resume_offset_seconds > 0)
+    media_info_data: dict | None = None
+
+    if not is_iso:
+        # Reuse one mediainfo JSON payload for resolution/audio decisions.
+        media_info_data = get_mediainfo_json(input_file)
 
     if resolution_override:
         resolution = resolution_override
     else:
-        resolution = get_resolution(input_file)
+        resolution = get_resolution(input_file, data=media_info_data)
         if not resolution:
             return ""
 
@@ -988,7 +996,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 "--audio-copy-mask", "",
             ]
     else:
-        audio_info = get_audio_info(input_file)
+        audio_info = get_audio_info(input_file, data=media_info_data)
         if audio_info:
             track_list = []
             encoder_list = []

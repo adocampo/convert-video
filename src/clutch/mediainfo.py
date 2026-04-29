@@ -92,6 +92,21 @@ def get_mediainfo_json(filepath: str) -> dict:
         return {}
 
 
+def _resolution_from_data(data: dict, basename: str = "") -> str:
+    tracks = (data.get("media") or {}).get("track") or []
+    video_track = next((t for t in tracks if t.get("@type") == "Video"), None)
+    if not video_track:
+        return ""
+    width = str(video_track.get("Width", "")).strip()
+    height = str(video_track.get("Height", "")).strip()
+    if not width or not height:
+        return ""
+    resolution = f"{width}x{height}"
+    if basename:
+        debug(f"Resolution for {basename}: {resolution}")
+    return resolution
+
+
 def get_media_duration_seconds(filepath: str) -> float:
     """Return the duration in seconds of a media file, or 0.0 if unknown."""
     data = get_mediainfo_json(filepath)
@@ -188,8 +203,13 @@ def extract_media_summary(filepath: str) -> dict:
     return summary
 
 
-def get_resolution(filepath: str) -> str:
+def get_resolution(filepath: str, data: dict | None = None) -> str:
     basename = os.path.basename(filepath)
+    if data:
+        resolved = _resolution_from_data(data, basename)
+        if resolved:
+            return resolved
+
     try:
         result = subprocess.run(
             [get_binary_path("mediainfo"), "--Inform=Video;%Width%x%Height%", filepath],
@@ -223,8 +243,9 @@ def get_resolution(filepath: str) -> str:
     return ""
 
 
-def get_audio_info(filepath: str) -> List[dict]:
-    data = get_mediainfo_json(filepath)
+def get_audio_info(filepath: str, data: dict | None = None) -> List[dict]:
+    if data is None:
+        data = get_mediainfo_json(filepath)
     if not data:
         return []
     try:
