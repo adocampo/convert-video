@@ -15,7 +15,7 @@ from typing import List
 from tqdm import tqdm
 
 from clutch import APP_NAME, REQUIRED_BINARIES, get_version, set_binary_paths, detect_binary
-from clutch.output import info, warning, error, deleted, skip, success
+from clutch.output import info, warning, error, deleted, skip, success, set_console_log_level
 from clutch.mediainfo import VIDEO_EXTENSIONS, show_source_info, check_already_converted
 from clutch.converter import (
     install_signal_handlers, convert_video, confirm_prompt, poweroff_with_countdown,
@@ -734,6 +734,8 @@ def main():
                            help="Automatically accept transcoding without prompts.")
     beh_group.add_argument("--verbose", action="store_true",
                            help="Show verbose output from HandBrakeCLI.")
+    beh_group.add_argument("--debug", action="store_true",
+                           help="Show debug diagnostics in console output.")
     beh_group.add_argument("-w", "--workers", type=int, default=1,
                            help="Number of local conversion workers to run in parallel (default: 1).")
     beh_group.add_argument("-po", "--poweroff", action="store_true",
@@ -821,6 +823,8 @@ def main():
                             help="Install the systemd user unit file for running clutch as a background service (Linux only).")
 
     args = parser.parse_args()
+
+    set_console_log_level("DEBUG" if args.debug else "INFO")
 
     if args.workers < 1:
         parser.error("--workers must be at least 1.")
@@ -993,7 +997,7 @@ def main():
                 if item.lower().endswith(VIDEO_EXTENSIONS):
                     input_files.append(item)
                 else:
-                    warning(f"Skipping non-video file: '{os.path.basename(item)}'")
+                    info(f"Skipping non-video file: '{os.path.basename(item)}'")
             elif os.path.isdir(item):
                 if args.recursive:
                     for root, _, filenames in os.walk(item):

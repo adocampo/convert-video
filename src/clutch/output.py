@@ -17,11 +17,23 @@ MAGENTA_COLOR = '\033[0;35m'
 
 # Central logger for the application
 logger = logging.getLogger("clutch")
+logger.propagate = False
 
 # Reference to the file handler so we can reconfigure it at runtime
 _file_handler: TimedRotatingFileHandler | None = None
 _log_dir: str | None = None
 _retention_days: int = 30
+_console_level: int = logging.INFO
+
+
+def _resolve_level(level: str) -> int:
+    return getattr(logging, str(level).upper(), logging.INFO)
+
+
+def set_console_log_level(level: str) -> None:
+    """Set the minimum level for console output helpers."""
+    global _console_level
+    _console_level = _resolve_level(level)
 
 
 def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 30):
@@ -47,7 +59,7 @@ def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 
         "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     ))
-    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    numeric_level = _resolve_level(level)
     handler.setLevel(numeric_level)
     logger.addHandler(handler)
     logger.setLevel(min(logger.level or numeric_level, numeric_level))
@@ -61,7 +73,7 @@ def set_log_level(level: str):
     """Change the file handler level at runtime."""
     if _file_handler is None:
         return
-    numeric = getattr(logging, level.upper(), logging.INFO)
+    numeric = _resolve_level(level)
     _file_handler.setLevel(numeric)
     logger.setLevel(min(logger.level or numeric, numeric))
 
@@ -92,36 +104,47 @@ def _status(label: str, color: str, msg: str, *, stream=sys.stdout):
     print(f"[{color}{label}{RESET_COLOR}] {msg}", file=stream)
 
 
+def _emit_console(level: int) -> bool:
+    return level >= _console_level
+
+
 def info(msg: str):
-    print(f"{CYAN_COLOR}{msg}{RESET_COLOR}")
+    if _emit_console(logging.INFO):
+        print(f"{CYAN_COLOR}{msg}{RESET_COLOR}")
     logger.info(msg)
 
 
 def warning(msg: str):
-    _status("WARN", YELLOW_COLOR, msg)
+    if _emit_console(logging.WARNING):
+        _status("WARN", YELLOW_COLOR, msg)
     logger.warning(msg)
 
 
 def debug(msg: str):
-    _status("DBG ", MAGENTA_COLOR, msg)
+    if _emit_console(logging.DEBUG):
+        _status("DBG ", MAGENTA_COLOR, msg)
     logger.debug(msg)
 
 
 def error(msg: str):
-    _status("FAIL", RED_COLOR, msg, stream=sys.stderr)
+    if _emit_console(logging.ERROR):
+        _status("FAIL", RED_COLOR, msg, stream=sys.stderr)
     logger.error(msg)
 
 
 def success(msg: str):
-    _status(" OK ", GREEN_COLOR, msg)
+    if _emit_console(logging.INFO):
+        _status(" OK ", GREEN_COLOR, msg)
     logger.info(msg)
 
 
 def skip(msg: str):
-    _status("SKIP", BLUE_COLOR, msg)
+    if _emit_console(logging.INFO):
+        _status("SKIP", BLUE_COLOR, msg)
     logger.info(msg)
 
 
 def deleted(msg: str):
-    _status("DEL ", MAGENTA_COLOR, msg)
+    if _emit_console(logging.INFO):
+        _status("DEL ", MAGENTA_COLOR, msg)
     logger.info(msg)

@@ -812,18 +812,28 @@ def confirm_prompt() -> bool:
     """Interactive confirmation prompt. Returns True to proceed, False to cancel."""
     while True:
         warning("Continue with transcoding? [Y(yes)/N(no)] (default Y): ")
+        key = None
         try:
             import tty
             import termios
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
+        except ImportError:
+            tty = None
+            termios = None
+
+        if tty is not None and termios is not None:
             try:
-                tty.setraw(fd)
-                key = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        except (ImportError, termios.error, ValueError):
-            # Fallback for non-TTY environments
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                try:
+                    tty.setraw(fd)
+                    key = sys.stdin.read(1)
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except (termios.error, ValueError, OSError):
+                key = None
+
+        if key is None:
+            # Fallback for non-TTY environments and platforms without termios.
             key = input().strip()
             if not key:
                 key = "y"
