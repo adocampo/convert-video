@@ -11,7 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from clutch import build_state_dir
 from clutch.service import ConversionJob, ConversionService, JobStore
-from clutch.converter import find_existing_converted_output
+from clutch.converter import (
+    find_existing_converted_output,
+    _find_external_subtitles,
+    _normalize_subtitle_language,
+)
 from clutch.mediainfo import check_already_converted
 
 
@@ -97,6 +101,77 @@ class ExistingOutputDetectionTests(unittest.TestCase):
                 existing = find_existing_converted_output(source_path, "", "nvenc_h265")
 
             self.assertEqual(existing, "")
+
+
+class ExternalSubtitleDetectionTests(unittest.TestCase):
+    def test_detects_same_basename_and_language_suffix(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = os.path.join(temp_dir, "episode.mp4")
+            with open(video, "w", encoding="utf-8") as handle:
+                handle.write("video")
+
+            subtitle_paths = [
+                os.path.join(temp_dir, "episode.srt"),
+                os.path.join(temp_dir, "episode.es.ass"),
+                os.path.join(temp_dir, "episode.eng.vtt"),
+            ]
+            for path in subtitle_paths:
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("sub")
+
+            found = _find_external_subtitles(video)
+
+            self.assertEqual(
+                [(os.path.basename(path), lang) for path, lang in found],
+                [
+                    ("episode.eng.vtt", "eng"),
+                    ("episode.es.ass", "spa"),
+                    ("episode.srt", "und"),
+                ],
+            )
+
+    def test_ignores_non_matching_or_invalid_suffix_patterns(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = os.path.join(temp_dir, "movie.avi")
+            with open(video, "w", encoding="utf-8") as handle:
+                handle.write("video")
+
+            noise = [
+                "movie.en.us.srt",  # multiple dotted suffixes are invalid
+                "movie-extra.srt",  # different basename
+                "movie.txt",        # unsupported extension
+            ]
+            for name in noise:
+                with open(os.path.join(temp_dir, name), "w", encoding="utf-8") as handle:
+                    handle.write("x")
+
+            found = _find_external_subtitles(video)
+            self.assertEqual(found, [])
+
+    def test_prefers_idx_control_file_over_sub_pair(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = os.path.join(temp_dir, "classic.mkv")
+            with open(video, "w", encoding="utf-8") as handle:
+                handle.write("video")
+
+            idx_path = os.path.join(temp_dir, "classic.es.idx")
+            sub_path = os.path.join(temp_dir, "classic.es.sub")
+            with open(idx_path, "w", encoding="utf-8") as handle:
+                handle.write("idx")
+            with open(sub_path, "w", encoding="utf-8") as handle:
+                handle.write("sub")
+
+            found = _find_external_subtitles(video)
+
+            self.assertEqual(len(found), 1)
+            self.assertEqual(os.path.basename(found[0][0]), "classic.es.idx")
+            self.assertEqual(found[0][1], "spa")
+
+    def test_normalize_subtitle_language_defaults_to_und_for_unknown_tokens(self):
+        self.assertEqual(_normalize_subtitle_language("es"), "spa")
+        self.assertEqual(_normalize_subtitle_language("eng"), "eng")
+        self.assertEqual(_normalize_subtitle_language("   "), "und")
+        self.assertEqual(_normalize_subtitle_language("spanish"), "und")
 
 
 class StateDirectoryMigrationTests(unittest.TestCase):

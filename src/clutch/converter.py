@@ -24,6 +24,20 @@ from clutch.output import (
 )
 from clutch.mediainfo import check_already_converted, get_resolution, get_audio_info
 
+EXTERNAL_SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".idx", ".sub"}
+LANGUAGE_CODE_ALIASES = {
+    "en": "eng",
+    "es": "spa",
+    "fr": "fra",
+    "de": "deu",
+    "it": "ita",
+    "pt": "por",
+    "ja": "jpn",
+    "ko": "kor",
+    "zh": "zho",
+    "ru": "rus",
+}
+
 # Global references for cleanup on signal
 _STATE_UNSET = object()
 _conversion_state_lock = threading.Lock()
@@ -582,6 +596,115 @@ def preserve_audio_titles(input_file: str, output_file: str, *, emit_logs: bool 
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             if emit_logs:
                 warning(f"Could not set audio title for track {track_num}: {e}")
+
+
+def _normalize_subtitle_language(language_token: str) -> str:
+    token = (language_token or "").strip().lower().replace("_", "-")
+    if not token:
+        return "und"
+    primary = token.split("-", 1)[0]
+    if len(primary) == 2 and primary.isalpha():
+        return LANGUAGE_CODE_ALIASES.get(primary, primary)
+    if len(primary) == 3 and primary.isalpha():
+        return primary
+    return "und"
+
+
+def _find_external_subtitles(input_file: str) -> list[tuple[str, str]]:
+    input_dir = os.path.dirname(os.path.abspath(input_file))
+    base_name = os.path.splitext(os.path.basename(input_file))[0]
+    base_folded = base_name.casefold()
+    discovered: list[tuple[str, str]] = []
+
+    try:
+        entries = list(os.scandir(input_dir))
+    except OSError:
+        return discovered
+
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        stem, ext = os.path.splitext(entry.name)
+        ext_lower = ext.lower()
+        if ext_lower not in EXTERNAL_SUBTITLE_EXTENSIONS:
+            continue
+
+        # For VobSub pairs, use .idx as the control file and skip plain .sub.
+        if ext_lower == ".sub":
+            idx_pair = os.path.join(input_dir, f"{stem}.idx")
+            if os.path.exists(idx_pair):
+                continue
+
+        stem_folded = stem.casefold()
+        language = "und"
+        if stem_folded == base_folded:
+            language = "und"
+        elif stem_folded.startswith(f"{base_folded}."):
+            suffix = stem[len(base_name) + 1:]
+            if not suffix or "." in suffix:
+                continue
+            language = _normalize_subtitle_language(suffix)
+        else:
+            continue
+
+        discovered.append((entry.path, language))
+
+    discovered.sort(key=lambda item: os.path.basename(item[0]).casefold())
+    return discovered
+
+
+def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool = True):
+    subtitles = _find_external_subtitles(input_file)
+    if not subtitles:
+        return
+
+    if emit_logs:
+        listed = ", ".join(os.path.basename(path) for path, _ in subtitles)
+        info(f"Adding external subtitles to output: {listed}")
+
+    merged_output = f"{output_file}.subs.tmp.mkv"
+    command = [get_binary_path("mkvmerge"), "-o", merged_output, output_file]
+    for subtitle_path, language in subtitles:
+        command.extend(["--language", f"0:{language}", subtitle_path])
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        if emit_logs:
+            warning(f"Could not add external subtitles (mkvmerge error): {exc}")
+        try:
+            os.remove(merged_output)
+        except OSError:
+            pass
+        return
+
+    if result.returncode not in (0, 1):
+        if emit_logs:
+            detail = (result.stderr or "").strip()
+            if detail:
+                warning(f"Could not add external subtitles: {detail}")
+            else:
+                warning("Could not add external subtitles: mkvmerge failed.")
+        try:
+            os.remove(merged_output)
+        except OSError:
+            pass
+        return
+
+    try:
+        os.replace(merged_output, output_file)
+    except OSError as exc:
+        if emit_logs:
+            warning(f"External subtitles were generated but could not replace output file: {exc}")
+        try:
+            os.remove(merged_output)
+        except OSError:
+            pass
 
 
 class ConversionDetached(RuntimeError):
@@ -1211,6 +1334,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     success(f"Conversion successful: {os.path.basename(final_output)}")
             # Preserve audio track titles from original file
             preserve_audio_titles(input_file, final_output, emit_logs=emit_logs)
+            # Add external sidecar subtitles that match the source filename.
+            mux_external_subtitles(input_file, final_output, emit_logs=emit_logs)
             # Clean up any orphaned temp files from previous attempts
             base_name = os.path.splitext(os.path.basename(input_file))[0]
             _cleanup_sibling_temps(final_output, base_name, os.path.dirname(final_output))
