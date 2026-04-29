@@ -802,6 +802,7 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
     if _original_writing_app:
         propedit_cmd = [
             get_binary_path("mkvpropedit"), output_file,
+            "--edit", "info",
             "--set", f"writing-app={_original_writing_app}",
         ]
         try:
