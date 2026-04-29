@@ -18,6 +18,9 @@ MAGENTA_COLOR = '\033[0;35m'
 # Central logger for the application
 logger = logging.getLogger("clutch")
 logger.propagate = False
+# Prevent Python's lastResort handler from printing bare WARNING+ messages to
+# stderr when no file handler has been configured yet (e.g. plain CLI use).
+logger.addHandler(logging.NullHandler())
 
 # Reference to the file handler so we can reconfigure it at runtime
 _file_handler: TimedRotatingFileHandler | None = None
