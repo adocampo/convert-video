@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-04-29
+
+### Added in 2.0.1
+
+- **Automatic external subtitle muxing**: after a successful conversion, Clutch scans the source directory for subtitle files sharing the video basename (e.g. `movie.srt`, `movie.es.srt`, `movie_castellano.ass`) and muxes them into the output MKV using `mkvmerge`.
+- **Language suffix detection**: language is inferred from the filename — supports ISO 639-1 codes (`es`, `en`), ISO 639-2 codes (`spa`, `eng`), regional variants (`es-ES`, `ca_ES`), and full-word aliases (`castellano`, `english`, `catalan`, `french`, …).
+- **Both dot and underscore separators**: `movie.es.srt` and `movie_es.srt` are both recognised.
+- **VobSub pairs**: `.idx`/`.sub` pairs are detected and the `.idx` control file is passed to `mkvmerge`.
+
 ## [2.0.0] - 2026-04-28
 
 ### Added in 2.0.0
