@@ -705,6 +705,23 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
         )
         debug(f"External subtitle matches: {listed}")
 
+    # Read the HandBrake encoding application from the output file BEFORE mkvmerge
+    # overwrites the container metadata, so we can restore it afterwards.
+    _original_writing_app: str = ""
+    try:
+        _minfo = get_mediainfo_json(output_file)
+        _general = next(
+            (t for t in (_minfo.get("media", {}).get("track") or []) if t.get("@type") == "General"),
+            {},
+        )
+        for _key in ("Encoded_Application", "Writing_Application", "Encoded_Library"):
+            _val = _general.get(_key, "").strip()
+            if _val:
+                _original_writing_app = _val
+                break
+    except Exception:
+        pass
+
     merged_output = f"{output_file}.subs.tmp.mkv"
     command = [get_binary_path("mkvmerge"), "-o", merged_output, output_file]
     for subtitle_path, language in subtitles:
@@ -747,6 +764,24 @@ def mux_external_subtitles(input_file: str, output_file: str, *, emit_logs: bool
         try:
             os.remove(merged_output)
         except OSError:
+            pass
+        return
+
+    # Restore the original HandBrake writing-app so skip detection still works
+    # on the next run (mkvmerge overwrites it with its own signature).
+    if _original_writing_app:
+        try:
+            subprocess.run(
+                [
+                    get_binary_path("mkvpropedit"), output_file,
+                    "--set", f"muxing-app={_original_writing_app}",
+                    "--set", f"writing-app={_original_writing_app}",
+                ],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
             pass
 
 
