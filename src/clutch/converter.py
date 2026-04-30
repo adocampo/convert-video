@@ -996,7 +996,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                    runtime_callback: Optional[Callable[[dict[str, object]], None]] = None,
                    output_base_dir: str = "",
                    resume_partial_file: str = "",
-                   resume_offset_seconds: float = 0.0) -> str:
+                   resume_offset_seconds: float = 0.0,
+                   preset_params: Optional[dict] = None) -> str:
     thread_id = threading.get_ident()
 
     is_iso = title is not None
@@ -1131,30 +1132,40 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         get_binary_path("HandBrakeCLI"),
         "-i", input_file,
         "-o", temp_filepath,
-        "--all-subtitles",
-        "-f", "mkv",
     ]
+    # Subtitles/format are governed by the preset when present; otherwise default to the
+    # historical "all subtitles + mkv container" behavior.
+    if not preset_params:
+        hb_params.extend(["--all-subtitles", "-f", "mkv"])
     if is_resume:
         hb_params.extend(["--start-at", f"duration:{resume_offset_seconds:.3f}"])
     if title is not None:
         hb_params += ["--title", str(title)]
-    hb_params += audio_params
 
-    if encode_speed == "slow":
-        hb_params.extend(["--preset", "H.265 MKV 2160p60 4K"])
-    elif encode_speed == "normal":
-        hb_params.extend(["--preset", "H.265 NVENC 2160p 4K"])
-    elif encode_speed == "fast":
-        hb_params.extend([
-            "-e", codec,
-            "-w", resolution.split("x")[0],
-            "-l", resolution.split("x")[1],
-            "-q", "30",
-            "--vb", "1000",
-        ])
-
-    if gpu_device is not None and uses_nvenc_encoder(codec, encode_speed):
-        hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
+    if preset_params:
+        from clutch.presets import build_handbrake_args
+        hb_params += build_handbrake_args(preset_params, source_resolution=resolution)
+        # GPU pinning when the preset's video encoder is NVENC.
+        video_cfg = preset_params.get("video") if isinstance(preset_params, dict) else {}
+        encoder_name = str((video_cfg or {}).get("encoder") or "").lower()
+        if gpu_device is not None and encoder_name.startswith("nvenc_"):
+            hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
+    else:
+        hb_params += audio_params
+        if encode_speed == "slow":
+            hb_params.extend(["--preset", "H.265 MKV 2160p60 4K"])
+        elif encode_speed == "normal":
+            hb_params.extend(["--preset", "H.265 NVENC 2160p 4K"])
+        elif encode_speed == "fast":
+            hb_params.extend([
+                "-e", codec,
+                "-w", resolution.split("x")[0],
+                "-l", resolution.split("x")[1],
+                "-q", "30",
+                "--vb", "1000",
+            ])
+        if gpu_device is not None and uses_nvenc_encoder(codec, encode_speed):
+            hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
 
     try:
         elapsed_text = None

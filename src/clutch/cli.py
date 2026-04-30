@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import List
+from typing import List, Optional
 from tqdm import tqdm
 
 from clutch import APP_NAME, REQUIRED_BINARIES, get_version, set_binary_paths, detect_binary
@@ -366,6 +366,31 @@ def find_video_files(pattern: str) -> List[str]:
     return files
 
 
+def _resolve_cli_preset_id(preset_name: str) -> str:
+    """Resolve a --preset name to a preset_id string.
+
+    Checks official HandBrake presets first (returning ``official:<name>``),
+    otherwise returns the raw name so the service can look it up as a custom
+    preset name later.
+    """
+    from clutch.presets import find_official_preset
+    if find_official_preset(preset_name):
+        return f"official:{preset_name}"
+    return preset_name
+
+
+def _resolve_cli_preset_params(preset_name: str) -> Optional[dict]:
+    """Resolve a --preset name to normalized preset params for local mode."""
+    from clutch.presets import find_official_preset, normalize_preset_params
+    official = find_official_preset(preset_name)
+    if official:
+        return normalize_preset_params({"handbrake_preset": preset_name})
+    # Not an official preset — can't look up custom presets without a DB
+    error(f"Preset '{preset_name}' not found in official HandBrake presets. "
+          "Custom presets are only available in service mode.")
+    return None
+
+
 def process_local_input(
     input_file: str,
     *,
@@ -380,6 +405,7 @@ def process_local_input(
     stop_requested: threading.Event | None = None,
     show_progress: bool = True,
     renderer: MultiProgressRenderer | None = None,
+    preset_params: Optional[dict] = None,
 ) -> str:
     use_combined_progress = renderer is not None
     emit_logs = not use_combined_progress
@@ -439,6 +465,7 @@ def process_local_input(
                 gpu_device=gpu_device,
                 progress_callback=(lambda percent, detail: renderer.update_job(input_file, percent, detail)) if renderer is not None else None,
                 emit_logs=emit_logs,
+                preset_params=preset_params,
             )
             if conversion_ok:
                 if delete_source:
@@ -499,6 +526,7 @@ def process_local_input(
             gpu_device=gpu_device,
             progress_callback=(lambda percent, detail: renderer.update_job(input_file, percent, detail)) if renderer is not None else None,
             emit_logs=emit_logs,
+            preset_params=preset_params,
         )
         if conversion_ok:
             if delete_source:
@@ -527,7 +555,7 @@ def process_local_input(
         return "failed"
 
 
-def run_local_conversions(input_files: List[str], args, speed: str) -> dict[str, int]:
+def run_local_conversions(input_files: List[str], args, speed: str, preset_params: Optional[dict] = None) -> dict[str, int]:
     summary = {
         "succeeded": 0,
         "skipped": 0,
@@ -548,6 +576,7 @@ def run_local_conversions(input_files: List[str], args, speed: str) -> dict[str,
                 force=args.force,
                 gpu_device=get_job_gpu_device(index, args.gpu_devices),
                 show_progress=True,
+                preset_params=preset_params,
             )
             summary[status] += 1
         return summary
@@ -595,6 +624,7 @@ def run_local_conversions(input_files: List[str], args, speed: str) -> dict[str,
                     stop_requested=stop_requested,
                     show_progress=False,
                     renderer=renderer,
+                    preset_params=preset_params,
                 )
                 for index, input_file in enumerate(input_files)
             ]
@@ -718,6 +748,8 @@ def main():
     enc_group = parser.add_argument_group("encoding")
     enc_group.add_argument("-c", "--codec", default="nvenc_h265",
                            help="Video codec: nvenc_h265 (default), nvenc_h264, av1, x265.")
+    enc_group.add_argument("--preset", default="",
+                           help="Use a saved preset by name (custom or official HandBrake preset).")
     enc_group.add_argument("-s", "--slow", action="store_true", help="Use slow encoding speed.")
     enc_group.add_argument("-f", "--fast", action="store_true", help="Use fast encoding speed.")
     enc_group.add_argument("-n", "--normal", action="store_true", help="Use normal encoding speed (default).")
@@ -939,6 +971,7 @@ def main():
                 "delete_source": args.delete_source,
                 "verbose": args.verbose,
                 "force": args.force,
+                "default_preset_id": _resolve_cli_preset_id(args.preset) if args.preset else "",
             },
             schedule_config=schedule_config,
         )
@@ -1399,7 +1432,15 @@ def main():
     # Start transcoding
     print("Starting transcoding...")
 
-    summary = run_local_conversions(input_files, args, speed)
+    # Resolve --preset for local mode
+    cli_preset_params = None
+    if args.preset:
+        cli_preset_params = _resolve_cli_preset_params(args.preset)
+        if cli_preset_params is None:
+            sys.exit(1)
+        info(f"Using preset: {args.preset}")
+
+    summary = run_local_conversions(input_files, args, speed, preset_params=cli_preset_params)
 
     if summary["skipped"]:
         skip(f"{summary['skipped']} file(s) skipped (already converted).")

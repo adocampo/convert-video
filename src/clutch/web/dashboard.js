@@ -4,6 +4,7 @@
         timerId: null,
         theme: 'dark',
         allowedRoots: [],
+        defaultJobSettings: {},
         release: {
             local_version: '',
             remote_version: '',
@@ -196,6 +197,24 @@
         return parts[parts.length - 1] || normalized;
     }
 
+    /**
+     * Return a display label for the codec column.
+     * When a preset was used, show its name; otherwise fall back to codec / speed.
+     */
+    function resolvePresetLabel(record) {
+        var pid = record.preset_id || '';
+        if (!pid) return (record.codec || '') + ' / ' + (record.encode_speed || '');
+        // Official preset: "official:Name" → show the name
+        if (pid.startsWith('official:')) return pid.substring(9);
+        // Custom preset: look up in cached list by id
+        var presets = (typeof presetsState !== 'undefined' && presetsState.quickAccess) || [];
+        for (var i = 0; i < presets.length; i++) {
+            if (presets[i].id === pid) return presets[i].name;
+        }
+        // Fallback: show a truncated id hint
+        return pid.length > 12 ? pid.substring(0, 8) + '…' : pid;
+    }
+
     function padNumber(value) {
         return String(value).padStart(2, '0');
     }
@@ -344,7 +363,7 @@
         wrapper.appendChild(selectEl);
 
         function renderOptions() {
-            var current = selectEl.value;
+            var current = selectEl.dataset.wantedValue || selectEl.value;
             optionsPanel.innerHTML = '';
             Array.prototype.forEach.call(selectEl.options, function (opt) {
                 var btn = document.createElement('button');
@@ -355,6 +374,7 @@
                 btn.addEventListener('click', function (e) {
                     e.stopPropagation();
                     selectEl.value = opt.value;
+                    selectEl.dataset.wantedValue = opt.value;
                     selectEl.dispatchEvent(new Event('change', { bubbles: true }));
                     optionsPanel.hidden = true;
                     wrapper.classList.remove('open');
@@ -365,6 +385,9 @@
         }
 
         function syncTrigger() {
+            // Use wantedValue as source of truth in case native value was transiently reset
+            var wantedVal = selectEl.dataset.wantedValue || selectEl.value;
+            if (wantedVal && wantedVal !== selectEl.value) selectEl.value = wantedVal;
             var selected = selectEl.options[selectEl.selectedIndex];
             trigger.innerHTML = escapeHtml(selected ? selected.textContent : '') + ' ' + arrowSvg;
         }
@@ -1137,6 +1160,10 @@
         watcherForm.elements.delete_source.checked = settingsForm.elements.default_delete_source.checked;
         watcherForm.elements.codec.value = '';
         watcherForm.elements.encode_speed.value = '';
+        if (watcherForm.elements.preset_id) {
+            watcherForm.elements.preset_id.value = '';
+            watcherForm.elements.preset_id.dispatchEvent(new Event('change'));
+        }
         watcherForm.elements.audio_passthrough.checked = false;
         watcherForm.elements.force.checked = false;
         syncAllCustomSelects();
@@ -1258,7 +1285,7 @@
 
     var validPages = [
         'activity', 'jobs', 'watchers', 'schedule',
-        'settings/general', 'settings/binaries', 'settings/media', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
+        'settings/general', 'settings/binaries', 'settings/media', 'settings/presets', 'settings/smtp', 'settings/notifications', 'settings/logs', 'settings/user',
         'system/users', 'system/logs', 'system/tasks', 'system/changelog', 'system/about',
     ];
 
@@ -1311,6 +1338,9 @@
         if (page === 'settings/media' || page === 'watchers') {
             initCustomSelects();
             syncAllCustomSelects();
+        }
+        if (page === 'settings/presets') {
+            loadPresetsPage();
         }
         if (page === 'system/about') {
             startSysmonPolling();
@@ -2083,6 +2113,7 @@
 
     function applySummaryToForms(summary) {
         const defaults = summary.default_job_settings || {};
+        state.defaultJobSettings = defaults;
         setAllowedRoots(summary.allowed_roots || []);
         settingsForm.elements.worker_count.value = String(summary.worker_count || 1);
         settingsForm.elements.gpu_devices.value = Array.isArray(summary.gpu_devices) ? summary.gpu_devices.join(',') : '';
@@ -2093,6 +2124,32 @@
         settingsForm.elements.default_delete_source.checked = Boolean(defaults.delete_source);
         settingsForm.elements.default_force.checked = Boolean(defaults.force);
         settingsForm.elements.default_verbose.checked = Boolean(defaults.verbose);
+
+        // Default preset
+        var defPresetSel = document.getElementById('settings-default-preset');
+        if (defPresetSel) {
+            var wantedVal = defaults.default_preset_id || '';
+            // Store wanted value so populatePresetSelects can restore it
+            // even if preset options have not been loaded yet
+            defPresetSel.dataset.wantedValue = wantedVal;
+            // If the value is an official preset, enable show-all and load official presets
+            if (wantedVal.startsWith('official:')) {
+                defPresetSel.dataset.showAllPresets = 'true';
+                // Also sync the checkbox
+                var cb = document.querySelector('.show-all-presets-toggle input[data-target="settings-default-preset"]');
+                if (cb) cb.checked = true;
+                if (!presetsState.loadedOfficial) {
+                    refreshOfficialPresets(false).then(function () {
+                        populatePresetSelects(presetsState.quickAccess || []);
+                        defPresetSel.value = wantedVal;
+                    });
+                } else {
+                    populatePresetSelects(presetsState.quickAccess || []);
+                }
+            }
+            defPresetSel.value = wantedVal;
+            if (window._clutchToggleSettingsCodecSpeedRows) window._clutchToggleSettingsCodecSpeedRows(!wantedVal);
+        }
         watcherForm.elements.delete_source.checked = Boolean(defaults.delete_source);
 
         // Log settings
@@ -2185,6 +2242,10 @@
                     setWatcherOutputDir(watcher.output_dir || '');
                     watcherForm.elements.codec.value = watcher.codec || '';
                     watcherForm.elements.encode_speed.value = watcher.encode_speed || '';
+                    if (watcherForm.elements.preset_id) {
+                        watcherForm.elements.preset_id.value = watcher.preset_id || '';
+                        watcherForm.elements.preset_id.dispatchEvent(new Event('change'));
+                    }
                     watcherForm.elements.audio_passthrough.checked = Boolean(watcher.audio_passthrough);
                     watcherForm.elements.force.checked = Boolean(watcher.force);
                     syncAllCustomSelects();
@@ -2247,8 +2308,8 @@
                 vb = Number(b.progress_percent || 0);
                 return asc ? va - vb : vb - va;
             } else if (col === 'codec') {
-                va = (a.codec || '') + '/' + (a.encode_speed || '');
-                vb = (b.codec || '') + '/' + (b.encode_speed || '');
+                va = resolvePresetLabel(a);
+                vb = resolvePresetLabel(b);
             } else if (col === 'size') {
                 va = Number(a.input_size_bytes || 0);
                 vb = Number(b.input_size_bytes || 0);
@@ -2608,7 +2669,7 @@
                 + '<td class="jt-name" title="' + escapeHtml(basename(job.input_file)) + '">' + escapeHtml(basename(job.input_file)) + '</td>'
                 + '<td><span class="badge badge-sm ' + escapeHtml(job.status) + '">' + escapeHtml(i18n.t('job_status.' + job.status)) + '</span></td>'
                 + '<td class="jt-progress"><div class="progress-track"><div class="progress-fill progress-fill-' + escapeHtml(job.status) + '" style="width:' + progress.toFixed(1) + '%"></div></div><span class="jt-progress-label">' + escapeHtml(progressLabel) + '</span></td>'
-                + '<td class="jt-codec">' + escapeHtml(job.codec || '') + ' / ' + escapeHtml(job.encode_speed || '') + '</td>'
+                + '<td class="jt-codec">' + escapeHtml(resolvePresetLabel(job)) + '</td>'
                 + '<td class="jt-size">' + escapeHtml(formatBytes(job.input_size_bytes)) + '</td>'
                 + '<td class="jt-eta">' + escapeHtml(etaLabel || '\u2014') + '</td>'
                 + '<td class="jt-submitted">' + escapeHtml(submitted) + '</td>'
@@ -2633,7 +2694,7 @@
                 + '</div>';
 
             var footerDetails = '<div class="jt-detail-footer">'
-                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.profile_label') + '</div><div class="job-detail-value">' + escapeHtml(job.codec) + ' / ' + escapeHtml(job.encode_speed) + '</div></div>'
+                + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.profile_label') + '</div><div class="job-detail-value">' + escapeHtml(resolvePresetLabel(job)) + '</div></div>'
                 + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.submitted_label') + '</div><div class="job-detail-value">' + escapeHtml(submitted) + '</div></div>'
                 + '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.compression_label') + '</div><div class="job-detail-value">' + escapeHtml(formatCompression(job.compression_percent)) + '</div></div>'
                 + (elapsed ? '<div class="job-detail"><div class="job-detail-label">' + i18n.t('job_detail.duration_label') + '</div><div class="job-detail-value">' + escapeHtml(elapsed) + '</div></div>' : '')
@@ -3426,7 +3487,7 @@
             switch (tasksSortCol) {
                 case 'name': va = baseName(a.input_file); vb = baseName(b.input_file); break;
                 case 'status': va = a.status || ''; vb = b.status || ''; break;
-                case 'codec': va = a.codec || ''; vb = b.codec || ''; break;
+                case 'codec': va = resolvePresetLabel(a); vb = resolvePresetLabel(b); break;
                 case 'size': va = Number(a.input_size_bytes || 0); vb = Number(b.input_size_bytes || 0); break;
                 case 'duration':
                     va = taskDuration(a); vb = taskDuration(b); break;
@@ -3450,7 +3511,7 @@
             return '<tr' + rowCls + '>'
                 + '<td title="' + escapeHtml(t.input_file || '') + '">' + escapeHtml(name) + '</td>'
                 + '<td><span class="' + statusCls + '">' + escapeHtml(i18n.t('job_status.' + (t.status || 'queued'))) + '</span></td>'
-                + '<td>' + escapeHtml(t.codec || '–') + '</td>'
+                + '<td>' + escapeHtml(resolvePresetLabel(t)) + '</td>'
                 + '<td>' + sizeIn + ' → ' + sizeOut + comp + '</td>'
                 + '<td>' + dur + '</td>'
                 + '<td>' + escapeHtml(sub) + '</td>'
@@ -4370,14 +4431,16 @@
         setFormStatus(i18n.t('jobs.queueing'));
 
         const formData = new FormData(form);
+        const presetId = formData.get('preset_id') || '';
         const payload = {
             input_file: formData.get('input_file'),
             input_kind: formData.get('input_kind') || 'file',
             recursive: formData.get('recursive') === 'on',
             filter_pattern: formData.get('filter_pattern') || '',
             output_dir: formData.get('output_dir'),
-            codec: formData.get('codec'),
-            encode_speed: formData.get('encode_speed'),
+            codec: presetId ? null : formData.get('codec'),
+            encode_speed: presetId ? null : formData.get('encode_speed'),
+            preset_id: presetId || null,
             audio_passthrough: formData.get('audio_passthrough') === 'on',
             delete_source: formData.get('delete_source') === 'on',
             force: formData.get('force') === 'on',
@@ -4421,6 +4484,7 @@
                 delete_source: formData.get('default_delete_source') === 'on',
                 force: formData.get('default_force') === 'on',
                 verbose: formData.get('default_verbose') === 'on',
+                default_preset_id: formData.get('default_preset_id') || '',
             },
         };
 
@@ -4472,8 +4536,9 @@
         setStatus(watcherStatus, isEditing ? 'Updating watcher...' : 'Adding watcher...');
 
         const formData = new FormData(watcherForm);
-        const codecVal = formData.get('codec') || '';
-        const speedVal = formData.get('encode_speed') || '';
+        const presetIdW = formData.get('preset_id') || '';
+        const codecVal = presetIdW ? '' : (formData.get('codec') || '');
+        const speedVal = presetIdW ? '' : (formData.get('encode_speed') || '');
         const payload = {
             directory: formData.get('directory'),
             recursive: formData.get('recursive') === 'on',
@@ -4483,6 +4548,7 @@
             output_dir: (formData.get('output_dir') || '').trim(),
             codec: codecVal,
             encode_speed: speedVal,
+            preset_id: presetIdW || null,
             audio_passthrough: formData.get('audio_passthrough') === 'on' ? true : null,
             force: formData.get('force') === 'on' ? true : null,
         };
@@ -5272,6 +5338,853 @@
         });
     }());
 
+    /* ── Presets editor ── */
+    var presetsState = {
+        custom: [],
+        official: [],
+        officialGroups: [],
+        editing: null,            // null = not editing; object = current preset draft
+        loadedOfficial: false,
+        quickAccess: [],
+    };
+
+    function presetEl(id) { return document.getElementById(id); }
+
+    function categoryLabel(cat) {
+        var key = 'settings.presets.category.' + (cat || 'other').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        var translated = i18n.t(key);
+        if (translated && translated !== key) return translated;
+        return cat || i18n.t('settings.presets.category.other') || 'Other';
+    }
+
+    var BUILTIN_PRESETS = [
+        { name: 'nvenc_h265', description: 'NVIDIA GPU H.265 encoder — best balance of speed and quality.', encoder: 'nvenc_h265', speeds: 'fast / normal / slow' },
+        { name: 'nvenc_h264', description: 'NVIDIA GPU H.264 encoder — broad device compatibility.', encoder: 'nvenc_h264', speeds: 'fast / normal / slow' },
+        { name: 'av1', description: 'AV1 software encoder — smallest files, very slow.', encoder: 'av1', speeds: 'fast / normal / slow' },
+        { name: 'x265', description: 'CPU H.265 encoder — great quality, slower than NVENC.', encoder: 'x265', speeds: 'fast / normal / slow' },
+    ];
+
+    function renderBuiltinCard(preset) {
+        var card = document.createElement('div');
+        card.className = 'preset-card preset-card-readonly';
+        var header = document.createElement('div');
+        header.className = 'preset-card-header';
+        var name = document.createElement('div');
+        name.className = 'preset-card-name';
+        name.textContent = preset.name;
+        header.appendChild(name);
+        card.appendChild(header);
+        var desc = document.createElement('p');
+        desc.className = 'preset-card-desc';
+        desc.textContent = preset.description;
+        card.appendChild(desc);
+        var badges = document.createElement('div');
+        badges.className = 'preset-card-badges';
+        var bb = document.createElement('span');
+        bb.className = 'preset-badge builtin';
+        bb.textContent = i18n.t('settings.presets.builtin_badge') || 'Built-in';
+        badges.appendChild(bb);
+        var eb = document.createElement('span');
+        eb.className = 'preset-badge';
+        eb.textContent = preset.encoder;
+        badges.appendChild(eb);
+        if (preset.speeds) {
+            var sb = document.createElement('span');
+            sb.className = 'preset-badge';
+            sb.textContent = preset.speeds;
+            badges.appendChild(sb);
+        }
+        card.appendChild(badges);
+        return card;
+    }
+
+    function renderCustomPresets() {
+        var container = presetEl('custom-presets-container');
+        if (!container) return;
+        container.innerHTML = '';
+        // Always show built-in quick-access presets as read-only cards first
+        BUILTIN_PRESETS.forEach(function (bp) {
+            container.appendChild(renderBuiltinCard(bp));
+        });
+        presetsState.custom.forEach(function (preset) {
+            var card = document.createElement('div');
+            card.className = 'preset-card';
+            var header = document.createElement('div');
+            header.className = 'preset-card-header';
+            var name = document.createElement('div');
+            name.className = 'preset-card-name';
+            name.textContent = preset.name;
+            header.appendChild(name);
+            if (preset.base_preset) {
+                var base = document.createElement('div');
+                base.className = 'preset-card-base';
+                base.textContent = '↳ ' + preset.base_preset;
+                header.appendChild(base);
+            }
+            card.appendChild(header);
+            if (preset.description) {
+                var desc = document.createElement('p');
+                desc.className = 'preset-card-desc';
+                desc.textContent = preset.description;
+                card.appendChild(desc);
+            }
+            var badges = document.createElement('div');
+            badges.className = 'preset-card-badges';
+            if (preset.quick_access) {
+                var qb = document.createElement('span');
+                qb.className = 'preset-badge quick';
+                qb.textContent = i18n.t('settings.presets.quick_badge') || 'Quick access';
+                badges.appendChild(qb);
+            }
+            var params = preset.params || {};
+            var video = (params.video || {});
+            if (video.encoder) {
+                var enc = document.createElement('span');
+                enc.className = 'preset-badge';
+                enc.textContent = video.encoder;
+                badges.appendChild(enc);
+            }
+            card.appendChild(badges);
+            var actions = document.createElement('div');
+            actions.className = 'preset-card-actions';
+            var editBtn = document.createElement('button');
+            editBtn.className = 'secondary small';
+            editBtn.type = 'button';
+            editBtn.textContent = i18n.t('settings.presets.edit') || 'Edit';
+            editBtn.addEventListener('click', function () { openPresetEditor(preset); });
+            actions.appendChild(editBtn);
+            var exportBtn = document.createElement('button');
+            exportBtn.className = 'ghost small';
+            exportBtn.type = 'button';
+            exportBtn.textContent = i18n.t('settings.presets.export') || 'Export';
+            exportBtn.addEventListener('click', function () { exportPreset(preset.id); });
+            actions.appendChild(exportBtn);
+            var delBtn = document.createElement('button');
+            delBtn.className = 'danger small';
+            delBtn.type = 'button';
+            delBtn.textContent = i18n.t('settings.presets.delete') || 'Delete';
+            delBtn.addEventListener('click', function () { deletePreset(preset); });
+            actions.appendChild(delBtn);
+            card.appendChild(actions);
+            container.appendChild(card);
+        });
+    }
+
+    function renderOfficialPresets() {
+        var container = presetEl('official-presets-container');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!presetsState.official.length) {
+            var p = document.createElement('p');
+            p.className = 'empty-state';
+            p.textContent = i18n.t('settings.presets.no_official') || 'No official presets available.';
+            container.appendChild(p);
+            return;
+        }
+        // Group by category
+        var groups = {};
+        presetsState.official.forEach(function (preset) {
+            var cat = preset.category || 'Other';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(preset);
+        });
+        Object.keys(groups).sort().forEach(function (cat) {
+            var details = document.createElement('details');
+            details.className = 'preset-group';
+            var summary = document.createElement('summary');
+            var label = document.createElement('span');
+            label.textContent = categoryLabel(cat);
+            var count = document.createElement('span');
+            count.className = 'preset-group-count';
+            count.textContent = ' (' + groups[cat].length + ')';
+            label.appendChild(count);
+            summary.appendChild(label);
+            details.appendChild(summary);
+            var body = document.createElement('div');
+            body.className = 'preset-group-body';
+            groups[cat].forEach(function (preset) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'preset-group-item';
+                var n = document.createElement('div');
+                n.className = 'preset-group-item-name';
+                n.textContent = preset.name;
+                btn.appendChild(n);
+                if (preset.description) {
+                    var d = document.createElement('p');
+                    d.className = 'preset-group-item-desc';
+                    d.textContent = preset.description;
+                    btn.appendChild(d);
+                }
+                btn.addEventListener('click', function () { cloneOfficialPreset(preset); });
+                body.appendChild(btn);
+            });
+            details.appendChild(body);
+            container.appendChild(details);
+        });
+    }
+
+    function emptyDraft() {
+        return {
+            id: null,
+            name: '',
+            description: '',
+            quick_access: false,
+            base_preset: '',
+            params: {
+                video: { encoder: 'nvenc_h265', quality_mode: 'crf', quality_value: 22, encoder_preset: '', max_width: 0, max_height: 0, framerate_mode: 'same-as-source', framerate_value: 0, extra_options: '' },
+                audio: { mode: 'passthrough', encoder: 'opus', bitrate: 0, mixdown: 'auto' },
+                container: { format: 'mkv', chapter_markers: true },
+                subtitles: { mode: 'all' },
+                filters: { deinterlace: 'off', denoise: 'off' },
+            },
+        };
+    }
+
+    function openPresetEditor(preset) {
+        var draft;
+        if (preset && preset.id) {
+            draft = JSON.parse(JSON.stringify(preset));
+        } else if (preset && preset._fromCodec) {
+            // Pre-filled from a built-in codec selection
+            draft = preset;
+            delete draft._fromCodec;
+        } else if (preset) {
+            // Cloning from official: use only safe fields
+            draft = emptyDraft();
+            draft.name = (preset.name || '') + ' (copy)';
+            draft.description = preset.description || '';
+            draft.base_preset = preset.name || '';
+        } else {
+            draft = emptyDraft();
+        }
+        presetsState.editing = draft;
+        // Fill form
+        presetEl('preset-field-name').value = draft.name || '';
+        presetEl('preset-field-description').value = draft.description || '';
+        presetEl('preset-field-quick-access').checked = !!draft.quick_access;
+        presetEl('preset-field-base').value = draft.base_preset || '';
+        var v = draft.params.video || {};
+        presetEl('preset-field-encoder').value = v.encoder || 'nvenc_h265';
+        presetEl('preset-field-quality-mode').value = v.quality_mode || 'crf';
+        presetEl('preset-field-quality-value').value = (v.quality_value != null ? v.quality_value : 22);
+        presetEl('preset-field-encoder-preset').value = v.encoder_preset || '';
+        presetEl('preset-field-max-width').value = v.max_width || 0;
+        presetEl('preset-field-max-height').value = v.max_height || 0;
+        presetEl('preset-field-framerate-mode').value = v.framerate_mode || 'same-as-source';
+        presetEl('preset-field-framerate-value').value = v.framerate_value || 0;
+        presetEl('preset-field-extra-options').value = v.extra_options || '';
+        var a = draft.params.audio || {};
+        presetEl('preset-field-audio-mode').value = a.mode || 'passthrough';
+        presetEl('preset-field-audio-encoder').value = a.encoder || 'opus';
+        presetEl('preset-field-audio-bitrate').value = a.bitrate || 0;
+        presetEl('preset-field-audio-mixdown').value = a.mixdown || 'auto';
+        var c = draft.params.container || {};
+        presetEl('preset-field-container-format').value = c.format || 'mkv';
+        presetEl('preset-field-chapter-markers').checked = c.chapter_markers !== false;
+        presetEl('preset-field-subtitles').value = (draft.params.subtitles || {}).mode || 'all';
+        var f = draft.params.filters || {};
+        presetEl('preset-field-deinterlace').value = f.deinterlace || 'off';
+        presetEl('preset-field-denoise').value = f.denoise || 'off';
+        // Update title and button visibility
+        var titleEl = presetEl('preset-editor-title');
+        if (titleEl) {
+            titleEl.textContent = draft.id
+                ? (i18n.t('settings.presets.editor_title_edit') || 'Edit preset')
+                : (i18n.t('settings.presets.editor_title_new') || 'New preset');
+        }
+        presetEl('preset-export-button').hidden = !draft.id;
+        presetEl('preset-delete-button').hidden = !draft.id;
+        presetEl('preset-editor-status').textContent = '';
+        presetEl('presets-list-view').hidden = true;
+        presetEl('presets-editor-view').hidden = false;
+        syncAllCustomSelects();
+    }
+
+    function closePresetEditor() {
+        presetsState.editing = null;
+        presetEl('presets-editor-view').hidden = true;
+        presetEl('presets-list-view').hidden = false;
+    }
+
+    function collectPresetFromForm() {
+        var draft = presetsState.editing || emptyDraft();
+        draft.name = presetEl('preset-field-name').value.trim();
+        draft.description = presetEl('preset-field-description').value.trim();
+        draft.quick_access = presetEl('preset-field-quick-access').checked;
+        draft.params = {
+            video: {
+                encoder: presetEl('preset-field-encoder').value,
+                quality_mode: presetEl('preset-field-quality-mode').value,
+                quality_value: parseFloat(presetEl('preset-field-quality-value').value) || 0,
+                encoder_preset: presetEl('preset-field-encoder-preset').value.trim(),
+                max_width: parseInt(presetEl('preset-field-max-width').value, 10) || 0,
+                max_height: parseInt(presetEl('preset-field-max-height').value, 10) || 0,
+                framerate_mode: presetEl('preset-field-framerate-mode').value,
+                framerate_value: parseFloat(presetEl('preset-field-framerate-value').value) || 0,
+                extra_options: presetEl('preset-field-extra-options').value.trim(),
+            },
+            audio: {
+                mode: presetEl('preset-field-audio-mode').value,
+                encoder: presetEl('preset-field-audio-encoder').value,
+                bitrate: parseInt(presetEl('preset-field-audio-bitrate').value, 10) || 0,
+                mixdown: presetEl('preset-field-audio-mixdown').value,
+            },
+            container: {
+                format: presetEl('preset-field-container-format').value,
+                chapter_markers: presetEl('preset-field-chapter-markers').checked,
+            },
+            subtitles: { mode: presetEl('preset-field-subtitles').value },
+            filters: {
+                deinterlace: presetEl('preset-field-deinterlace').value,
+                denoise: presetEl('preset-field-denoise').value,
+            },
+        };
+        return draft;
+    }
+
+    async function savePreset() {
+        var draft = collectPresetFromForm();
+        if (!draft.name) {
+            setStatus(presetEl('preset-editor-status'), i18n.t('settings.presets.error.name_required') || 'Name is required.', 'error');
+            return;
+        }
+        var body = {
+            name: draft.name,
+            description: draft.description,
+            quick_access: draft.quick_access,
+            base_preset: draft.base_preset || null,
+            params: draft.params,
+        };
+        try {
+            if (draft.id) {
+                await fetchJson('/presets/' + encodeURIComponent(draft.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                showToast(i18n.t('settings.presets.toast.updated') || 'Preset updated', 'ok');
+            } else {
+                await fetchJson('/presets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                showToast(i18n.t('settings.presets.toast.created') || 'Preset created', 'ok');
+            }
+            closePresetEditor();
+            await refreshCustomPresets();
+            await refreshQuickAccessPresets();
+        } catch (err) {
+            setStatus(presetEl('preset-editor-status'), err.message || String(err), 'error');
+        }
+    }
+
+    async function deletePreset(preset) {
+        if (!preset || !preset.id) return;
+        var msg = (i18n.t('settings.presets.confirm.delete') || 'Delete preset "{name}"?').replace('{name}', preset.name);
+        var confirmed = await showConfirm({
+            title: i18n.t('settings.presets.confirm.delete_title') || 'Delete preset',
+            message: msg,
+            ok: i18n.t('settings.presets.confirm.delete_ok') || 'Delete',
+        });
+        if (!confirmed) return;
+        try {
+            await fetchJson('/presets/' + encodeURIComponent(preset.id), { method: 'DELETE' });
+            showToast(i18n.t('settings.presets.toast.deleted') || 'Preset deleted', 'ok');
+            if (presetsState.editing && presetsState.editing.id === preset.id) {
+                closePresetEditor();
+            }
+            await refreshCustomPresets();
+            await refreshQuickAccessPresets();
+        } catch (err) {
+            showToast(err.message || String(err), 'error');
+        }
+    }
+
+    function exportPreset(id) {
+        if (!id) return;
+        var url = '/presets/' + encodeURIComponent(id) + '/export';
+        if (state.auth.token) {
+            // We need auth header → fetch + blob
+            fetchJson(url).then(function (data) {
+                var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'preset-' + id + '.json';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+            }).catch(function (err) {
+                showToast(err.message || String(err), 'error');
+            });
+        } else {
+            window.open(url, '_blank');
+        }
+    }
+
+    async function importPreset(file) {
+        if (!file) return;
+        try {
+            var text = await file.text();
+            var doc = JSON.parse(text);
+            await fetchJson('/presets/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ document: doc }),
+            });
+            showToast(i18n.t('settings.presets.toast.imported') || 'Preset imported', 'ok');
+            await refreshCustomPresets();
+            await refreshQuickAccessPresets();
+        } catch (err) {
+            showToast(err.message || String(err), 'error');
+        }
+    }
+
+    function cloneOfficialPreset(preset) {
+        openPresetEditor(preset);
+    }
+
+    async function refreshCustomPresets() {
+        try {
+            var resp = await fetchJson('/presets');
+            presetsState.custom = (resp && resp.presets) || [];
+            renderCustomPresets();
+        } catch (err) {
+            console.error('Failed to load custom presets', err);
+        }
+    }
+
+    async function refreshOfficialPresets(forceRefresh) {
+        var url = '/presets/official' + (forceRefresh ? '?refresh=1' : '');
+        try {
+            var resp = await fetchJson(url);
+            // Backend returns {available, groups: [{category, presets: [...]}], error}
+            // Flatten into a single array with category on each preset.
+            var flat = [];
+            var rawGroups = [];
+            if (resp && resp.groups) {
+                resp.groups.forEach(function (g) {
+                    rawGroups.push({ name: g.category || 'Other', presets: g.presets || [] });
+                    (g.presets || []).forEach(function (p) {
+                        p.category = g.category || 'Other';
+                        flat.push(p);
+                    });
+                });
+            }
+            presetsState.official = flat;
+            presetsState.officialGroups = rawGroups;
+            presetsState.loadedOfficial = true;
+            renderOfficialPresets();
+        } catch (err) {
+            var container = presetEl('official-presets-container');
+            if (container) {
+                container.innerHTML = '';
+                var p = document.createElement('p');
+                p.className = 'empty-state';
+                p.textContent = (i18n.t('settings.presets.error.official_load') || 'Could not load official presets: ') + (err.message || err);
+                container.appendChild(p);
+            }
+        }
+    }
+
+    async function refreshQuickAccessPresets() {
+        // Used to populate job/watcher preset selects
+        try {
+            var resp = await fetchJson('/presets');
+            var all = (resp && resp.presets) || [];
+            presetsState.quickAccess = all;
+            populatePresetSelects(all);
+        } catch (err) {
+            // Silent
+        }
+    }
+
+    function populatePresetSelects(presets) {
+        ['job-preset-select', 'watcher-preset-select', 'settings-default-preset', 'upload-preset-select'].forEach(function (selectId) {
+            var sel = document.getElementById(selectId);
+            if (!sel) return;
+            // Prefer a pending wanted value (set before options existed), then the current DOM value
+            var current = sel.dataset.wantedValue || sel.value;
+            // Keep the first (default) option, drop the rest
+            while (sel.options.length > 1) sel.remove(1);
+            // Group: quick-access first, then others (separator)
+            var quick = presets.filter(function (p) { return p.quick_access; });
+            var other = presets.filter(function (p) { return !p.quick_access; });
+            if (quick.length) {
+                var gQuick = document.createElement('optgroup');
+                gQuick.label = i18n.t('settings.presets.optgroup.quick') || 'Quick access';
+                quick.forEach(function (p) {
+                    var o = document.createElement('option');
+                    o.value = p.id; o.textContent = p.name;
+                    gQuick.appendChild(o);
+                });
+                sel.appendChild(gQuick);
+            }
+            if (other.length) {
+                var gOther = document.createElement('optgroup');
+                gOther.label = i18n.t('settings.presets.optgroup.custom') || 'Custom presets';
+                other.forEach(function (p) {
+                    var o = document.createElement('option');
+                    o.value = p.id; o.textContent = p.name;
+                    gOther.appendChild(o);
+                });
+                sel.appendChild(gOther);
+            }
+            // Append official presets if the "show all" toggle is active for this select
+            var showAllState = sel.dataset.showAllPresets === 'true';
+            if (showAllState && presetsState.officialGroups && presetsState.officialGroups.length) {
+                presetsState.officialGroups.forEach(function (group) {
+                    var g = document.createElement('optgroup');
+                    g.label = group.name || 'Official';
+                    (group.presets || []).forEach(function (p) {
+                        var o = document.createElement('option');
+                        o.value = 'official:' + p.name;
+                        o.textContent = p.name;
+                        g.appendChild(o);
+                    });
+                    sel.appendChild(g);
+                });
+            }
+            if (current) {
+                sel.value = current;
+                // Clear pending if it was successfully applied
+                if (sel.value === current) delete sel.dataset.wantedValue;
+            }
+        });
+        // Update default-hint labels on the first option of each select
+        syncAllCustomSelects();
+    }
+
+    async function loadPresetsPage() {
+        // Show dragons warning if not dismissed
+        var dragonsEl = document.getElementById('presets-dragons-warning');
+        if (dragonsEl) {
+            var dismissed = false;
+            try { dismissed = window.localStorage.getItem('clutch-presets-dragons-dismissed') === '1'; } catch (e) {}
+            dragonsEl.hidden = dismissed;
+            var cb = document.getElementById('presets-dragons-dismiss');
+            if (cb && !cb.dataset.wired) {
+                cb.dataset.wired = '1';
+                cb.addEventListener('change', function () {
+                    if (cb.checked) {
+                        try { window.localStorage.setItem('clutch-presets-dragons-dismissed', '1'); } catch (e) {}
+                        dragonsEl.hidden = true;
+                    }
+                });
+            }
+        }
+        await refreshCustomPresets();
+    }
+
+    // Wire up preset editor controls
+    (function wirePresetEditor() {
+        // --- Wizard ---
+        var wizardModal = document.getElementById('preset-wizard-modal');
+        var wizardStepSource = document.getElementById('wizard-step-source');
+        var wizardStepCodec = document.getElementById('wizard-step-codec');
+        var wizardStepOfficial = document.getElementById('wizard-step-official');
+        var wizardStepCustom = document.getElementById('wizard-step-custom');
+        var wizardStepForm = document.getElementById('wizard-step-form');
+        var wizardFormContainer = document.getElementById('wizard-form-container');
+        var editorView = presetEl('presets-editor-view');
+        var editorFieldsets = editorView ? Array.from(editorView.querySelectorAll('fieldset')) : [];
+
+        function showWizardStep(step) {
+            [wizardStepSource, wizardStepCodec, wizardStepOfficial, wizardStepCustom, wizardStepForm].forEach(function (s) {
+                if (s) s.hidden = true;
+            });
+            if (step) step.hidden = false;
+        }
+
+        function openWizard() {
+            if (!wizardModal) return;
+            showWizardStep(wizardStepSource);
+            wizardModal.hidden = false;
+        }
+
+        function closeWizard() {
+            if (!wizardModal) return;
+            wizardModal.hidden = true;
+            // Move editor fieldsets back if they were in the wizard
+            if (editorView && wizardFormContainer) {
+                editorFieldsets.forEach(function (fs) { editorView.appendChild(fs); });
+            }
+        }
+
+        function openEditorInWizard(preset) {
+            // Fill form via existing logic
+            openPresetEditor(preset);
+            // Now move the editor fieldsets into the wizard form container
+            if (wizardFormContainer && editorView) {
+                wizardFormContainer.innerHTML = '';
+                editorFieldsets.forEach(function (fs) { wizardFormContainer.appendChild(fs); });
+            }
+            // Hide the inline editor view (it was shown by openPresetEditor)
+            if (editorView) editorView.hidden = true;
+            presetEl('presets-list-view').hidden = false;
+            // Hide export/delete buttons (new preset)
+            presetEl('preset-export-button').hidden = true;
+            presetEl('preset-delete-button').hidden = true;
+            showWizardStep(wizardStepForm);
+        }
+
+        // "Create preset" button opens wizard
+        var createBtn = document.getElementById('preset-create-wizard-btn');
+        if (createBtn) createBtn.addEventListener('click', openWizard);
+
+        // Close wizard
+        var closeBtn = document.getElementById('wizard-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', closeWizard);
+        // Close on backdrop click
+        if (wizardModal) {
+            wizardModal.querySelector('.confirm-backdrop').addEventListener('click', closeWizard);
+        }
+
+        // Step 1: source cards
+        if (wizardStepSource) {
+            wizardStepSource.querySelectorAll('.wizard-card').forEach(function (card) {
+                card.addEventListener('click', function () {
+                    var source = card.dataset.wizardSource;
+                    if (source === 'blank') {
+                        openEditorInWizard(null);
+                    } else if (source === 'codec') {
+                        renderWizardCodecCards();
+                        showWizardStep(wizardStepCodec);
+                    } else if (source === 'official') {
+                        renderWizardOfficialList();
+                        showWizardStep(wizardStepOfficial);
+                    } else if (source === 'custom') {
+                        renderWizardCustomList();
+                        showWizardStep(wizardStepCustom);
+                    }
+                });
+            });
+        }
+
+        // Step 2a: codec cards
+        function renderWizardCodecCards() {
+            var container = document.getElementById('wizard-codec-cards');
+            if (!container) return;
+            container.innerHTML = '';
+            BUILTIN_PRESETS.forEach(function (bp) {
+                var card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'wizard-card';
+                card.innerHTML = '<span class="wizard-card-icon">🎬</span>' +
+                    '<span class="wizard-card-title">' + escapeHtml(bp.name) + '</span>' +
+                    '<span class="wizard-card-desc">' + escapeHtml(bp.description) + '</span>';
+                card.addEventListener('click', function () {
+                    var draft = emptyDraft();
+                    draft.name = bp.name;
+                    draft.params.video.encoder = bp.encoder;
+                    draft._fromCodec = true;
+                    openEditorInWizard(draft);
+                });
+                container.appendChild(card);
+            });
+        }
+
+        // Back buttons
+        var codecBackBtn = document.getElementById('wizard-codec-back');
+        if (codecBackBtn) codecBackBtn.addEventListener('click', function () { showWizardStep(wizardStepSource); });
+        var officialBackBtn = document.getElementById('wizard-official-back');
+        if (officialBackBtn) officialBackBtn.addEventListener('click', function () { showWizardStep(wizardStepSource); });
+        var customBackBtn = document.getElementById('wizard-custom-back');
+        if (customBackBtn) customBackBtn.addEventListener('click', function () { showWizardStep(wizardStepSource); });
+        var formBackBtn = document.getElementById('wizard-form-back');
+        if (formBackBtn) formBackBtn.addEventListener('click', function () { showWizardStep(wizardStepSource); });
+
+        // Step 2c: custom presets list
+        function renderWizardCustomList() {
+            var container = document.getElementById('wizard-custom-container');
+            if (!container) return;
+            container.innerHTML = '';
+            var customs = presetsState.custom || [];
+            if (!customs.length) {
+                var p = document.createElement('p');
+                p.className = 'empty-state';
+                p.textContent = i18n.t('settings.presets.no_custom') || 'You have not created any custom presets yet.';
+                container.appendChild(p);
+                return;
+            }
+            customs.forEach(function (preset) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'preset-group-item';
+                var n = document.createElement('div');
+                n.className = 'preset-group-item-name';
+                n.textContent = preset.name;
+                btn.appendChild(n);
+                if (preset.description) {
+                    var d = document.createElement('p');
+                    d.className = 'preset-group-item-desc';
+                    d.textContent = preset.description;
+                    btn.appendChild(d);
+                }
+                btn.addEventListener('click', function () {
+                    // Clone: deep copy but clear id so it saves as new
+                    var clone = JSON.parse(JSON.stringify(preset));
+                    clone.id = null;
+                    clone.name = preset.name + ' (copy)';
+                    openEditorInWizard(clone);
+                });
+                container.appendChild(btn);
+            });
+        }
+
+        // Step 2b: official presets list
+        function renderWizardOfficialList() {
+            var container = document.getElementById('wizard-official-container');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!presetsState.loadedOfficial) {
+                var loading = document.createElement('p');
+                loading.className = 'empty-state';
+                loading.textContent = i18n.t('settings.presets.loading') || 'Loading official presets…';
+                container.appendChild(loading);
+                refreshOfficialPresets(false).then(function () { renderWizardOfficialList(); });
+                return;
+            }
+            if (!presetsState.official.length) {
+                var p = document.createElement('p');
+                p.className = 'empty-state';
+                p.textContent = i18n.t('settings.presets.no_official') || 'No official presets available.';
+                container.appendChild(p);
+                return;
+            }
+            // Group by category
+            var groups = {};
+            presetsState.official.forEach(function (preset) {
+                var cat = preset.category || 'Other';
+                if (!groups[cat]) groups[cat] = [];
+                groups[cat].push(preset);
+            });
+            Object.keys(groups).sort().forEach(function (cat) {
+                var details = document.createElement('details');
+                details.className = 'preset-group';
+                var summary = document.createElement('summary');
+                var label = document.createElement('span');
+                label.textContent = categoryLabel(cat);
+                var count = document.createElement('span');
+                count.className = 'preset-group-count';
+                count.textContent = ' (' + groups[cat].length + ')';
+                label.appendChild(count);
+                summary.appendChild(label);
+                details.appendChild(summary);
+                var body = document.createElement('div');
+                body.className = 'preset-group-body';
+                groups[cat].forEach(function (preset) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'preset-group-item';
+                    var n = document.createElement('div');
+                    n.className = 'preset-group-item-name';
+                    n.textContent = preset.name;
+                    btn.appendChild(n);
+                    if (preset.description) {
+                        var d = document.createElement('p');
+                        d.className = 'preset-group-item-desc';
+                        d.textContent = preset.description;
+                        btn.appendChild(d);
+                    }
+                    btn.addEventListener('click', function () { openEditorInWizard(preset); });
+                    body.appendChild(btn);
+                });
+                details.appendChild(body);
+                container.appendChild(details);
+            });
+        }
+
+        // Wizard save button — delegates to the existing save logic
+        var wizardSaveBtn = document.getElementById('wizard-form-save');
+        if (wizardSaveBtn) wizardSaveBtn.addEventListener('click', async function () {
+            await savePreset();
+            // If save was successful, editing state is cleared
+            if (!presetsState.editing) closeWizard();
+        });
+
+        // Keep existing save/cancel/export/delete for inline editor (editing existing presets)
+        var saveBtn = presetEl('preset-save-button');
+        if (saveBtn) saveBtn.addEventListener('click', savePreset);
+        var cancelBtn = presetEl('preset-cancel-button');
+        if (cancelBtn) cancelBtn.addEventListener('click', closePresetEditor);
+        var exportBtn = presetEl('preset-export-button');
+        if (exportBtn) exportBtn.addEventListener('click', function () {
+            if (presetsState.editing && presetsState.editing.id) exportPreset(presetsState.editing.id);
+        });
+        var deleteBtn = presetEl('preset-delete-button');
+        if (deleteBtn) deleteBtn.addEventListener('click', function () {
+            if (presetsState.editing && presetsState.editing.id) {
+                deletePreset(presetsState.editing);
+            }
+        });
+
+        // Hide codec/speed rows in settings when a default preset is selected
+        function toggleSettingsCodecSpeedRows(show) {
+            var codecRow = document.getElementById('settings-default-codec-row');
+            var speedRow = document.getElementById('settings-default-speed-row');
+            if (codecRow) codecRow.hidden = !show;
+            if (speedRow) speedRow.hidden = !show;
+        }
+        var settingsPresetSel = document.getElementById('settings-default-preset');
+        if (settingsPresetSel) {
+            settingsPresetSel.addEventListener('change', function () {
+                toggleSettingsCodecSpeedRows(!settingsPresetSel.value);
+            });
+        }
+        // Expose for applySummaryToForms
+        window._clutchToggleSettingsCodecSpeedRows = toggleSettingsCodecSpeedRows;
+
+        // "Show all presets" toggle checkboxes
+        document.querySelectorAll('.show-all-presets-toggle input[type="checkbox"]').forEach(function (cb) {
+            cb.addEventListener('change', async function () {
+                var targetId = cb.dataset.target;
+                var sel = document.getElementById(targetId);
+                if (!sel) return;
+                sel.dataset.showAllPresets = cb.checked ? 'true' : '';
+                if (cb.checked && !presetsState.loadedOfficial) {
+                    await refreshOfficialPresets(false);
+                }
+                populatePresetSelects(presetsState.quickAccess || []);
+            });
+        });
+
+        // Hide codec/speed rows when a preset is selected (preset overrides them)
+        ['job-preset-select', 'watcher-preset-select'].forEach(function (selId) {
+            var sel = document.getElementById(selId);
+            if (!sel) return;
+            sel.addEventListener('change', function () {
+                var form = sel.closest('form');
+                if (!form) return;
+                var hasPreset = !!sel.value;
+                var codecSel = form.querySelector('select[name="codec"]');
+                var speedSel = form.querySelector('select[name="encode_speed"]');
+                if (codecSel) {
+                    var codecRow = codecSel.closest('.field-row');
+                    if (codecRow) codecRow.hidden = hasPreset;
+                }
+                if (speedSel) {
+                    var speedRow = speedSel.closest('.field-row');
+                    if (speedRow) speedRow.hidden = hasPreset;
+                }
+            });
+        });
+
+        // Hide upload codec/speed rows when a preset is selected
+        var uploadPresetSel = document.getElementById('upload-preset-select');
+        if (uploadPresetSel) {
+            uploadPresetSel.addEventListener('change', function () {
+                var hasPreset = !!uploadPresetSel.value;
+                var codecRow = document.getElementById('upload-codec-row');
+                var speedRow = document.getElementById('upload-speed-row');
+                if (codecRow) codecRow.hidden = hasPreset;
+                if (speedRow) speedRow.hidden = hasPreset;
+            });
+        }
+    })();
+
     navigateTo(getPageFromHash());
     i18n.init().then(function () {
         // Sync language selectors with the detected/loaded language
@@ -5283,6 +6196,7 @@
     }).then(function () {
         navigateTo(getPageFromHash());
         refreshAll();
+        refreshQuickAccessPresets();
         scheduleRefresh();
     }).catch(function () {
         // Auth redirect in progress — do not load dashboard data
@@ -5488,13 +6402,16 @@
             var speedEl = document.getElementById('upload-speed');
             var apEl = document.getElementById('upload-audio-passthrough');
             var dsEl = document.getElementById('upload-delete-source');
+            var presetSelEl = document.getElementById('upload-preset-select');
+            var presetId = presetSelEl ? presetSelEl.value : '';
 
             var settings = {
-                codec: codecEl ? codecEl.value : 'nvenc_h265',
-                encode_speed: speedEl ? speedEl.value : 'normal',
+                codec: presetId ? '' : (codecEl ? codecEl.value : 'nvenc_h265'),
+                encode_speed: presetId ? '' : (speedEl ? speedEl.value : 'normal'),
                 audio_passthrough: apEl && apEl.checked ? 'true' : 'false',
                 delete_source: dsEl && dsEl.checked ? 'true' : 'false',
             };
+            if (presetId) settings.preset_id = presetId;
 
             var CONCURRENT = 2;
             var queue = pendingFiles.slice();
