@@ -1036,6 +1036,41 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"watchers": self.server.service.list_watchers()})
             return
 
+        if path == "/presets":
+            self._send_json(200, {"presets": self.server.service.list_presets()})
+            return
+
+        if path == "/presets/official":
+            force = str(query.get("refresh") or "").lower() in {"1", "true", "yes", "on"}
+            self._send_json(200, self.server.service.list_official_presets(force_refresh=force))
+            return
+
+        if path.startswith("/presets/") and path.endswith("/export"):
+            preset_id = path[len("/presets/"):-len("/export")]
+            doc = self.server.service.export_preset_as_handbrake(preset_id)
+            if doc is None:
+                self._send_json(404, {"error": "Preset not found."})
+                return
+            body = json.dumps(doc, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            safe_name = "".join(c for c in str(doc.get("PresetList", [{}])[0].get("PresetName") or "preset") if c.isalnum() or c in "-_") or "preset"
+            self.send_header("Content-Disposition", f'attachment; filename="{safe_name}.json"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if path.startswith("/presets/"):
+            preset_id = path.rsplit("/", 1)[-1]
+            preset = self.server.service.get_preset(preset_id)
+            if not preset:
+                self._send_json(404, {"error": "Preset not found."})
+                return
+            self._send_json(200, preset)
+            return
+
         if path == "/jobs":
             self._send_json(200, {"jobs": self.server.service.list_jobs()})
             return
@@ -1398,6 +1433,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                             "delete_source": payload.get("default_delete_source") == "on",
                             "force": payload.get("default_force") == "on",
                             "verbose": payload.get("default_verbose") == "on",
+                            "default_preset_id": payload.get("default_preset_id", ""),
                         },
                     }
                 summary = self.server.service.update_service_settings(payload)
@@ -1424,6 +1460,38 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 ).start()
             return
 
+        if path == "/presets":
+            user = self._require_role("admin")
+            if not user:
+                return
+            try:
+                payload = self._read_json()
+                preset = self.server.service.save_preset(payload)
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(201, preset)
+            return
+
+        if path == "/presets/import":
+            user = self._require_role("admin")
+            if not user:
+                return
+            try:
+                document = self._read_json()
+                preset = self.server.service.import_preset_from_handbrake(document)
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(201, preset)
+            return
+
         if path == "/watchers":
             user = self._require_role("operator")
             if not user:
@@ -1444,6 +1512,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                     encode_speed=str(payload.get("encode_speed") or "").strip(),
                     audio_passthrough=_nbool("audio_passthrough"),
                     force=_nbool("force"),
+                    preset_id=str(payload.get("preset_id") or "").strip() or None,
                 )
             except json.JSONDecodeError as exc:
                 self._send_json(400, {"error": f"Invalid JSON: {exc}"})
@@ -1530,6 +1599,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 return
 
             fields = result["fields"]
+            preset_id = fields.get("preset_id", "").strip()
             payload = {
                 "input_file": result["file_path"],
                 "output_dir": fields.get("output_dir", "").strip() or svc.upload_dir,
@@ -1540,6 +1610,8 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 "verbose": fields.get("verbose", "").lower() in ("true", "1", "on"),
                 "force": fields.get("force", "").lower() in ("true", "1", "on"),
             }
+            if preset_id:
+                payload["preset_id"] = preset_id
             try:
                 record = svc.submit_jobs_from_payload(payload, source="upload")
             except ValueError as exc:
@@ -2047,6 +2119,29 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
         if self._check_setup_redirect(path):
             return
 
+        if path.startswith("/presets/"):
+            user = self._require_role("admin")
+            if not user:
+                return
+            preset_id = path.rsplit("/", 1)[-1]
+            try:
+                payload = self._read_json()
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+            existing = self.server.service.get_preset(preset_id)
+            if not existing:
+                self._send_json(404, {"error": "Preset not found."})
+                return
+            try:
+                payload["id"] = preset_id
+                preset = self.server.service.save_preset(payload)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, preset)
+            return
+
         if path.startswith("/watchers/"):
             user = self._require_role("operator")
             if not user:
@@ -2067,6 +2162,7 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                     encode_speed=str(payload.get("encode_speed") or "").strip(),
                     audio_passthrough=_nbool("audio_passthrough"),
                     force=_nbool("force"),
+                    preset_id=str(payload.get("preset_id") or "").strip() or None,
                 )
             except json.JSONDecodeError as exc:
                 self._send_json(400, {"error": f"Invalid JSON: {exc}"})
@@ -2126,6 +2222,18 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             if mode not in ("all", "finished", "queued"):
                 mode = "all"
             self._send_json(200, self.server.service.clear_jobs(mode=mode))
+            return
+
+        if path.startswith("/presets/"):
+            user = self._require_role("admin")
+            if not user:
+                return
+            preset_id = path.rsplit("/", 1)[-1]
+            deleted = self.server.service.delete_preset(preset_id)
+            if not deleted:
+                self._send_json(404, {"error": "Preset not found."})
+                return
+            self._send_json(200, {"id": preset_id, "deleted": True})
             return
 
         if path.startswith("/watchers/"):

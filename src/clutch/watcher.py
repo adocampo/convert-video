@@ -30,6 +30,7 @@ class DirectoryWatcher(threading.Thread):
         encode_speed: str = "",
         audio_passthrough: Optional[bool] = None,
         force: Optional[bool] = None,
+        preset_id: Optional[str] = None,
     ):
         super().__init__(daemon=True)
         self.service = service
@@ -44,6 +45,7 @@ class DirectoryWatcher(threading.Thread):
         self.encode_speed = (encode_speed or "").strip()
         self.audio_passthrough = audio_passthrough
         self.force = force
+        self.preset_id = (preset_id or None) if preset_id else None
         self.stop_event = threading.Event()
         self._observed: Dict[str, Dict[str, float]] = {}
         self._submitted = set()
@@ -62,6 +64,7 @@ class DirectoryWatcher(threading.Thread):
             "encode_speed": self.encode_speed,
             "audio_passthrough": self.audio_passthrough,
             "force": self.force,
+            "preset_id": self.preset_id,
         }
 
     def _apply_overrides(self, payload: Dict[str, object]):
@@ -79,6 +82,8 @@ class DirectoryWatcher(threading.Thread):
             payload["audio_passthrough"] = self.audio_passthrough
         if self.force is not None:
             payload["force"] = self.force
+        if self.preset_id:
+            payload["preset_id"] = self.preset_id
 
     def stop(self):
         self.stop_event.set()

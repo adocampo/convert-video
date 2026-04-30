@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from clutch.converter import RESUME_MIN_DURATION, is_conversion_process_alive
 from clutch.mediainfo import extract_media_summary, get_media_duration_seconds
 from clutch.output import info, warning, debug
+from clutch.presets import normalize_preset_params
 
 
 def utc_now() -> str:
@@ -90,6 +91,7 @@ class ConversionJob:
     audio_tracks: List[dict] = field(default_factory=list)
     submitted_display: str = ""
     output_base_dir: str = ""
+    preset_id: Optional[str] = None
 
     def to_record(self) -> Dict[str, object]:
         return {
@@ -102,6 +104,7 @@ class ConversionJob:
             "verbose": int(self.verbose),
             "force": int(self.force),
             "source": self.source,
+            "preset_id": self.preset_id or None,
             "extra_json": json.dumps(
                 {
                     "title": self.title,
@@ -131,6 +134,7 @@ class ConversionJob:
             audio_tracks=extra.get("audio_tracks") or [],
             submitted_display=str(extra.get("submitted_display") or "").strip(),
             output_base_dir=str(extra.get("output_base_dir") or "").strip(),
+            preset_id=str(row.get("preset_id") or "").strip() or None,
         )
 
     @classmethod
@@ -139,6 +143,7 @@ class ConversionJob:
         if not input_file:
             raise ValueError("'input_file' is required.")
 
+        preset_id = str(payload.get("preset_id") or "").strip() or None
         encode_speed = str(payload.get("encode_speed") or payload.get("speed") or "normal")
         if encode_speed not in {"slow", "normal", "fast"}:
             raise ValueError("'encode_speed' must be one of: slow, normal, fast.")
@@ -170,6 +175,7 @@ class ConversionJob:
             audio_tracks=audio_tracks,
             submitted_display=submitted_display,
             output_base_dir=str(payload.get("output_base_dir") or "").strip(),
+            preset_id=preset_id,
         )
 
 
@@ -333,9 +339,30 @@ class JobStore:
                 ("encode_speed", "TEXT NOT NULL DEFAULT ''"),
                 ("audio_passthrough", "INTEGER"),
                 ("force", "INTEGER"),
+                ("preset_id", "TEXT"),
             ]:
                 if col not in watcher_columns:
                     self._conn.execute(f"ALTER TABLE watchers ADD COLUMN {col} {definition}")
+
+            # Job-level preset reference (NULL = simple codec+speed mode)
+            if "preset_id" not in columns:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN preset_id TEXT")
+
+            # Custom encoding presets (Preset Editor feature)
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS presets (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT NOT NULL DEFAULT '',
+                    base_preset TEXT NOT NULL DEFAULT '',
+                    params_json TEXT NOT NULL,
+                    quick_access INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
             # Notification channels (Phase 4)
             self._conn.execute(
@@ -512,8 +539,8 @@ class JobStore:
                     audio_passthrough, delete_source, verbose, force, source,
                     submitted_at, started_at, finished_at, input_size_bytes, output_size_bytes,
                     progress_percent, message, output_file, process_id, temp_file, log_file,
-                    final_output_file, resume_on_start, extra_json
-                ) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, ?)
+                    final_output_file, resume_on_start, extra_json, preset_id
+                ) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, ?, ?)
                 """,
                 (
                     job_id,
@@ -529,6 +556,7 @@ class JobStore:
                     submitted_at,
                     input_size_bytes,
                     record["extra_json"],
+                    record.get("preset_id"),
                 ),
             )
         return self.get(job_id)
@@ -685,7 +713,7 @@ class JobStore:
     def list_watcher_configs(self) -> List[Dict[str, object]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force FROM watchers ORDER BY directory ASC"
+                "SELECT id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force, preset_id FROM watchers ORDER BY directory ASC"
             ).fetchall()
         return [
             {
@@ -700,6 +728,7 @@ class JobStore:
                 "encode_speed": str(row["encode_speed"] or ""),
                 "audio_passthrough": None if row["audio_passthrough"] is None else bool(row["audio_passthrough"]),
                 "force": None if row["force"] is None else bool(row["force"]),
+                "preset_id": str(row["preset_id"] or "") or None,
             }
             for row in rows
         ]
@@ -708,8 +737,8 @@ class JobStore:
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO watchers (id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO watchers (id, directory, recursive, poll_interval, settle_time, delete_source, output_dir, codec, encode_speed, audio_passthrough, force, preset_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     directory = excluded.directory,
                     recursive = excluded.recursive,
@@ -720,7 +749,8 @@ class JobStore:
                     codec = excluded.codec,
                     encode_speed = excluded.encode_speed,
                     audio_passthrough = excluded.audio_passthrough,
-                    force = excluded.force
+                    force = excluded.force,
+                    preset_id = excluded.preset_id
                 """,
                 (
                     str(watcher["id"]),
@@ -734,6 +764,7 @@ class JobStore:
                     str(watcher.get("encode_speed") or ""),
                     None if watcher.get("audio_passthrough") is None else int(bool(watcher["audio_passthrough"])),
                     None if watcher.get("force") is None else int(bool(watcher["force"])),
+                    str(watcher.get("preset_id") or "") or None,
                 ),
             )
 
@@ -803,6 +834,8 @@ class JobStore:
                 "input_file": r.get("input_file"),
                 "output_file": r.get("output_file"),
                 "codec": r.get("codec"),
+                "encode_speed": r.get("encode_speed"),
+                "preset_id": r.get("preset_id") or None,
                 "input_size_bytes": r.get("input_size_bytes"),
                 "output_size_bytes": r.get("output_size_bytes"),
                 "compression_percent": r.get("compression_percent"),
@@ -1110,5 +1143,136 @@ class JobStore:
             "queued": queued_count,
             "active": running_count + paused_count + cancelling_count,
         }
+
+    # ── Custom presets ──────────────────────────────────────────────
+
+    @staticmethod
+    def _row_to_preset(row: sqlite3.Row) -> Dict[str, object]:
+        try:
+            params = json.loads(row["params_json"] or "{}")
+        except json.JSONDecodeError:
+            params = {}
+        return {
+            "id": str(row["id"]),
+            "name": str(row["name"] or ""),
+            "description": str(row["description"] or ""),
+            "base_preset": str(row["base_preset"] or ""),
+            "params": params,
+            "quick_access": bool(row["quick_access"]),
+            "created_at": str(row["created_at"] or ""),
+            "updated_at": str(row["updated_at"] or ""),
+        }
+
+    def list_presets(self) -> List[Dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, name, description, base_preset, params_json, quick_access, created_at, updated_at "
+                "FROM presets ORDER BY quick_access DESC, name COLLATE NOCASE ASC"
+            ).fetchall()
+        return [self._row_to_preset(row) for row in rows]
+
+    def get_preset(self, preset_id: str) -> Optional[Dict[str, object]]:
+        if not preset_id:
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, name, description, base_preset, params_json, quick_access, created_at, updated_at "
+                "FROM presets WHERE id = ?",
+                (preset_id,),
+            ).fetchone()
+        return self._row_to_preset(row) if row else None
+
+    def get_preset_by_name(self, name: str) -> Optional[Dict[str, object]]:
+        if not name:
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, name, description, base_preset, params_json, quick_access, created_at, updated_at "
+                "FROM presets WHERE name = ?",
+                (name,),
+            ).fetchone()
+        return self._row_to_preset(row) if row else None
+
+    def save_preset(
+        self,
+        *,
+        preset_id: Optional[str],
+        name: str,
+        description: str,
+        base_preset: str,
+        params: Dict[str, object],
+        quick_access: bool,
+    ) -> Dict[str, object]:
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise ValueError("Preset name is required.")
+        normalized_params = normalize_preset_params(params)
+        params_json = json.dumps(normalized_params)
+        now = utc_now()
+        with self._lock, self._conn:
+            if preset_id:
+                existing = self._conn.execute(
+                    "SELECT id FROM presets WHERE name = ? AND id != ?",
+                    (clean_name, preset_id),
+                ).fetchone()
+                if existing:
+                    raise ValueError(f"A preset named '{clean_name}' already exists.")
+                self._conn.execute(
+                    """
+                    UPDATE presets
+                    SET name = ?, description = ?, base_preset = ?, params_json = ?,
+                        quick_access = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        clean_name,
+                        str(description or ""),
+                        str(base_preset or ""),
+                        params_json,
+                        int(bool(quick_access)),
+                        now,
+                        preset_id,
+                    ),
+                )
+                final_id = preset_id
+            else:
+                existing = self._conn.execute(
+                    "SELECT id FROM presets WHERE name = ?",
+                    (clean_name,),
+                ).fetchone()
+                if existing:
+                    raise ValueError(f"A preset named '{clean_name}' already exists.")
+                final_id = str(uuid.uuid4())
+                self._conn.execute(
+                    """
+                    INSERT INTO presets (id, name, description, base_preset, params_json,
+                                         quick_access, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        final_id,
+                        clean_name,
+                        str(description or ""),
+                        str(base_preset or ""),
+                        params_json,
+                        int(bool(quick_access)),
+                        now,
+                        now,
+                    ),
+                )
+        result = self.get_preset(final_id)
+        if result is None:
+            raise RuntimeError("Failed to load preset after save.")
+        return result
+
+    def delete_preset(self, preset_id: str) -> bool:
+        if not preset_id:
+            return False
+        with self._lock, self._conn:
+            # Detach the preset from any jobs/watchers that referenced it
+            self._conn.execute("UPDATE jobs SET preset_id = NULL WHERE preset_id = ?", (preset_id,))
+            self._conn.execute("UPDATE watchers SET preset_id = NULL WHERE preset_id = ?", (preset_id,))
+            updated = self._conn.execute("DELETE FROM presets WHERE id = ?", (preset_id,))
+        return updated.rowcount == 1
 
 

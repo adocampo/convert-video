@@ -45,6 +45,7 @@ from clutch.mediainfo import VIDEO_EXTENSIONS, check_already_converted, extract_
 from clutch.notifications import NotificationManager
 from clutch.output import error as print_error
 from clutch.output import debug, info, success, warning, setup_file_logging, set_log_level
+from clutch.presets import list_official_presets, normalize_preset_params, find_official_preset
 from clutch.scheduler import BIDDING_ZONES, ScheduleConfig, ScheduleEngine
 from clutch.store import (
     ACTIVE_JOB_STATUSES,
@@ -207,6 +208,7 @@ class ConversionService:
                     encode_speed=str(watcher_config.get("encode_speed") or ""),
                     audio_passthrough=watcher_config.get("audio_passthrough"),
                     force=watcher_config.get("force"),
+                    preset_id=watcher_config.get("preset_id"),
                 )
                 self._watchers[watcher.watcher_id] = watcher
 
@@ -731,10 +733,13 @@ class ConversionService:
         encode_speed: str = "",
         audio_passthrough: Optional[bool] = None,
         force: Optional[bool] = None,
+        preset_id: Optional[str] = None,
     ) -> Dict[str, object]:
         if not directory.strip():
             raise ValueError("Watcher directory is required.")
         self._validate_path(directory, require_directory=True)
+        if preset_id and not self.store.get_preset(preset_id):
+            raise ValueError("Referenced preset does not exist.")
         watcher_id = str(uuid.uuid4())
         watcher = DirectoryWatcher(
             self,
@@ -749,6 +754,7 @@ class ConversionService:
             encode_speed=encode_speed,
             audio_passthrough=audio_passthrough,
             force=force,
+            preset_id=preset_id,
         )
         with self._watchers_lock:
             for existing in self._watchers.values():
@@ -780,10 +786,13 @@ class ConversionService:
         encode_speed: str = "",
         audio_passthrough: Optional[bool] = None,
         force: Optional[bool] = None,
+        preset_id: Optional[str] = None,
     ) -> Dict[str, object]:
         if not directory.strip():
             raise ValueError("Watcher directory is required.")
         self._validate_path(directory, require_directory=True)
+        if preset_id and not self.store.get_preset(preset_id):
+            raise ValueError("Referenced preset does not exist.")
         with self._watchers_lock:
             old_watcher = self._watchers.pop(watcher_id, None)
             if old_watcher is None:
@@ -806,6 +815,7 @@ class ConversionService:
             encode_speed=encode_speed,
             audio_passthrough=audio_passthrough,
             force=force,
+            preset_id=preset_id,
         )
         with self._watchers_lock:
             self._watchers[watcher_id] = new_watcher
@@ -827,6 +837,150 @@ class ConversionService:
         with self._watchers_lock:
             watchers = list(self._watchers.values())
         return [watcher.to_summary() for watcher in watchers]
+
+    # ── Presets ─────────────────────────────────────────────────────
+
+    def list_presets(self) -> List[Dict[str, object]]:
+        return self.store.list_presets()
+
+    def get_preset(self, preset_id: str) -> Optional[Dict[str, object]]:
+        return self.store.get_preset(preset_id)
+
+    def list_official_presets(self, *, force_refresh: bool = False) -> Dict[str, object]:
+        return list_official_presets(force_refresh=force_refresh)
+
+    def save_preset(self, payload: Dict[str, object]) -> Dict[str, object]:
+        preset_id = str(payload.get("id") or "").strip() or None
+        name = str(payload.get("name") or "").strip()
+        description = str(payload.get("description") or "").strip()
+        base_preset = str(payload.get("base_preset") or "").strip()
+        params = payload.get("params")
+        if not isinstance(params, dict):
+            params = {}
+        # Honor handbrake_preset shorthand at the top level for HandBrake-format imports.
+        if not params.get("handbrake_preset") and base_preset:
+            params = {**params, "handbrake_preset": base_preset}
+        quick_access = bool(payload.get("quick_access", False))
+        return self.store.save_preset(
+            preset_id=preset_id,
+            name=name,
+            description=description,
+            base_preset=base_preset,
+            params=params,
+            quick_access=quick_access,
+        )
+
+    def delete_preset(self, preset_id: str) -> bool:
+        return self.store.delete_preset(preset_id)
+
+    def import_preset_from_handbrake(self, document: Dict[str, object]) -> Dict[str, object]:
+        """Translate a HandBrake-format preset JSON into our curated schema and persist it."""
+        if not isinstance(document, dict):
+            raise ValueError("Invalid HandBrake preset document.")
+        # HandBrake exports wrap the preset in {"PresetList": [{...}]} or as a bare object.
+        preset_node = document
+        preset_list = document.get("PresetList") if isinstance(document, dict) else None
+        if isinstance(preset_list, list) and preset_list:
+            for entry in preset_list:
+                if isinstance(entry, dict) and entry.get("PresetName"):
+                    preset_node = entry
+                    break
+        name = str(preset_node.get("PresetName") or "").strip()
+        if not name:
+            raise ValueError("Preset name not found in document.")
+        description = str(preset_node.get("PresetDescription") or "").strip()
+        encoder = str(preset_node.get("VideoEncoder") or "").strip()
+        quality = preset_node.get("VideoQualitySlider")
+        bitrate = preset_node.get("VideoAvgBitrate")
+        params = {
+            "handbrake_preset": "",
+            "video": {
+                "encoder": encoder,
+                "quality_mode": "abr" if (bitrate and not quality) else "crf",
+                "quality_value": int(bitrate) if (bitrate and not quality) else (int(float(quality)) if quality else 22),
+                "encoder_preset": str(preset_node.get("VideoPreset") or ""),
+                "max_width": int(preset_node.get("PictureWidth") or 0),
+                "max_height": int(preset_node.get("PictureHeight") or 0),
+                "framerate_mode": "peak" if str(preset_node.get("VideoFramerateMode") or "").lower() == "pfr" else "same-as-source",
+                "framerate_value": 0,
+                "extra_options": str(preset_node.get("VideoOptionExtra") or ""),
+            },
+            "container": {
+                "format": "mp4" if "mp4" in str(preset_node.get("FileFormat") or "").lower() else "mkv",
+                "chapter_markers": bool(preset_node.get("ChapterMarkers", True)),
+            },
+        }
+        return self.save_preset({
+            "name": name,
+            "description": description,
+            "base_preset": "",
+            "params": params,
+            "quick_access": False,
+        })
+
+    def export_preset_as_handbrake(self, preset_id: str) -> Optional[Dict[str, object]]:
+        """Render a stored preset as a HandBrake-compatible JSON document."""
+        preset = self.store.get_preset(preset_id)
+        if not preset:
+            return None
+        params = preset.get("params") or {}
+        if not isinstance(params, dict):
+            params = {}
+        video = params.get("video") or {}
+        container = params.get("container") or {}
+        encoder = str(video.get("encoder") or "x265")
+        quality_mode = str(video.get("quality_mode") or "crf")
+        node: Dict[str, object] = {
+            "PresetName": str(preset.get("name") or ""),
+            "PresetDescription": str(preset.get("description") or ""),
+            "VideoEncoder": encoder,
+            "VideoPreset": str(video.get("encoder_preset") or ""),
+            "VideoOptionExtra": str(video.get("extra_options") or ""),
+            "PictureWidth": int(video.get("max_width") or 0),
+            "PictureHeight": int(video.get("max_height") or 0),
+            "FileFormat": "av_mp4" if container.get("format") == "mp4" else "av_mkv",
+            "ChapterMarkers": bool(container.get("chapter_markers", True)),
+            "Type": 0,
+        }
+        if quality_mode == "abr":
+            node["VideoAvgBitrate"] = int(video.get("quality_value") or 0)
+            node["VideoQualityType"] = 1
+        else:
+            node["VideoQualitySlider"] = float(video.get("quality_value") or 22)
+            node["VideoQualityType"] = 2
+        return {"PresetList": [node], "VersionMajor": 50, "VersionMinor": 0, "VersionMicro": 0}
+
+    def _resolve_preset_params(self, preset_id: Optional[str]) -> Optional[Dict[str, object]]:
+        """Look up a preset by id and return its normalized params, or None.
+
+        Supports custom presets (UUID from DB), custom presets by name, and
+        official presets via the ``official:<PresetName>`` convention.
+        """
+        if not preset_id:
+            return None
+        # Official preset referenced by name
+        if preset_id.startswith("official:"):
+            official_name = preset_id[len("official:"):]
+            entry = find_official_preset(official_name)
+            if not entry:
+                warning(f"Official preset {official_name!r} not found; falling back to job defaults.")
+                return None
+            return normalize_preset_params({"handbrake_preset": official_name})
+        preset = self.store.get_preset(preset_id)
+        if not preset:
+            # Try looking up by name (e.g. from --preset CLI flag)
+            preset = self.store.get_preset_by_name(preset_id)
+        if not preset:
+            warning(f"Preset {preset_id!r} not found at execution time; falling back to job defaults.")
+            return None
+        params = preset.get("params") or {}
+        if not isinstance(params, dict):
+            return None
+        try:
+            return normalize_preset_params(params)
+        except ValueError as exc:
+            warning(f"Preset {preset_id!r} has invalid params, falling back: {exc}")
+            return None
 
     def should_ignore_watch_path(self, path: str, job_settings: Optional[Dict[str, object]] = None) -> bool:
         settings = job_settings or self.get_default_job_settings()
@@ -862,6 +1016,7 @@ class ConversionService:
             "delete_source": bool(payload.get("delete_source", False)),
             "verbose": bool(payload.get("verbose", False)),
             "force": bool(payload.get("force", False)),
+            "default_preset_id": str(payload.get("default_preset_id") or "").strip() or "",
         }
         if normalized["encode_speed"] not in {"slow", "normal", "fast"}:
             raise ValueError("Default encode speed must be one of: slow, normal, fast.")
@@ -1011,7 +1166,10 @@ class ConversionService:
     ):
         normalized = normalize_path(path)
         effective_roots = list(self.allowed_roots)
-        if self.upload_dir:
+        # Only extend effective_roots with upload_dir when allowed_roots are
+        # already configured.  When allowed_roots is empty the user intends to
+        # allow all paths, so upload_dir must not create a new restriction.
+        if effective_roots and self.upload_dir:
             effective_roots.append(os.path.abspath(self.upload_dir))
         if effective_roots and not path_within_roots(normalized, effective_roots):
             raise ValueError(f"Path is outside allowed roots: {normalized}")
@@ -1460,6 +1618,12 @@ class ConversionService:
         input_path = str(payload.get("input_file") or "").strip()
         if not input_path:
             raise ValueError("'input_file' is required.")
+
+        # Apply default preset when no explicit preset is given in the payload
+        if not payload.get("preset_id"):
+            default_preset = self.default_job_settings.get("default_preset_id") or ""
+            if default_preset:
+                payload = {**payload, "preset_id": default_preset}
 
         input_kind = str(payload.get("input_kind") or "file").strip().lower() or "file"
         if input_kind not in {"file", "directory"}:
@@ -1973,6 +2137,7 @@ class ConversionService:
                 output_base_dir=job.output_base_dir,
                 resume_partial_file=resume_partial,
                 resume_offset_seconds=resume_offset,
+                preset_params=self._resolve_preset_params(job.preset_id),
             )
         except ConversionDetached:
             if self._consume_pause_detach(job_id):
@@ -2083,6 +2248,7 @@ class ConversionService:
                 output_base_dir=job.output_base_dir,
                 resume_partial_file=resume_partial,
                 resume_offset_seconds=resume_offset,
+                preset_params=self._resolve_preset_params(job.preset_id),
             )
         except ConversionDetached:
             if self._consume_pause_detach(job_id):
