@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-04-30
+
+### Added in 2.1.0
+
+- **Preset editor**: full dashboard UI for creating, editing, importing, exporting, and deleting custom encoding presets with all HandBrake parameters (video, audio, container, subtitles, filters).
+- **Creation wizard**: card-based wizard popup for creating new presets — choose "From scratch", "From codec", "From official preset", or "From your presets" to duplicate an existing one.
+- **Official HandBrake preset browser**: browse and clone official HandBrake presets grouped by category directly from the wizard.
+- **Quick-access presets**: mark custom presets as quick-access so they appear in codec dropdowns when submitting jobs or configuring watchers.
+- **Preset selection in uploads**: the upload form now supports selecting a custom preset to override codec/speed settings.
+- **"Here be dragons" warning**: dismissable notice on the presets page explaining that presets are a power-user feature, with a link to HandBrake documentation.
+- **HandBrake documentation links**: inline links to relevant HandBrake docs in the preset editor fields (encoder, quality, speed, audio, filters).
+- **Preset backend**: new `presets.py` module for building HandBrake CLI arguments from preset parameters; CRUD API endpoints for managing presets; official preset fetching and caching.
+
 ## [2.0.1] - 2026-04-29
 
 ### Added in 2.0.1
