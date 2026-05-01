@@ -53,14 +53,9 @@ def read_web_asset_bytes(name: str) -> bytes:
     return _resolve_web_asset(name).read_bytes()
 
 
-_changelog_cache: str | None = None
-
 
 def _read_changelog() -> str:
     """Read CHANGELOG.md bundled inside the package or from the project root."""
-    global _changelog_cache
-    if _changelog_cache is not None:
-        return _changelog_cache
     import clutch as _pkg
     pkg_dir = os.path.dirname(os.path.abspath(_pkg.__file__))
     candidates = [
@@ -76,12 +71,10 @@ def _read_changelog() -> str:
         if os.path.isfile(norm):
             try:
                 with open(norm, "r", encoding="utf-8") as fh:
-                    _changelog_cache = fh.read()
-                return _changelog_cache
+                    return fh.read()
             except OSError:
                 pass
-    _changelog_cache = ""
-    return _changelog_cache
+    return ""
 
 
 class ConversionHTTPServer(ThreadingHTTPServer):
