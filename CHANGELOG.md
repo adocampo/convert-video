@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1] - 2026-05-01
+
+### Fixed in 2.1.1
+
+- **Changelog display**: the dashboard now always reads the changelog file fresh from disk instead of caching it permanently in memory, so updates are visible after `--upgrade` without a manual restart.
+- **Bundled changelog sync**: the `CHANGELOG.md` shipped inside the package now stays in sync with the project root changelog.
+
 ## [2.1.0] - 2026-04-30
 
 ### Added in 2.1.0
