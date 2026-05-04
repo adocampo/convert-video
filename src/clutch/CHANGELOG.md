@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.2] - 2026-05-04
+
+### Fixed in 2.1.2
+
+- **Preset editor: stale encoder dropdown**: changing the encoder in a preset and saving it would cause the next preset editor session to show the previous encoder instead of the correct one. Fixed by clearing the custom select widget's cached value when opening the editor.
+- **Preset cloning from custom presets**: duplicating a user-created preset via the wizard produced a blank form with default values instead of copying the source preset's parameters.
+- **Official preset cloning: wrong encoder/container**: cloning an official HandBrake preset always showed NVENC H.265 and default settings regardless of the actual preset. The editor now maps official preset metadata (encoder, quality, container, audio) into the form fields.
+- **Official preset metadata missing**: when HandBrakeCLI only provided plain-text preset listings (no JSON), encoder and container info was unavailable. The backend now tries `--preset-export-file` first for full JSON metadata, and the frontend infers encoder and container from the preset name as a fallback.
+
 ## [2.1.1] - 2026-05-01
 
 ### Fixed in 2.1.1

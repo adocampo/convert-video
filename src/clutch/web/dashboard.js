@@ -5541,6 +5541,48 @@
         };
     }
 
+    // Map HandBrake official preset encoder names to our curated select values.
+    var _hbEncoderMap = {
+        'x264': 'x264', 'x265': 'x265', 'x265_10bit': 'x265_10bit',
+        'nvenc_h264': 'nvenc_h264', 'nvenc_h265': 'nvenc_h265',
+        'nvenc_h265_10bit': 'nvenc_h265_10bit',
+        'svt_av1': 'av1', 'svt_av1_10bit': 'av1',
+        'nvenc_av1': 'av1_nvenc', 'qsv_av1': 'av1_qsv',
+        'vp9': 'vp9', 'VP9': 'vp9', 'vp9_10bit': 'vp9',
+        'qsv_h264': 'qsv_h264', 'qsv_h265': 'qsv_h265',
+        'vt_h264': 'vt_h264', 'vt_h265': 'vt_h265',
+        'mpeg2': 'x264', 'mpeg4': 'x264', 'theora': 'vp9',
+    };
+    var _hbContainerMap = {
+        'av_mkv': 'mkv', 'av_mp4': 'mp4', 'mkv': 'mkv', 'mp4': 'mp4',
+    };
+    var _hbAudioMap = {
+        'av_aac': 'aac', 'fdk_aac': 'aac', 'fdk_haac': 'aac',
+        'copy:aac': 'aac', 'opus': 'opus', 'ac3': 'ac3',
+        'copy:ac3': 'ac3', 'eac3': 'eac3', 'copy:eac3': 'eac3',
+        'flac': 'opus', 'mp3': 'aac', 'vorbis': 'opus',
+        'copy': 'opus',
+    };
+
+    // Infer encoder from official preset name when backend has no metadata.
+    function _inferEncoderFromName(name) {
+        if (!name) return '';
+        var n = name.toLowerCase();
+        if (/\bvp9\b/.test(n)) return 'vp9';
+        if (/\bav1\b/.test(n)) return 'av1';
+        if (/\bh\.?264\b|\bx264\b/.test(n)) return 'x264';
+        if (/\bh\.?265\b|\bx265\b|\bhevc\b/.test(n)) return 'x265';
+        return '';
+    }
+    function _inferContainerFromName(name) {
+        if (!name) return '';
+        var n = name.toLowerCase();
+        if (/\bmkv\b|\bmatroska\b/.test(n)) return 'mkv';
+        if (/\bmp4\b/.test(n)) return 'mp4';
+        if (/\bwebm\b/.test(n)) return 'mkv';
+        return '';
+    }
+
     function openPresetEditor(preset) {
         var draft;
         if (preset && preset.id) {
@@ -5549,16 +5591,58 @@
             // Pre-filled from a built-in codec selection
             draft = preset;
             delete draft._fromCodec;
+        } else if (preset && preset.params) {
+            // Clone of a custom preset (has full params already)
+            draft = JSON.parse(JSON.stringify(preset));
         } else if (preset) {
-            // Cloning from official: use only safe fields
+            // Cloning from official: map official fields into a draft
             draft = emptyDraft();
             draft.name = (preset.name || '') + ' (copy)';
             draft.description = preset.description || '';
             draft.base_preset = preset.name || '';
+            // Map video encoder (from metadata, then fall back to name inference)
+            var hbEnc = (preset.video_encoder || '').trim();
+            if (hbEnc && _hbEncoderMap[hbEnc]) {
+                draft.params.video.encoder = _hbEncoderMap[hbEnc];
+            } else {
+                var inferred = _inferEncoderFromName(preset.name);
+                if (inferred) draft.params.video.encoder = inferred;
+            }
+            // Map quality
+            if (preset.video_bitrate && Number(preset.video_bitrate) > 0) {
+                draft.params.video.quality_mode = 'abr';
+                draft.params.video.quality_value = Number(preset.video_bitrate);
+            } else if (preset.video_quality != null && Number(preset.video_quality) > 0) {
+                draft.params.video.quality_mode = 'crf';
+                draft.params.video.quality_value = Number(preset.video_quality);
+            }
+            // Map container (from metadata, then fall back to name inference)
+            var hbCont = (preset.container || '').trim();
+            if (hbCont && _hbContainerMap[hbCont]) {
+                draft.params.container.format = _hbContainerMap[hbCont];
+            } else {
+                var inferredCont = _inferContainerFromName(preset.name);
+                if (inferredCont) draft.params.container.format = inferredCont;
+            }
+            // Map audio encoder (use first entry if comma-separated)
+            var hbAudio = (preset.audio_encoder || '').split(',')[0].trim();
+            if (hbAudio && _hbAudioMap[hbAudio]) {
+                draft.params.audio.encoder = _hbAudioMap[hbAudio];
+            }
         } else {
             draft = emptyDraft();
         }
         presetsState.editing = draft;
+        // Clear stale wantedValue on all selects inside the editor so that
+        // programmatic .value assignments below are not overridden by
+        // syncTrigger reading a leftover wantedValue from a previous session.
+        var editorContainer = presetEl('presets-editor-view');
+        if (editorContainer) {
+            Array.prototype.forEach.call(
+                editorContainer.querySelectorAll('select[data-customized]'),
+                function (sel) { delete sel.dataset.wantedValue; }
+            );
+        }
         // Fill form
         presetEl('preset-field-name').value = draft.name || '';
         presetEl('preset-field-description').value = draft.description || '';

@@ -165,7 +165,40 @@ _cache_lock = threading.Lock()
 
 
 def _run_handbrake_preset_list(handbrake_path: str) -> str:
-    """Invoke HandBrakeCLI to dump its built-in preset catalogue."""
+    """Invoke HandBrakeCLI to dump its built-in preset catalogue.
+
+    First tries ``--preset-export-file /dev/stdout`` which outputs full JSON
+    with all preset metadata. Falls back to ``--preset-list`` (plain text with
+    names only) if the export fails.
+    """
+    import tempfile, os
+
+    # Try exporting full preset JSON via a temp file (works on all platforms).
+    tmpfd, tmppath = tempfile.mkstemp(suffix=".json", prefix="clutch_presets_")
+    os.close(tmpfd)
+    try:
+        proc = subprocess.run(
+            [handbrake_path, "--preset-export-file", tmppath],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if proc.returncode == 0 and os.path.getsize(tmppath) > 2:
+            with open(tmppath, "r", encoding="utf-8") as f:
+                content = f.read()
+            if content.strip().startswith("{"):
+                debug("Loaded official presets via --preset-export-file (full JSON).")
+                return content
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        try:
+            os.unlink(tmppath)
+        except OSError:
+            pass
+
+    # Fallback: plain text listing (no encoder metadata).
     proc = subprocess.run(
         [handbrake_path, "--preset-list"],
         capture_output=True,
