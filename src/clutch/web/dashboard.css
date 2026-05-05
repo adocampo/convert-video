@@ -656,7 +656,11 @@ input.input-missing {
     font-size: 0.86rem;
     font-weight: 600;
     color: var(--text);
-    line-height: 2.2;
+}
+
+#about-version-section .field-row-control > span {
+    padding-top: 10px;
+    line-height: 1.4;
 }
 
 .changelog-text {

@@ -105,6 +105,44 @@ pipx install git+https://github.com/adocampo/clutch.git
 
 > **Tip:** If HandBrakeCLI, mediainfo, or mkvpropedit are not in your PATH after a manual install, you can configure their locations from the clutch web dashboard under **Settings → Binary Paths**.
 
+### Docker
+
+Clutch is available as two Docker images:
+
+| Image | Size | Best for |
+|-------|------|----------|
+| `ghcr.io/adocampo/clutch` | ~1.5 GB | Full Arch image — shell access, in-place upgrades |
+| `ghcr.io/adocampo/clutch-minimal` | ~280 MB | Scratch image — minimal footprint, no shell |
+
+Pull and run:
+
+```bash
+docker run -d \
+  --name clutch \
+  -p 8765:8765 \
+  -v clutch-config:/config \
+  -v /path/to/media:/media \
+  ghcr.io/adocampo/clutch:latest
+```
+
+Or use the provided `docker-compose.yml` (edit to pick full or minimal):
+
+```bash
+docker compose up -d
+```
+
+To build locally from source:
+
+```bash
+# Full image
+docker build -t clutch .
+
+# Minimal image
+docker build -f Dockerfile.minimal -t clutch-minimal .
+```
+
+For NVIDIA GPU passthrough, environment variables, watch directories, and scheduling options, see the [Docker wiki page](docs/wiki/Docker.md).
+
 ### Verify installation
 
 ```bash

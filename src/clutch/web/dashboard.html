@@ -78,8 +78,7 @@
                             <span class="sidebar-label" data-i18n="nav.settings.binaries">Binary Paths</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/media" data-page="settings/media">
                             <span class="sidebar-label" data-i18n="nav.settings.media">Media Defaults</span></a></li>
-                    <li><a class="sidebar-link sidebar-sub-link" href="#settings/presets"
-                            data-page="settings/presets">
+                    <li><a class="sidebar-link sidebar-sub-link" href="#settings/presets" data-page="settings/presets">
                             <span class="sidebar-label" data-i18n="nav.settings.presets">Presets</span></a></li>
                     <li><a class="sidebar-link sidebar-sub-link" href="#settings/smtp" data-page="settings/smtp">
                             <span class="sidebar-label" data-i18n="nav.settings.smtp">SMTP</span></a></li>
@@ -101,7 +100,8 @@
                         Paths</a>
                     <a href="#settings/media" data-page="settings/media" data-i18n="nav.settings.media">Media
                         Defaults</a>
-                    <a href="#settings/presets" data-page="settings/presets" data-i18n="nav.settings.presets">Presets</a>
+                    <a href="#settings/presets" data-page="settings/presets"
+                        data-i18n="nav.settings.presets">Presets</a>
                     <a href="#settings/smtp" data-page="settings/smtp" data-i18n="nav.settings.smtp">SMTP</a>
                     <a href="#settings/notifications" data-page="settings/notifications"
                         data-i18n="nav.settings.notifications">Notifications</a>
@@ -384,14 +384,17 @@
                         <div class="field-row">
                             <label class="field-row-label" data-i18n="jobs.preset_label">Preset</label>
                             <div class="field-row-control">
-                                <select name="preset_id" id="job-preset-select" data-i18n-title="jobs.preset_title" title="Use a saved preset instead of the simple codec/speed options.">
+                                <select name="preset_id" id="job-preset-select" data-i18n-title="jobs.preset_title"
+                                    title="Use a saved preset instead of the simple codec/speed options.">
                                     <option value="" data-i18n="jobs.preset_default">Use simple options below</option>
                                 </select>
-                                <label class="check check-inline show-all-presets-toggle" style="margin-left:.5em;font-size:.85em;">
+                                <label class="check check-inline show-all-presets-toggle"
+                                    style="margin-left:.5em;font-size:.85em;">
                                     <input type="checkbox" data-target="job-preset-select">
                                     <span data-i18n="presets.show_all_toggle">Show official presets</span>
                                 </label>
-                                <p class="field-row-help" data-i18n="jobs.preset_help">Pick a preset to apply its full HandBrake configuration. Manage presets in Settings → Presets.</p>
+                                <p class="field-row-help" data-i18n="jobs.preset_help">Pick a preset to apply its full
+                                    HandBrake configuration. Manage presets in Settings → Presets.</p>
                             </div>
                         </div>
 
@@ -471,7 +474,8 @@
                 <!-- ── Upload & Convert section ── -->
                 <details id="upload-section" class="upload-section" hidden>
                     <summary class="upload-section-title" data-i18n="upload.title">Upload &amp; Convert</summary>
-                    <p class="small" data-i18n="upload.description">Upload video files from your device to the server for conversion.</p>
+                    <p class="small" data-i18n="upload.description">Upload video files from your device to the server
+                        for conversion.</p>
 
                     <div class="field-row">
                         <label class="field-row-label" data-i18n="upload.source_label">Source</label>
@@ -492,7 +496,8 @@
                         <div class="field-row-control">
                             <input id="upload-filter-pattern" type="text" placeholder="e.g. *.mkv"
                                 data-i18n-placeholder="upload.filter_placeholder">
-                            <p class="field-row-help" data-i18n="upload.filter_help">Glob pattern to filter files. Leave empty for all video files.</p>
+                            <p class="field-row-help" data-i18n="upload.filter_help">Glob pattern to filter files. Leave
+                                empty for all video files.</p>
                         </div>
                     </div>
 
@@ -501,10 +506,12 @@
                         <div class="field-row">
                             <label class="field-row-label" data-i18n="jobs.preset_label">Preset</label>
                             <div class="field-row-control">
-                                <select id="upload-preset-select" data-i18n-title="jobs.preset_title" title="Use a saved preset instead of the simple codec/speed options.">
+                                <select id="upload-preset-select" data-i18n-title="jobs.preset_title"
+                                    title="Use a saved preset instead of the simple codec/speed options.">
                                     <option value="" data-i18n="jobs.preset_default">Use simple options below</option>
                                 </select>
-                                <label class="check check-inline show-all-presets-toggle" style="margin-left:.5em;font-size:.85em;">
+                                <label class="check check-inline show-all-presets-toggle"
+                                    style="margin-left:.5em;font-size:.85em;">
                                     <input type="checkbox" data-target="upload-preset-select">
                                     <span data-i18n="presets.show_all_toggle">Show official presets</span>
                                 </label>
@@ -532,17 +539,20 @@
                             </div>
                         </div>
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="jobs.audio_passthrough_label">Audio passthrough</label>
+                            <label class="field-row-label" data-i18n="jobs.audio_passthrough_label">Audio
+                                passthrough</label>
                             <div class="field-row-control">
                                 <label class="check check-inline"><input type="checkbox" id="upload-audio-passthrough">
-                                    <span data-i18n="jobs.audio_passthrough_check">Keep original audio tracks</span></label>
+                                    <span data-i18n="jobs.audio_passthrough_check">Keep original audio
+                                        tracks</span></label>
                             </div>
                         </div>
                         <div class="field-row">
                             <label class="field-row-label" data-i18n="jobs.delete_source_label">Delete source</label>
                             <div class="field-row-control">
                                 <label class="check check-inline"><input type="checkbox" id="upload-delete-source">
-                                    <span data-i18n="jobs.delete_source_check">Delete source file on success</span></label>
+                                    <span data-i18n="jobs.delete_source_check">Delete source file on
+                                        success</span></label>
                             </div>
                         </div>
                     </fieldset>
@@ -656,14 +666,19 @@
                         <div class="field-row">
                             <label class="field-row-label" data-i18n="watchers.preset_label">Preset</label>
                             <div class="field-row-control">
-                                <select name="preset_id" id="watcher-preset-select" data-i18n-title="watchers.preset_title" title="Use a saved preset instead of the simple codec/speed options.">
-                                    <option value="" data-i18n="watchers.preset_default">Use default / simple options</option>
+                                <select name="preset_id" id="watcher-preset-select"
+                                    data-i18n-title="watchers.preset_title"
+                                    title="Use a saved preset instead of the simple codec/speed options.">
+                                    <option value="" data-i18n="watchers.preset_default">Use default / simple options
+                                    </option>
                                 </select>
-                                <label class="check check-inline show-all-presets-toggle" style="margin-left:.5em;font-size:.85em;">
+                                <label class="check check-inline show-all-presets-toggle"
+                                    style="margin-left:.5em;font-size:.85em;">
                                     <input type="checkbox" data-target="watcher-preset-select">
                                     <span data-i18n="presets.show_all_toggle">Show official presets</span>
                                 </label>
-                                <p class="field-row-help" data-i18n="watchers.preset_help">When set, the codec and encode speed below are ignored.</p>
+                                <p class="field-row-help" data-i18n="watchers.preset_help">When set, the codec and
+                                    encode speed below are ignored.</p>
                             </div>
                         </div>
 
@@ -961,22 +976,26 @@
                 <fieldset class="options-section">
                     <legend data-i18n="settings.general.upload_legend">File Upload</legend>
                     <div class="field-row">
-                        <label class="field-row-label" data-i18n="settings.general.upload_dir_label">Upload directory</label>
+                        <label class="field-row-label" data-i18n="settings.general.upload_dir_label">Upload
+                            directory</label>
                         <div class="field-row-control">
                             <input id="general-upload-dir" type="text" placeholder="/data/clutch/inbox"
                                 data-i18n-placeholder="settings.general.upload_dir_placeholder"
                                 data-i18n-title="settings.general.upload_dir_title"
                                 title="Absolute path where uploaded files are stored.">
-                            <p class="field-row-help" data-i18n="settings.general.upload_dir_help">Absolute path on the server where uploaded files are stored. Leave empty to disable uploads.</p>
+                            <p class="field-row-help" data-i18n="settings.general.upload_dir_help">Absolute path on the
+                                server where uploaded files are stored. Leave empty to disable uploads.</p>
                         </div>
                     </div>
                     <div class="field-row">
-                        <label class="field-row-label" data-i18n="settings.general.max_upload_label">Max upload size (MB)</label>
+                        <label class="field-row-label" data-i18n="settings.general.max_upload_label">Max upload size
+                            (MB)</label>
                         <div class="field-row-control">
                             <input id="general-max-upload-size" type="number" min="0" step="1" value="0"
                                 data-i18n-title="settings.general.max_upload_title"
                                 title="Maximum file size for uploads in MB. 0 = unlimited.">
-                            <p class="field-row-help" data-i18n="settings.general.max_upload_help">Maximum upload file size in megabytes. Set to 0 for no limit.</p>
+                            <p class="field-row-help" data-i18n="settings.general.max_upload_help">Maximum upload file
+                                size in megabytes. Set to 0 for no limit.</p>
                         </div>
                     </div>
                 </fieldset>
@@ -1110,14 +1129,17 @@
                         </div>
 
                         <div class="field-row" id="settings-default-preset-row">
-                            <label class="field-row-label" data-i18n="settings.media.preset_label">Default preset</label>
+                            <label class="field-row-label" data-i18n="settings.media.preset_label">Default
+                                preset</label>
                             <div class="field-row-control">
                                 <select name="default_preset_id" id="settings-default-preset"
                                     data-i18n-title="settings.media.preset_title"
                                     title="Default preset applied to all new jobs. Leave empty to use codec/speed defaults.">
-                                    <option value="" data-i18n="settings.media.preset_none">None (use codec/speed)</option>
+                                    <option value="" data-i18n="settings.media.preset_none">None (use codec/speed)
+                                    </option>
                                 </select>
-                                <label class="check check-inline show-all-presets-toggle" style="margin-left:.5em;font-size:.85em;">
+                                <label class="check check-inline show-all-presets-toggle"
+                                    style="margin-left:.5em;font-size:.85em;">
                                     <input type="checkbox" data-target="settings-default-preset">
                                     <span data-i18n="presets.show_all_toggle">Show official presets</span>
                                 </label>
@@ -1210,13 +1232,20 @@
         <section class="page" id="page-settings-presets" data-page="settings/presets" hidden>
             <div class="page-inner">
                 <h2 data-i18n="settings.presets.title">Encoding Presets</h2>
-                <p class="page-help" data-i18n="settings.presets.intro">Browse the official HandBrake presets and create your own. Mark a custom preset as quick-access to make it appear in the codec dropdown when submitting jobs.</p>
+                <p class="page-help" data-i18n="settings.presets.intro">Browse the official HandBrake presets and create
+                    your own. Mark a custom preset as quick-access to make it appear in the codec dropdown when
+                    submitting jobs.</p>
 
                 <!-- Dragons warning -->
                 <div id="presets-dragons-warning" class="notice notice-warning" hidden>
                     <strong>⚠️ <span data-i18n="settings.presets.dragons_title">Here be dragons!</span></strong>
-                    <p data-i18n="settings.presets.dragons_body">The developer spent a lot of time crafting simple codec/speed options so you wouldn't need to tinker with presets. These are here if you want full control, but expect trial and error — encode a test file, check the size, and verify it looks good on your TV. The built-in codec options cannot be deleted, so you always have a safety net to fall back on.</p>
-                    <p><a href="https://handbrake.fr/docs/en/latest/" target="_blank" rel="noopener" data-i18n="settings.presets.dragons_docs_link">HandBrake documentation ↗</a></p>
+                    <p data-i18n="settings.presets.dragons_body">The developer spent a lot of time crafting simple
+                        codec/speed options so you wouldn't need to tinker with presets. These are here if you want full
+                        control, but expect trial and error — encode a test file, check the size, and verify it looks
+                        good on your TV. The built-in codec options cannot be deleted, so you always have a safety net
+                        to fall back on.</p>
+                    <p><a href="https://handbrake.fr/docs/en/latest/" target="_blank" rel="noopener"
+                            data-i18n="settings.presets.dragons_docs_link">HandBrake documentation ↗</a></p>
                     <label class="check check-inline" style="margin-top:.5em;">
                         <input type="checkbox" id="presets-dragons-dismiss">
                         <span data-i18n="settings.presets.dragons_dismiss">Don't show this again</span>
@@ -1225,12 +1254,15 @@
 
                 <!-- Preset list view (default) -->
                 <div id="presets-list-view">
-                    <h3 class="presets-section-title" data-i18n="settings.presets.custom_legend">Your custom presets</h3>
+                    <h3 class="presets-section-title" data-i18n="settings.presets.custom_legend">Your custom presets
+                    </h3>
                     <div id="custom-presets-container" class="presets-grid">
-                        <p class="empty-state" data-i18n="settings.presets.no_custom">You have not created any custom presets yet.</p>
+                        <p class="empty-state" data-i18n="settings.presets.no_custom">You have not created any custom
+                            presets yet.</p>
                     </div>
                     <div class="presets-list-actions">
-                        <button class="primary" type="button" id="preset-create-wizard-btn" data-i18n="settings.presets.create_btn">Create preset</button>
+                        <button class="primary" type="button" id="preset-create-wizard-btn"
+                            data-i18n="settings.presets.create_btn">Create preset</button>
                     </div>
                 </div>
 
@@ -1245,31 +1277,42 @@
                             <label class="field-row-label" data-i18n="settings.presets.field.name">Name</label>
                             <div class="field-row-control">
                                 <input type="text" id="preset-field-name" maxlength="80" required>
-                                <p class="field-row-help" data-i18n="settings.presets.field.name_help">A short, unique name shown in dropdowns.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.name_help">A short, unique
+                                    name shown in dropdowns.</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.description">Description</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.presets.field.description">Description</label>
                             <div class="field-row-control">
                                 <textarea id="preset-field-description" rows="2" maxlength="240"></textarea>
-                                <p class="field-row-help" data-i18n="settings.presets.field.description_help">A short note about what this preset is good for (genre, device, source quality…).</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.description_help">A short
+                                    note about what this preset is good for (genre, device, source quality…).</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.quick_access">Quick access</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.quick_access">Quick
+                                access</label>
                             <div class="field-row-control">
-                                <label class="check check-inline"><input type="checkbox" id="preset-field-quick-access"><span data-i18n="settings.presets.field.quick_access_check">Show in the codec dropdown when submitting jobs</span></label>
-                                <p class="field-row-help" data-i18n="settings.presets.field.quick_access_help">Useful when you want a one-click preset for everyday encodes.</p>
+                                <label class="check check-inline"><input type="checkbox"
+                                        id="preset-field-quick-access"><span
+                                        data-i18n="settings.presets.field.quick_access_check">Show in the codec dropdown
+                                        when submitting jobs</span></label>
+                                <p class="field-row-help" data-i18n="settings.presets.field.quick_access_help">Useful
+                                    when you want a one-click preset for everyday encodes.</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.base_preset">Based on</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.base_preset">Based
+                                on</label>
                             <div class="field-row-control">
                                 <input type="text" id="preset-field-base" readonly>
-                                <p class="field-row-help" data-i18n="settings.presets.field.base_preset_help">The official HandBrake preset this one was cloned from. Empty for fully custom presets.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.base_preset_help">The
+                                    official HandBrake preset this one was cloned from. Empty for fully custom presets.
+                                </p>
                             </div>
                         </div>
                     </fieldset>
@@ -1296,37 +1339,63 @@
                                     <option value="vt_h264">VideoToolbox H.264 (Apple)</option>
                                     <option value="vt_h265">VideoToolbox H.265 (Apple)</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.encoder_help">Which video encoder to use. NVENC and QSV use hardware acceleration; x264/x265 use the CPU and produce smaller files.</p>
-                                <p class="field-row-help"><a href="https://handbrake.fr/docs/en/latest/technical/video-codecs.html" target="_blank" rel="noopener" data-i18n="settings.presets.docs.encoder">HandBrake docs: Video encoders ↗</a></p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.encoder_help">Which video
+                                    encoder to use. NVENC and QSV use hardware acceleration; x264/x265 use the CPU and
+                                    produce smaller files.</p>
+                                <p class="field-row-help"><a
+                                        href="https://handbrake.fr/docs/en/latest/technical/video-codecs.html"
+                                        target="_blank" rel="noopener"
+                                        data-i18n="settings.presets.docs.encoder">HandBrake docs: Video encoders ↗</a>
+                                </p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.quality_mode">Quality mode</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.quality_mode">Quality
+                                mode</label>
                             <div class="field-row-control">
                                 <select id="preset-field-quality-mode">
-                                    <option value="crf" data-i18n="settings.presets.quality_mode.crf">Constant quality (CRF/CQ)</option>
-                                    <option value="abr" data-i18n="settings.presets.quality_mode.abr">Average bitrate (ABR)</option>
+                                    <option value="crf" data-i18n="settings.presets.quality_mode.crf">Constant quality
+                                        (CRF/CQ)</option>
+                                    <option value="abr" data-i18n="settings.presets.quality_mode.abr">Average bitrate
+                                        (ABR)</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.quality_mode_help">Constant quality keeps a target perceptual quality at the cost of unpredictable file size; average bitrate targets a fixed kbps.</p>
-                                <p class="field-row-help"><a href="https://handbrake.fr/docs/en/latest/workflow/adjust-quality.html" target="_blank" rel="noopener" data-i18n="settings.presets.docs.quality">HandBrake docs: Adjusting quality ↗</a></p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.quality_mode_help">Constant
+                                    quality keeps a target perceptual quality at the cost of unpredictable file size;
+                                    average bitrate targets a fixed kbps.</p>
+                                <p class="field-row-help"><a
+                                        href="https://handbrake.fr/docs/en/latest/workflow/adjust-quality.html"
+                                        target="_blank" rel="noopener"
+                                        data-i18n="settings.presets.docs.quality">HandBrake docs: Adjusting quality
+                                        ↗</a></p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.quality_value">Quality value</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.quality_value">Quality
+                                value</label>
                             <div class="field-row-control">
                                 <input type="number" id="preset-field-quality-value" min="0" max="51" step="0.5">
-                                <p class="field-row-help" data-i18n="settings.presets.field.quality_value_help">For CRF, lower is better quality (typical: 18–28). For ABR, this is the target bitrate in kbps.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.quality_value_help">For CRF,
+                                    lower is better quality (typical: 18–28). For ABR, this is the target bitrate in
+                                    kbps.</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.encoder_preset">Encoder speed</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.encoder_preset">Encoder
+                                speed</label>
                             <div class="field-row-control">
-                                <input type="text" id="preset-field-encoder-preset" placeholder="medium / slow / p5 / …">
-                                <p class="field-row-help" data-i18n="settings.presets.field.encoder_preset_help">Encoder-specific speed preset. x264/x265 accept ultrafast→placebo. NVENC accepts p1 (fast) → p7 (best). Leave empty for the encoder default.</p>
-                                <p class="field-row-help"><a href="https://handbrake.fr/docs/en/latest/technical/video-encoding-speed.html" target="_blank" rel="noopener" data-i18n="settings.presets.docs.encoder_preset">HandBrake docs: Encoder speed ↗</a></p>
+                                <input type="text" id="preset-field-encoder-preset"
+                                    placeholder="medium / slow / p5 / …">
+                                <p class="field-row-help" data-i18n="settings.presets.field.encoder_preset_help">
+                                    Encoder-specific speed preset. x264/x265 accept ultrafast→placebo. NVENC accepts p1
+                                    (fast) → p7 (best). Leave empty for the encoder default.</p>
+                                <p class="field-row-help"><a
+                                        href="https://handbrake.fr/docs/en/latest/technical/video-encoding-speed.html"
+                                        target="_blank" rel="noopener"
+                                        data-i18n="settings.presets.docs.encoder_preset">HandBrake docs: Encoder speed
+                                        ↗</a></p>
                             </div>
                         </div>
 
@@ -1334,39 +1403,54 @@
                             <summary data-i18n="settings.presets.advanced">Advanced video options</summary>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.max_width">Max width</label>
+                                <label class="field-row-label" data-i18n="settings.presets.field.max_width">Max
+                                    width</label>
                                 <div class="field-row-control">
                                     <input type="number" id="preset-field-max-width" min="0" step="1" placeholder="0">
-                                    <p class="field-row-help" data-i18n="settings.presets.field.max_width_help">Cap output width in pixels. 0 keeps the source resolution.</p>
+                                    <p class="field-row-help" data-i18n="settings.presets.field.max_width_help">Cap
+                                        output width in pixels. 0 keeps the source resolution.</p>
                                 </div>
                             </div>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.max_height">Max height</label>
+                                <label class="field-row-label" data-i18n="settings.presets.field.max_height">Max
+                                    height</label>
                                 <div class="field-row-control">
                                     <input type="number" id="preset-field-max-height" min="0" step="1" placeholder="0">
-                                    <p class="field-row-help" data-i18n="settings.presets.field.max_height_help">Cap output height in pixels. 0 keeps the source resolution.</p>
+                                    <p class="field-row-help" data-i18n="settings.presets.field.max_height_help">Cap
+                                        output height in pixels. 0 keeps the source resolution.</p>
                                 </div>
                             </div>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.framerate_mode">Framerate</label>
+                                <label class="field-row-label"
+                                    data-i18n="settings.presets.field.framerate_mode">Framerate</label>
                                 <div class="field-row-control">
                                     <select id="preset-field-framerate-mode">
-                                        <option value="same-as-source" data-i18n="settings.presets.framerate.same">Same as source</option>
-                                        <option value="peak" data-i18n="settings.presets.framerate.peak">Peak (cap to)</option>
-                                        <option value="constant" data-i18n="settings.presets.framerate.constant">Constant</option>
+                                        <option value="same-as-source" data-i18n="settings.presets.framerate.same">Same
+                                            as source</option>
+                                        <option value="peak" data-i18n="settings.presets.framerate.peak">Peak (cap to)
+                                        </option>
+                                        <option value="constant" data-i18n="settings.presets.framerate.constant">
+                                            Constant</option>
                                     </select>
-                                    <input type="number" id="preset-field-framerate-value" min="0" step="0.001" placeholder="fps">
-                                    <p class="field-row-help" data-i18n="settings.presets.field.framerate_help">Same-as-source is usually best. Peak caps fluctuating sources; constant forces a fixed frame rate.</p>
+                                    <input type="number" id="preset-field-framerate-value" min="0" step="0.001"
+                                        placeholder="fps">
+                                    <p class="field-row-help" data-i18n="settings.presets.field.framerate_help">
+                                        Same-as-source is usually best. Peak caps fluctuating sources; constant forces a
+                                        fixed frame rate.</p>
                                 </div>
                             </div>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.extra_options">Extra encoder options</label>
+                                <label class="field-row-label" data-i18n="settings.presets.field.extra_options">Extra
+                                    encoder options</label>
                                 <div class="field-row-control">
-                                    <input type="text" id="preset-field-extra-options" placeholder="key1=value1:key2=value2">
-                                    <p class="field-row-help" data-i18n="settings.presets.field.extra_options_help">Passed verbatim to <code>--encopts</code>. Only set if you know the encoder syntax.</p>
+                                    <input type="text" id="preset-field-extra-options"
+                                        placeholder="key1=value1:key2=value2">
+                                    <p class="field-row-help" data-i18n="settings.presets.field.extra_options_help">
+                                        Passed verbatim to <code>--encopts</code>. Only set if you know the encoder
+                                        syntax.</p>
                                 </div>
                             </div>
                         </details>
@@ -1379,17 +1463,26 @@
                             <label class="field-row-label" data-i18n="settings.presets.field.audio_mode">Mode</label>
                             <div class="field-row-control">
                                 <select id="preset-field-audio-mode">
-                                    <option value="encode" data-i18n="settings.presets.audio_mode.encode">Re-encode all tracks</option>
-                                    <option value="passthrough" data-i18n="settings.presets.audio_mode.passthrough">Passthrough (keep original)</option>
-                                    <option value="copy_with_fallback" data-i18n="settings.presets.audio_mode.fallback">Copy when possible, otherwise re-encode</option>
+                                    <option value="encode" data-i18n="settings.presets.audio_mode.encode">Re-encode all
+                                        tracks</option>
+                                    <option value="passthrough" data-i18n="settings.presets.audio_mode.passthrough">
+                                        Passthrough (keep original)</option>
+                                    <option value="copy_with_fallback" data-i18n="settings.presets.audio_mode.fallback">
+                                        Copy when possible, otherwise re-encode</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.audio_mode_help">Passthrough keeps audio bit-identical (great for surround/HD audio). Re-encode shrinks the file; the chosen encoder applies.</p>
-                                <p class="field-row-help"><a href="https://handbrake.fr/docs/en/latest/workflow/select-audio-tracks-and-encoders.html" target="_blank" rel="noopener" data-i18n="settings.presets.docs.audio">HandBrake docs: Audio settings ↗</a></p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.audio_mode_help">Passthrough
+                                    keeps audio bit-identical (great for surround/HD audio). Re-encode shrinks the file;
+                                    the chosen encoder applies.</p>
+                                <p class="field-row-help"><a
+                                        href="https://handbrake.fr/docs/en/latest/workflow/select-audio-tracks-and-encoders.html"
+                                        target="_blank" rel="noopener" data-i18n="settings.presets.docs.audio">HandBrake
+                                        docs: Audio settings ↗</a></p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.audio_encoder">Encoder</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.presets.field.audio_encoder">Encoder</label>
                             <div class="field-row-control">
                                 <select id="preset-field-audio-encoder">
                                     <option value="opus">Opus (best small)</option>
@@ -1399,7 +1492,8 @@
                                     <option value="flac">FLAC (lossless)</option>
                                     <option value="mp3">MP3</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.audio_encoder_help">Used when re-encoding or as the fallback for copy mode.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.audio_encoder_help">Used
+                                    when re-encoding or as the fallback for copy mode.</p>
                             </div>
                         </div>
 
@@ -1407,25 +1501,34 @@
                             <summary data-i18n="settings.presets.advanced">Advanced audio options</summary>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.audio_bitrate">Bitrate (kbps)</label>
+                                <label class="field-row-label" data-i18n="settings.presets.field.audio_bitrate">Bitrate
+                                    (kbps)</label>
                                 <div class="field-row-control">
-                                    <input type="number" id="preset-field-audio-bitrate" min="0" step="1" placeholder="0">
-                                    <p class="field-row-help" data-i18n="settings.presets.field.audio_bitrate_help">0 lets the encoder pick a sensible default per track.</p>
+                                    <input type="number" id="preset-field-audio-bitrate" min="0" step="1"
+                                        placeholder="0">
+                                    <p class="field-row-help" data-i18n="settings.presets.field.audio_bitrate_help">0
+                                        lets the encoder pick a sensible default per track.</p>
                                 </div>
                             </div>
 
                             <div class="field-row">
-                                <label class="field-row-label" data-i18n="settings.presets.field.audio_mixdown">Mixdown</label>
+                                <label class="field-row-label"
+                                    data-i18n="settings.presets.field.audio_mixdown">Mixdown</label>
                                 <div class="field-row-control">
                                     <select id="preset-field-audio-mixdown">
                                         <option value="auto" data-i18n="settings.presets.mixdown.auto">Auto</option>
-                                        <option value="stereo" data-i18n="settings.presets.mixdown.stereo">Stereo</option>
-                                        <option value="5point1" data-i18n="settings.presets.mixdown.5point1">5.1 surround</option>
-                                        <option value="7point1" data-i18n="settings.presets.mixdown.7point1">7.1 surround</option>
-                                        <option value="dpl2" data-i18n="settings.presets.mixdown.dpl2">Dolby Pro Logic II</option>
+                                        <option value="stereo" data-i18n="settings.presets.mixdown.stereo">Stereo
+                                        </option>
+                                        <option value="5point1" data-i18n="settings.presets.mixdown.5point1">5.1
+                                            surround</option>
+                                        <option value="7point1" data-i18n="settings.presets.mixdown.7point1">7.1
+                                            surround</option>
+                                        <option value="dpl2" data-i18n="settings.presets.mixdown.dpl2">Dolby Pro Logic
+                                            II</option>
                                         <option value="mono" data-i18n="settings.presets.mixdown.mono">Mono</option>
                                     </select>
-                                    <p class="field-row-help" data-i18n="settings.presets.field.audio_mixdown_help">Auto picks a mixdown matching the source channel count.</p>
+                                    <p class="field-row-help" data-i18n="settings.presets.field.audio_mixdown_help">Auto
+                                        picks a mixdown matching the source channel count.</p>
                                 </div>
                             </div>
                         </details>
@@ -1435,29 +1538,38 @@
                         <legend data-i18n="settings.presets.container_legend">Container & subtitles</legend>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.container_format">Container</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.presets.field.container_format">Container</label>
                             <div class="field-row-control">
                                 <select id="preset-field-container-format">
                                     <option value="mkv">MKV (recommended)</option>
                                     <option value="mp4">MP4</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.container_format_help">MKV supports more codecs and unlimited subtitles. MP4 is the most compatible with mobile players.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.container_format_help">MKV
+                                    supports more codecs and unlimited subtitles. MP4 is the most compatible with mobile
+                                    players.</p>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.chapter_markers">Chapter markers</label>
+                            <label class="field-row-label" data-i18n="settings.presets.field.chapter_markers">Chapter
+                                markers</label>
                             <div class="field-row-control">
-                                <label class="check check-inline"><input type="checkbox" id="preset-field-chapter-markers" checked><span data-i18n="settings.presets.field.chapter_markers_check">Preserve chapters</span></label>
+                                <label class="check check-inline"><input type="checkbox"
+                                        id="preset-field-chapter-markers" checked><span
+                                        data-i18n="settings.presets.field.chapter_markers_check">Preserve
+                                        chapters</span></label>
                             </div>
                         </div>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.subtitles">Subtitles</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.presets.field.subtitles">Subtitles</label>
                             <div class="field-row-control">
                                 <select id="preset-field-subtitles">
                                     <option value="all" data-i18n="settings.presets.subtitles.all">All tracks</option>
-                                    <option value="first" data-i18n="settings.presets.subtitles.first">Only first track</option>
+                                    <option value="first" data-i18n="settings.presets.subtitles.first">Only first track
+                                    </option>
                                     <option value="none" data-i18n="settings.presets.subtitles.none">None</option>
                                 </select>
                             </div>
@@ -1468,16 +1580,25 @@
                         <legend data-i18n="settings.presets.filters_legend">Filters</legend>
 
                         <div class="field-row">
-                            <label class="field-row-label" data-i18n="settings.presets.field.deinterlace">Deinterlace</label>
+                            <label class="field-row-label"
+                                data-i18n="settings.presets.field.deinterlace">Deinterlace</label>
                             <div class="field-row-control">
                                 <select id="preset-field-deinterlace">
                                     <option value="off" data-i18n="settings.presets.filter.off">Off</option>
-                                    <option value="default" data-i18n="settings.presets.filter.deint_default">Default (decomb)</option>
-                                    <option value="skip-spatial" data-i18n="settings.presets.filter.deint_skip">Skip spatial check (faster)</option>
-                                    <option value="bob" data-i18n="settings.presets.filter.deint_bob">Bob (doubles framerate)</option>
+                                    <option value="default" data-i18n="settings.presets.filter.deint_default">Default
+                                        (decomb)</option>
+                                    <option value="skip-spatial" data-i18n="settings.presets.filter.deint_skip">Skip
+                                        spatial check (faster)</option>
+                                    <option value="bob" data-i18n="settings.presets.filter.deint_bob">Bob (doubles
+                                        framerate)</option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.deinterlace_help">Removes interlacing artifacts from old TV captures. Off if your source is already progressive.</p>
-                                <p class="field-row-help"><a href="https://handbrake.fr/docs/en/latest/technical/filters-summary.html" target="_blank" rel="noopener" data-i18n="settings.presets.docs.filters">HandBrake docs: Filters ↗</a></p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.deinterlace_help">Removes
+                                    interlacing artifacts from old TV captures. Off if your source is already
+                                    progressive.</p>
+                                <p class="field-row-help"><a
+                                        href="https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+                                        target="_blank" rel="noopener"
+                                        data-i18n="settings.presets.docs.filters">HandBrake docs: Filters ↗</a></p>
                             </div>
                         </div>
 
@@ -1486,20 +1607,28 @@
                             <div class="field-row-control">
                                 <select id="preset-field-denoise">
                                     <option value="off" data-i18n="settings.presets.filter.off">Off</option>
-                                    <option value="light" data-i18n="settings.presets.filter.denoise_light">Light</option>
-                                    <option value="medium" data-i18n="settings.presets.filter.denoise_medium">Medium</option>
-                                    <option value="strong" data-i18n="settings.presets.filter.denoise_strong">Strong</option>
+                                    <option value="light" data-i18n="settings.presets.filter.denoise_light">Light
+                                    </option>
+                                    <option value="medium" data-i18n="settings.presets.filter.denoise_medium">Medium
+                                    </option>
+                                    <option value="strong" data-i18n="settings.presets.filter.denoise_strong">Strong
+                                    </option>
                                 </select>
-                                <p class="field-row-help" data-i18n="settings.presets.field.denoise_help">Reduces grain. Stronger settings can wash out fine detail.</p>
+                                <p class="field-row-help" data-i18n="settings.presets.field.denoise_help">Reduces grain.
+                                    Stronger settings can wash out fine detail.</p>
                             </div>
                         </div>
                     </fieldset>
 
                     <div class="actions actions-centered">
-                        <button class="primary" type="button" id="preset-save-button" data-i18n="settings.presets.save">Save preset</button>
-                        <button class="secondary" type="button" id="preset-cancel-button" data-i18n="settings.presets.cancel">Cancel</button>
-                        <button class="ghost" type="button" id="preset-export-button" data-i18n="settings.presets.export" hidden>Export as HandBrake JSON</button>
-                        <button class="danger" type="button" id="preset-delete-button" data-i18n="settings.presets.delete" hidden>Delete</button>
+                        <button class="primary" type="button" id="preset-save-button"
+                            data-i18n="settings.presets.save">Save preset</button>
+                        <button class="secondary" type="button" id="preset-cancel-button"
+                            data-i18n="settings.presets.cancel">Cancel</button>
+                        <button class="ghost" type="button" id="preset-export-button"
+                            data-i18n="settings.presets.export" hidden>Export as HandBrake JSON</button>
+                        <button class="danger" type="button" id="preset-delete-button"
+                            data-i18n="settings.presets.delete" hidden>Delete</button>
                     </div>
                     <div class="status-line" id="preset-editor-status"></div>
                 </div>
@@ -2057,6 +2186,12 @@
                         </div>
                     </div>
                     <div class="field-row">
+                        <label class="field-row-label" data-i18n="system.about.environment_label">Environment</label>
+                        <div class="field-row-control">
+                            <span id="about-environment">—</span>
+                        </div>
+                    </div>
+                    <div class="field-row">
                         <label class="field-row-label" data-i18n="system.about.updates_label">Updates</label>
                         <div class="field-row-control">
                             <div class="update-row">
@@ -2158,60 +2293,75 @@
         <div class="wizard-dialog" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
             <div class="wizard-header">
                 <h3 id="wizard-title" data-i18n="settings.presets.wizard.title">Create preset</h3>
-                <button class="ghost small wizard-close" type="button" id="wizard-close-btn" aria-label="Close">&times;</button>
+                <button class="ghost small wizard-close" type="button" id="wizard-close-btn"
+                    aria-label="Close">&times;</button>
             </div>
 
             <!-- Step 1: choose source -->
             <div class="wizard-step" id="wizard-step-source">
-                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.choose_source">How do you want to start?</p>
+                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.choose_source">How do you want to start?
+                </p>
                 <div class="wizard-cards">
                     <button type="button" class="wizard-card" data-wizard-source="blank">
                         <span class="wizard-card-icon">📄</span>
-                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_scratch">From scratch</span>
-                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_scratch_desc">Empty preset, full control</span>
+                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_scratch">From
+                            scratch</span>
+                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_scratch_desc">Empty
+                            preset, full control</span>
                     </button>
                     <button type="button" class="wizard-card" data-wizard-source="codec">
                         <span class="wizard-card-icon">🎬</span>
                         <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_codec">From codec</span>
-                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_codec_desc">Pre-filled with a built-in codec</span>
+                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_codec_desc">Pre-filled
+                            with a built-in codec</span>
                     </button>
                     <button type="button" class="wizard-card" data-wizard-source="official">
                         <span class="wizard-card-icon">📦</span>
-                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_official">From official preset</span>
-                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_official_desc">Clone a HandBrake preset</span>
+                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_official">From official
+                            preset</span>
+                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_official_desc">Clone a
+                            HandBrake preset</span>
                     </button>
                     <button type="button" class="wizard-card" data-wizard-source="custom">
                         <span class="wizard-card-icon">✏️</span>
-                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_custom">From your presets</span>
-                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_custom_desc">Duplicate an existing custom preset</span>
+                        <span class="wizard-card-title" data-i18n="settings.presets.wizard.from_custom">From your
+                            presets</span>
+                        <span class="wizard-card-desc" data-i18n="settings.presets.wizard.from_custom_desc">Duplicate an
+                            existing custom preset</span>
                     </button>
                 </div>
             </div>
 
             <!-- Step 2a: choose codec -->
             <div class="wizard-step" id="wizard-step-codec" hidden>
-                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_codec">Pick a codec to start from:</p>
+                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_codec">Pick a codec to start from:
+                </p>
                 <div class="wizard-cards" id="wizard-codec-cards"></div>
                 <div class="wizard-nav">
-                    <button type="button" class="ghost" id="wizard-codec-back" data-i18n="settings.presets.wizard.back">← Back</button>
+                    <button type="button" class="ghost" id="wizard-codec-back"
+                        data-i18n="settings.presets.wizard.back">← Back</button>
                 </div>
             </div>
 
             <!-- Step 2c: choose from custom presets -->
             <div class="wizard-step" id="wizard-step-custom" hidden>
-                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_custom">Pick a preset to duplicate:</p>
+                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_custom">Pick a preset to duplicate:
+                </p>
                 <div id="wizard-custom-container" class="wizard-official-list"></div>
                 <div class="wizard-nav">
-                    <button type="button" class="ghost" id="wizard-custom-back" data-i18n="settings.presets.wizard.back">← Back</button>
+                    <button type="button" class="ghost" id="wizard-custom-back"
+                        data-i18n="settings.presets.wizard.back">← Back</button>
                 </div>
             </div>
 
             <!-- Step 2b: choose official preset -->
             <div class="wizard-step" id="wizard-step-official" hidden>
-                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_official">Pick an official preset:</p>
+                <p class="wizard-step-hint" data-i18n="settings.presets.wizard.pick_official">Pick an official preset:
+                </p>
                 <div id="wizard-official-container" class="wizard-official-list"></div>
                 <div class="wizard-nav">
-                    <button type="button" class="ghost" id="wizard-official-back" data-i18n="settings.presets.wizard.back">← Back</button>
+                    <button type="button" class="ghost" id="wizard-official-back"
+                        data-i18n="settings.presets.wizard.back">← Back</button>
                 </div>
             </div>
 
@@ -2219,8 +2369,10 @@
             <div class="wizard-step" id="wizard-step-form" hidden>
                 <div id="wizard-form-container"></div>
                 <div class="wizard-nav">
-                    <button type="button" class="ghost" id="wizard-form-back" data-i18n="settings.presets.wizard.back">← Back</button>
-                    <button type="button" class="primary" id="wizard-form-save" data-i18n="settings.presets.save">Save</button>
+                    <button type="button" class="ghost" id="wizard-form-back" data-i18n="settings.presets.wizard.back">←
+                        Back</button>
+                    <button type="button" class="primary" id="wizard-form-save"
+                        data-i18n="settings.presets.save">Save</button>
                 </div>
             </div>
         </div>

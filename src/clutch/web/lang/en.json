@@ -560,6 +560,7 @@
   "system.about.sysmon_failed": "Failed to load system stats.",
   "system.about.version_legend": "Version",
   "system.about.version_label": "Version",
+  "system.about.environment_label": "Environment",
   "system.about.updates_label": "Updates",
   "system.about.check_updates": "Check for updates",
   "system.about.check_updates_title": "Check for new versions",

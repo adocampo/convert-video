@@ -561,6 +561,7 @@
   "system.about.sysmon_failed": "Error al cargar estadísticas del sistema.",
   "system.about.version_legend": "Versión",
   "system.about.version_label": "Versión",
+  "system.about.environment_label": "Entorno",
   "system.about.updates_label": "Actualizaciones",
   "system.about.check_updates": "Buscar actualizaciones",
   "system.about.check_updates_title": "Buscar nuevas versiones",

@@ -71,6 +71,10 @@ def _migrate_legacy_state_dir(legacy_path: str, branded_path: str):
 
 
 def build_state_dir() -> str:
+    explicit_state_dir = os.environ.get("CLUTCH_STATE_DIR")
+    if explicit_state_dir:
+        return explicit_state_dir
+
     state_home = os.environ.get("XDG_STATE_HOME")
     if not state_home:
         state_home = os.path.join(os.path.expanduser("~"), ".local", "state")

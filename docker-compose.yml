@@ -1,0 +1,55 @@
+# ┌──────────────────────────────────────────────────────────────────────┐
+# │  Clutch — Video transcoding service                                 │
+# │                                                                     │
+# │  IMAGE OPTIONS (uncomment ONE):                                     │
+# │    • clutch:latest          — Full Arch image (~1.5 GB), includes   │
+# │                               shell, package manager, in-place      │
+# │                               upgrades via `clutch --upgrade`.      │
+# │    • clutch-minimal:latest  — Scratch-based (~280 MB), no shell,    │
+# │                               must rebuild/pull to upgrade.         │
+# │                                                                     │
+# │  BUILD FROM SOURCE (instead of pulling from ghcr.io):               │
+# │    Comment out "image:" and uncomment the "build:" section below.   │
+# └──────────────────────────────────────────────────────────────────────┘
+services:
+  clutch:
+    # ── Image: pick one ──────────────────────────────────────────────
+    image: ghcr.io/adocampo/clutch:latest
+    # image: ghcr.io/adocampo/clutch-minimal:latest
+
+    # ── Build from source (comment out "image:" above first) ─────────
+    # build:
+    #   context: .
+    #   #dockerfile: Dockerfile            # Full Arch image
+    #   dockerfile: Dockerfile.minimal  # Scratch minimal image
+    # image: clutch:latest
+
+    container_name: clutch
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - clutch-config:/config
+      - /path/to/media:/media       # ← change to your media directory
+    environment:
+      # ── Timezone (for log timestamps) ──
+      - TZ=Europe/Madrid
+      # ── User mapping (run as non-root) ──
+      - CLUTCH_UID=1000
+      - CLUTCH_GID=1000
+      # ── Workers ──
+      - CLUTCH_WORKERS=1
+      # ── Debug ──
+      # - CLUTCH_DEBUG=true
+
+    # ── NVIDIA GPU passthrough (uncomment for hardware encoding) ──
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  clutch-config:

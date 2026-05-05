@@ -131,6 +131,7 @@
     const releaseButton = document.getElementById('release-check');
     const releaseLabel = document.getElementById('release-label');
     const aboutVersion = document.getElementById('about-version');
+    const aboutEnvironment = document.getElementById('about-environment');
     const changelogRow = document.getElementById('changelog-row');
     const changelogText = document.getElementById('changelog-text');
     const navSystemBadge = document.getElementById('nav-system-badge');
@@ -211,8 +212,9 @@
         for (var i = 0; i < presets.length; i++) {
             if (presets[i].id === pid) return presets[i].name;
         }
-        // Fallback: show a truncated id hint
-        return pid.length > 12 ? pid.substring(0, 8) + '…' : pid;
+        // Fallback: show codec/speed from the job record if available
+        if (record.codec) return (record.codec || '') + ' / ' + (record.encode_speed || '');
+        return pid.length > 12 ? pid.substring(0, 8) + '\u2026' : pid;
     }
 
     function padNumber(value) {
@@ -734,6 +736,7 @@
             update_step: Number(updateInfo.update_step) || 0,
             update_step_total: Number(updateInfo.update_step_total) || 5,
             update_step_label: String(updateInfo.update_step_label || ''),
+            runtime_environment: String(updateInfo.runtime_environment || ''),
         };
 
         // If local matches remote, the update is done — treat as no-update
@@ -746,6 +749,9 @@
         // Version display
         if (aboutVersion) {
             aboutVersion.textContent = nextInfo.local_version ? 'v' + nextInfo.local_version : '\u2014';
+        }
+        if (aboutEnvironment) {
+            aboutEnvironment.textContent = nextInfo.runtime_environment || '\u2014';
         }
 
         // Update button

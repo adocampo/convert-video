@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unicodedata
+import copy
 from typing import Callable, Optional
 
 if os.name != "nt":
@@ -72,6 +73,7 @@ _conversion_state_lock = threading.Lock()
 _conversion_states: dict[int, dict[str, object]] = {}
 _last_sigint_time: float = 0.0
 _DOUBLE_PRESS_INTERVAL = 1.5  # seconds
+_nvenc_available_cache: Optional[bool] = None
 
 
 def _get_conversion_state(thread_id: Optional[int] = None) -> dict[str, object]:
@@ -517,15 +519,78 @@ def get_visible_nvidia_gpus() -> list[dict[str, object]]:
     return devices
 
 
+def is_nvenc_available() -> bool:
+    """Return whether NVENC can be used by this runtime.
+
+    A positive result requires both a visible NVIDIA GPU and HandBrake exposing
+    NVENC encoders. The result is cached for the process lifetime.
+    """
+    global _nvenc_available_cache
+    if _nvenc_available_cache is not None:
+        return _nvenc_available_cache
+
+    if not get_visible_nvidia_gpus():
+        _nvenc_available_cache = False
+        return False
+
+    try:
+        result = _debug_run(
+            [get_binary_path("HandBrakeCLI"), "--help"],
+            timeout=8,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        _nvenc_available_cache = False
+        return False
+
+    output = f"{result.stdout or ''}\n{result.stderr or ''}".lower()
+    _nvenc_available_cache = ("nvenc_h265" in output) or ("nvenc_h264" in output)
+    return _nvenc_available_cache
+
+
 def uses_nvenc_encoder(codec: str, encode_speed: str) -> bool:
     """Return whether the current settings route the encode through NVENC."""
     normalized_speed = str(encode_speed or "").strip().lower()
     normalized_codec = str(codec or "").strip().lower()
     if normalized_speed == "normal":
-        return True
+        return is_nvenc_available()
     if normalized_speed == "fast":
-        return normalized_codec.startswith("nvenc_")
+        return normalized_codec.startswith("nvenc_") and is_nvenc_available()
     return False
+
+
+def _preset_requests_nvenc(preset_params: Optional[dict]) -> bool:
+    if not isinstance(preset_params, dict):
+        return False
+    video_cfg = preset_params.get("video") if isinstance(preset_params.get("video"), dict) else {}
+    encoder = str((video_cfg or {}).get("encoder") or "").strip().lower()
+    if encoder.startswith("nvenc_"):
+        return True
+    base = str(preset_params.get("handbrake_preset") or "").strip().lower()
+    return "nvenc" in base
+
+
+def _build_software_fallback_preset(preset_params: Optional[dict]) -> Optional[dict]:
+    if not isinstance(preset_params, dict):
+        return None
+    fallback = copy.deepcopy(preset_params)
+    base = str(fallback.get("handbrake_preset") or "").strip().lower()
+    if "nvenc" in base:
+        fallback["handbrake_preset"] = ""
+
+    video_cfg = fallback.get("video")
+    if isinstance(video_cfg, dict):
+        encoder = str(video_cfg.get("encoder") or "").strip().lower()
+        if encoder.startswith("nvenc_"):
+            video_cfg["encoder"] = "x265" if "265" in encoder else "x264"
+            # NVENC-specific knobs can break software encoders.
+            video_cfg["encoder_preset"] = ""
+            video_cfg["extra_options"] = ""
+    return fallback
+
+
+def _is_unknown_video_codec_nvenc_error(hb_error_detail: str) -> bool:
+    detail = str(hb_error_detail or "").lower()
+    return "unknown video codec" in detail and "nvenc" in detail
 
 
 def generate_unique_filename(base_name: str, extension: str, output_path: str) -> str:
@@ -997,7 +1062,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                    output_base_dir: str = "",
                    resume_partial_file: str = "",
                    resume_offset_seconds: float = 0.0,
-                   preset_params: Optional[dict] = None) -> str:
+                   preset_params: Optional[dict] = None,
+                   allow_nvenc_retry: bool = True) -> str:
     thread_id = threading.get_ident()
 
     is_iso = title is not None
@@ -1142,12 +1208,18 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     if title is not None:
         hb_params += ["--title", str(title)]
 
+    nvenc_requested = False
+
     if preset_params:
+        if _preset_requests_nvenc(preset_params) and not is_nvenc_available():
+            warning("Preset requests NVENC but NVENC is not available. Falling back to software encoder.")
+            preset_params = _build_software_fallback_preset(preset_params)
         from clutch.presets import build_handbrake_args
         hb_params += build_handbrake_args(preset_params, source_resolution=resolution)
         # GPU pinning when the preset's video encoder is NVENC.
         video_cfg = preset_params.get("video") if isinstance(preset_params, dict) else {}
         encoder_name = str((video_cfg or {}).get("encoder") or "").lower()
+        nvenc_requested = _preset_requests_nvenc(preset_params)
         if gpu_device is not None and encoder_name.startswith("nvenc_"):
             hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
     else:
@@ -1155,15 +1227,25 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         if encode_speed == "slow":
             hb_params.extend(["--preset", "H.265 MKV 2160p60 4K"])
         elif encode_speed == "normal":
-            hb_params.extend(["--preset", "H.265 NVENC 2160p 4K"])
+            if uses_nvenc_encoder(codec, encode_speed):
+                hb_params.extend(["--preset", "H.265 NVENC 2160p 4K"])
+            else:
+                warning("NVENC is not available in this runtime. Falling back to software H.265 preset.")
+                hb_params.extend(["--preset", "H.265 MKV 2160p60 4K"])
         elif encode_speed == "fast":
+            selected_codec = codec
+            normalized_codec = str(codec or "").strip().lower()
+            if normalized_codec.startswith("nvenc_") and not uses_nvenc_encoder(codec, encode_speed):
+                warning("NVENC is not available in this runtime. Falling back to software encoder for fast mode.")
+                selected_codec = "x265" if "265" in normalized_codec else "x264"
             hb_params.extend([
-                "-e", codec,
+                "-e", selected_codec,
                 "-w", resolution.split("x")[0],
                 "-l", resolution.split("x")[1],
                 "-q", "30",
                 "--vb", "1000",
             ])
+        nvenc_requested = uses_nvenc_encoder(codec, encode_speed)
         if gpu_device is not None and uses_nvenc_encoder(codec, encode_speed):
             hb_params.extend(["--encopts", f"gpu={int(gpu_device)}"])
 
@@ -1474,6 +1556,66 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
         else:
             if not hb_error_detail:
                 hb_error_detail = _read_last_error_lines(log_path)
+
+            should_retry_with_software = (
+                allow_nvenc_retry
+                and nvenc_requested
+                and _is_unknown_video_codec_nvenc_error(hb_error_detail)
+            )
+
+            if should_retry_with_software:
+                warning("NVENC failed with unsupported codec in this runtime. Retrying with software encoder.")
+                _remove_temp_and_log(temp_filepath)
+                _update_conversion_state(
+                    thread_id,
+                    temp_file=None,
+                    process=None,
+                    pid=None,
+                    interrupted=False,
+                    paused=False,
+                    paused_at=None,
+                    paused_seconds=0.0,
+                )
+
+                retry_preset_params = preset_params
+                retry_codec = codec
+                retry_speed = encode_speed
+
+                if preset_params:
+                    retry_preset_params = _build_software_fallback_preset(preset_params)
+                else:
+                    retry_codec = "x265" if "265" in str(codec or "").lower() else "x264"
+                    retry_speed = "fast" if str(encode_speed or "").lower() == "fast" else "slow"
+
+                return convert_video(
+                    input_file=input_file,
+                    output_dir=output_dir,
+                    codec=retry_codec,
+                    encode_speed=retry_speed,
+                    audio_passthrough=audio_passthrough,
+                    verbose=verbose,
+                    title=title,
+                    resolution_override=resolution_override,
+                    audio_tracks=audio_tracks,
+                    show_progress=show_progress,
+                    gpu_device=gpu_device,
+                    progress_callback=progress_callback,
+                    emit_logs=emit_logs,
+                    progress_log_path=progress_log_path,
+                    existing_process_id=None,
+                    existing_temp_file="",
+                    existing_output_file=existing_output_file,
+                    initial_progress=initial_progress,
+                    resume_existing_process=False,
+                    detach_when=detach_when,
+                    runtime_callback=runtime_callback,
+                    output_base_dir=output_base_dir,
+                    resume_partial_file=resume_partial_file,
+                    resume_offset_seconds=resume_offset_seconds,
+                    preset_params=retry_preset_params,
+                    allow_nvenc_retry=False,
+                )
+
             _remove_temp_and_log(temp_filepath)
             _update_conversion_state(
                 thread_id,

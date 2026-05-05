@@ -274,7 +274,33 @@ def _collect_system_stats() -> Dict[str, object]:
 
     # ── Disks (mount points) ──
     disks: List[Dict[str, object]] = []
-    seen_devs: set = set()
+    best_mount_by_dev: dict[str, tuple[int, str]] = {}
+
+    def _mount_score(mount: str) -> int:
+        """Lower score means a more representative filesystem mount.
+
+        Prefer real directory mounts (/, /config, /NAS) and avoid file bind
+        mounts or virtual/system paths that are common inside containers.
+        """
+        score = 0
+
+        # Root mount should always win against sibling bind mounts
+        # of the same backing device.
+        if mount == "/":
+            score -= 100
+
+        if not os.path.isdir(mount):
+            score += 10000
+
+        for prefix in ("/proc", "/sys", "/dev", "/run", "/var/lib/docker"):
+            if mount == prefix or mount.startswith(prefix + "/"):
+                score += 1000
+                break
+
+        # Prefer shallower paths when device has multiple mountpoints.
+        score += len([part for part in mount.split("/") if part])
+        return score
+
     try:
         with open("/proc/mounts") as f:
             for line in f:
@@ -282,20 +308,28 @@ def _collect_system_stats() -> Dict[str, object]:
                 if len(parts) < 2:
                     continue
                 device, mount = parts[0], parts[1]
-                if not device.startswith("/") or device in seen_devs:
+                is_path_device = device.startswith("/")
+                is_overlay_root = device == "overlay" and mount == "/"
+                if not (is_path_device or is_overlay_root):
                     continue
-                seen_devs.add(device)
-                try:
-                    usage = shutil.disk_usage(mount)
-                    disks.append({
-                        "mount": mount,
-                        "device": device,
-                        "total": usage.total,
-                        "used": usage.used,
-                        "free": usage.free,
-                    })
-                except OSError:
-                    continue
+
+                score = _mount_score(mount)
+                current = best_mount_by_dev.get(device)
+                if current is None or score < current[0]:
+                    best_mount_by_dev[device] = (score, mount)
+
+        for device, (_, mount) in best_mount_by_dev.items():
+            try:
+                usage = shutil.disk_usage(mount)
+                disks.append({
+                    "mount": mount,
+                    "device": device,
+                    "total": usage.total,
+                    "used": usage.used,
+                    "free": usage.free,
+                })
+            except OSError:
+                continue
     except OSError:
         # Fallback for Windows: use GetLogicalDrives bitmask + net use for UNC
         if os.name == "nt":
@@ -451,6 +485,30 @@ def _collect_system_stats() -> Dict[str, object]:
                         "used": None,
                         "free": None,
                     })
+    # In Docker setups, the host root can be bind-mounted as /media while
+    # container root appears as overlay '/'. Prefer showing a single '/'.
+    root_overlay_idx = next(
+        (i for i, d in enumerate(disks) if d.get("mount") == "/" and d.get("device") == "overlay"),
+        None,
+    )
+    media_idx = next(
+        (i for i, d in enumerate(disks) if str(d.get("mount", "")).lower() == "/media"),
+        None,
+    )
+    if media_idx is not None:
+        has_root = any(i != media_idx and d.get("mount") == "/" for i, d in enumerate(disks))
+        if not has_root:
+            disks[media_idx]["mount"] = "/"
+        elif root_overlay_idx is not None:
+            media = disks[media_idx]
+            root = disks[root_overlay_idx]
+            if (
+                media.get("total") == root.get("total")
+                and media.get("used") == root.get("used")
+            ):
+                disks[media_idx]["mount"] = "/"
+                del disks[root_overlay_idx]
+
     stats["disks"] = disks
 
     # ── GPUs (nvidia-smi) ──

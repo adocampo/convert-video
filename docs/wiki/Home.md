@@ -18,6 +18,7 @@ Clutch is a video conversion tool built around HandBrakeCLI, with:
 - [Service and API](Service-and-API)
 - [Remote Upload and Stream Mode](Remote-Upload-and-Stream-Mode)
 - [Scheduling and Energy Rules](Scheduling-and-Energy-Rules)
+- [Docker](Docker)
 
 ## Typical workflows
 

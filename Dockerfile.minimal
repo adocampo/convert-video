@@ -1,0 +1,100 @@
+# Minimal clutch image (~280MB vs ~1.5GB for full Arch).
+# Uses Arch as build stage, copies only required runtime files to scratch.
+# Trade-off: no shell inside container, no package manager, no in-place upgrades.
+FROM archlinux:base AS builder
+
+# Install all runtime dependencies.
+RUN pacman -Sy --noconfirm \
+    && pacman -S --noconfirm --needed \
+    python \
+    python-pip \
+    handbrake-cli \
+    mediainfo \
+    mkvtoolnix-cli \
+    ca-certificates \
+    && pacman -Scc --noconfirm
+
+# Install clutch into the system Python.
+WORKDIR /app
+COPY pyproject.toml ./
+COPY src/ src/
+RUN pip3 install --no-cache-dir --break-system-packages .
+
+# Collect all shared libraries needed by our binaries.
+RUN mkdir -p /collect/usr/bin /collect/usr/lib /collect/etc/ssl \
+    && cp /usr/bin/HandBrakeCLI /collect/usr/bin/ \
+    && cp /usr/bin/mediainfo /collect/usr/bin/ \
+    && cp /usr/bin/mkvmerge /collect/usr/bin/ \
+    && cp /usr/bin/mkvpropedit /collect/usr/bin/ \
+    # Copy Python interpreter
+    && cp /usr/bin/python3 /collect/usr/bin/python3 \
+    && ln -s python3 /collect/usr/bin/python \
+    # Copy the clutch CLI wrapper
+    && cp /usr/bin/clutch /collect/usr/bin/clutch 2>/dev/null \
+    || cp /usr/local/bin/clutch /collect/usr/bin/clutch 2>/dev/null \
+    || true \
+    # Copy all shared libraries for our binaries
+    && for bin in /collect/usr/bin/HandBrakeCLI /collect/usr/bin/mediainfo \
+    /collect/usr/bin/mkvmerge /collect/usr/bin/mkvpropedit \
+    /collect/usr/bin/python3; do \
+    ldd "$bin" 2>/dev/null | grep -oP '/\S+' | while read -r lib; do \
+    dir="$(dirname "$lib")"; \
+    mkdir -p "/collect$dir"; \
+    cp -n "$lib" "/collect$lib" 2>/dev/null || true; \
+    done; \
+    done \
+    # Also collect libs for Python native extensions (.so files)
+    && PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
+    && find "/usr/lib/python${PYVER}" -name '*.so' -exec sh -c '\
+    for so; do \
+    ldd "$so" 2>/dev/null | grep -oP "/\S+" | while read -r lib; do \
+    dir="$(dirname "$lib")"; \
+    mkdir -p "/collect$dir"; \
+    cp -n "$lib" "/collect$lib" 2>/dev/null || true; \
+    done; \
+    done' _ {} + \
+    # Copy the dynamic linker
+    && cp /usr/lib/ld-linux-x86-64.so.2 /collect/usr/lib/ 2>/dev/null || true \
+    && mkdir -p /collect/lib64 \
+    && ln -sf /usr/lib/ld-linux-x86-64.so.2 /collect/lib64/ld-linux-x86-64.so.2 \
+    # glibc 2.34+ merged libpthread/libdl/librt into libc.so.6 but
+    # NVIDIA driver binaries (nvidia-smi) still dlopen the old names.
+    && ln -sf libc.so.6 /collect/usr/lib/libpthread.so.0 \
+    && ln -sf libc.so.6 /collect/usr/lib/libdl.so.2 \
+    && ln -sf libc.so.6 /collect/usr/lib/librt.so.1 \
+    # Copy Python standard library + clutch package
+    && mkdir -p "/collect/usr/lib/python${PYVER}" \
+    && cp -a "/usr/lib/python${PYVER}/"* "/collect/usr/lib/python${PYVER}/" \
+    # Copy CA certificates
+    && cp -a /etc/ssl/certs /collect/etc/ssl/ \
+    && mkdir -p /collect/etc \
+    && cp /etc/ca-certificates/extracted/tls-ca-bundle.pem /collect/etc/ssl/cert.pem 2>/dev/null || true \
+    # Create required directories
+    && mkdir -p /collect/config /collect/media /collect/tmp
+
+# ─── Final minimal image ───
+FROM scratch
+
+LABEL org.opencontainers.image.title="clutch-minimal" \
+    org.opencontainers.image.description="Minimal video transcoding service with NVENC/NVDEC (~280MB)" \
+    org.opencontainers.image.source="https://github.com/adocampo/clutch" \
+    org.opencontainers.image.url="https://github.com/adocampo/clutch" \
+    org.opencontainers.image.licenses="MIT"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    XDG_STATE_HOME=/config \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+    PATH=/usr/bin:/usr/local/bin \
+    LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib64:/usr/local/nvidia/lib64 \
+    SSL_CERT_FILE=/etc/ssl/cert.pem \
+    CLUTCH_DOCKER_VARIANT=minimal
+
+COPY --from=builder /collect/ /
+
+EXPOSE 8765
+VOLUME ["/config", "/media"]
+
+ENTRYPOINT ["/usr/bin/python3", "/usr/bin/clutch"]
+CMD ["--serve", "--listen-host", "0.0.0.0", "--listen-port", "8765", "--service-db", "/config/service.db", "--allow-root", "/media"]

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-05-05
+
+### Added in 2.2.0
+
+- **Docker support**: official Docker images published to `ghcr.io/adocampo/clutch` (full Arch Linux, ~1.5 GB) and `ghcr.io/adocampo/clutch-minimal` (scratch-based, ~280 MB) with complete environment variable configuration.
+- **Docker Compose**: ready-to-use `docker-compose.yml` for one-command deployment with persistent volumes and optional GPU passthrough.
+- **Minimal Docker image**: multi-stage scratch build with only the required runtime binaries, achieving ~82% size reduction while maintaining full NVENC GPU support via glibc compatibility symlinks.
+- **Docker entrypoint**: `docker-entrypoint.sh` translates environment variables (`CLUTCH_PORT`, `CLUTCH_WORKERS`, `CLUTCH_GPUS`, `CLUTCH_WATCH_DIRS`, etc.) into CLI arguments automatically.
+- **NVIDIA GPU passthrough**: both images support NVENC hardware encoding via NVIDIA Container Toolkit with `--gpus all` and `CLUTCH_GPUS` variable.
+- **Docker release script**: `docker-release.sh` for automated building and pushing of both image variants with version tags.
+- **Docker documentation**: comprehensive wiki page covering quick start, image variants, environment variables, volumes, GPU configuration, and troubleshooting.
+
+### Fixed in 2.2.0
+
+- **Dashboard "Environment" field**: the About page now correctly shows the runtime environment (Docker/native) instead of displaying "—".
+- **Dashboard CSS alignment**: fixed label alignment in the settings panel with proper padding.
+
 ## [2.1.2] - 2026-05-04
 
 ### Fixed in 2.1.2

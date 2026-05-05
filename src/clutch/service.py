@@ -57,7 +57,7 @@ from clutch.store import (
     record_has_recoverable_runtime,
     utc_now,
 )
-from clutch.updater import get_update_state, install_latest_version, mark_update_installed, _build_install_source, _windows_deferred_install
+from clutch.updater import get_update_state, get_runtime_environment, install_latest_version, mark_update_installed, _build_install_source, _windows_deferred_install
 from clutch.watcher import DirectoryWatcher, WorkerHandle
 
 # Re-export for backward compatibility
@@ -562,6 +562,7 @@ class ConversionService:
             "update_step": self._upgrade_step,
             "update_step_total": self._upgrade_step_total,
             "update_step_label": self._upgrade_step_label,
+            "runtime_environment": get_runtime_environment(),
         }
 
     def schedule_self_upgrade(self, shutdown_callback: Callable[[], None]) -> Dict[str, object]:

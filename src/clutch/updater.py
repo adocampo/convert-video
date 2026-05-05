@@ -15,6 +15,23 @@ from clutch.output import info, error
 _UPDATE_STATE_LOCK = threading.Lock()
 
 
+def is_running_in_docker() -> bool:
+    """Return True if running inside a Docker container."""
+    return os.path.exists("/.dockerenv") or os.path.isfile("/run/.containerenv")
+
+
+def get_runtime_environment() -> str:
+    """Return a label describing the runtime environment."""
+    variant = os.environ.get("CLUTCH_DOCKER_VARIANT", "")
+    if variant == "minimal":
+        return "Docker (minimal)"
+    if variant == "full":
+        return "Docker"
+    if is_running_in_docker():
+        return "Docker"
+    return "Python"
+
+
 def build_update_state_path() -> str:
     """Return the shared state file used to cache update checks."""
     return os.path.join(build_state_dir(), "update-state.json")
@@ -468,6 +485,23 @@ def upgrade():
         info("Already up to date.")
         mark_update_installed(local_ver)
         sys.exit(0)
+
+    if is_running_in_docker():
+        print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} inside Docker ...")
+        source = _build_install_source(remote_ver)
+        result = _pip_upgrade_in_place(source, on_progress=lambda line: print(f"  {line}"))
+        if result.returncode == 0:
+            mark_update_installed(remote_ver)
+            info(f"Upgraded to {remote_ver} (active until container restart).")
+            info("To make this permanent, update your Docker image:")
+            info("  docker compose pull   (if using ghcr.io)")
+            info("  docker compose build  (if using local build)")
+        else:
+            if result.stdout:
+                print(result.stdout)
+            error("Upgrade failed. Check the output above for details.")
+            sys.exit(1)
+        return
 
     print(f"\nUpgrading {APP_NAME} {local_ver} \u2192 {remote_ver} ...")
 

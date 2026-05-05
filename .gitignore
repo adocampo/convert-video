@@ -7,3 +7,6 @@ build/
 src/*.egg-info/
 .venv/
 .github/copilot-instructions.md
+docker-compose.override.yml
+.ghcr-token
+docker-publish.sh
