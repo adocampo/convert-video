@@ -4,6 +4,7 @@ import glob
 import logging
 import os
 import sys
+import time as _time
 from logging.handlers import TimedRotatingFileHandler
 
 # ANSI color codes
@@ -45,6 +46,11 @@ def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 
     Safe to call more than once — subsequent calls reconfigure the handler.
     """
     global _file_handler, _log_dir, _retention_days
+
+    # Ensure the process honours the TZ environment variable (important in Docker)
+    if hasattr(_time, "tzset"):
+        _time.tzset()
+
     os.makedirs(log_dir, exist_ok=True)
     _log_dir = log_dir
     _retention_days = max(1, min(365, retention_days))
@@ -56,7 +62,7 @@ def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 
         _file_handler.close()
 
     handler = TimedRotatingFileHandler(
-        log_path, when="midnight", backupCount=_retention_days, utc=True, encoding="utf-8",
+        log_path, when="midnight", backupCount=_retention_days, utc=False, encoding="utf-8",
     )
     handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",

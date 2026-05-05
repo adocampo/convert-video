@@ -511,6 +511,12 @@ class ConversionService:
                 self.get_update_info(force_check=False)
             except Exception as exc:
                 warning(f"Could not refresh release status: {exc}")
+            # Pre-warm the changelog cache so it's ready when the user opens the tab
+            try:
+                from clutch.http_handler import _get_cached_changelog
+                _get_cached_changelog()
+            except Exception:
+                pass
             if self.stop_event.wait(3600):
                 break
 

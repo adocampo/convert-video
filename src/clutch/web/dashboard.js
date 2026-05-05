@@ -862,7 +862,8 @@
 
     // ── Full changelog page ──
 
-    var changelogFullLoaded = false;
+    var changelogLastFetched = 0;
+    var CHANGELOG_CLIENT_TTL = 300000; // 5 min client-side re-fetch guard
 
     function changelogMarkdownToHtml(md, localVersion) {
         var lines = String(md || '').split('\n');
@@ -943,18 +944,17 @@
         return html.join('\n');
     }
 
-    async function loadFullChangelog() {
-        if (changelogFullLoaded) return;
+    async function loadFullChangelog(force) {
+        var now = Date.now();
+        if (!force && changelogLastFetched && (now - changelogLastFetched) < CHANGELOG_CLIENT_TTL) return;
         var container = document.getElementById('changelog-full-container');
         if (!container) return;
         try {
-            var url = state.release.update_available
-                ? '/system/changelog?source=remote'
-                : '/system/changelog';
+            var url = force ? '/system/changelog?force=true' : '/system/changelog';
             var data = await fetchJson(url);
             var rendered = changelogMarkdownToHtml(data.changelog || '', state.release.local_version);
             container.innerHTML = '<div class="changelog-text changelog-full-text">' + rendered + '</div>';
-            changelogFullLoaded = true;
+            changelogLastFetched = Date.now();
         } catch (err) {
             container.innerHTML = '<div class="empty">Failed to load changelog.</div>';
         }
@@ -5218,10 +5218,14 @@
                 showToast(payload.last_error, 'error');
             } else if (payload.update_available) {
                 showToast(i18n.t('toast.update_available', { local: payload.local_version, remote: payload.remote_version }), 'ok');
-                // Reload changelog page so it picks up newer remote versions
-                changelogFullLoaded = false;
+                // Force-refresh changelog so it picks up newer remote versions
+                changelogLastFetched = 0;
+                loadFullChangelog(true);
             } else {
                 showToast(i18n.t('toast.already_up_to_date', { version: payload.local_version }), 'ok');
+                // Also refresh changelog in case it was stale
+                changelogLastFetched = 0;
+                loadFullChangelog(true);
             }
         } catch (error) {
             showToast(error.message, 'error');

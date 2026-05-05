@@ -77,6 +77,28 @@ def _read_changelog() -> str:
     return ""
 
 
+# Server-side changelog cache (avoids hitting GitHub API on every tab click)
+_changelog_cache: dict = {"content": "", "fetched_at": 0.0}
+_CHANGELOG_TTL = 3600  # 1 hour
+
+
+def _get_cached_changelog(force: bool = False) -> str:
+    """Return changelog content, fetching from remote with 1h cache."""
+    import time as _t
+    now = _t.time()
+    if not force and _changelog_cache["content"] and (now - _changelog_cache["fetched_at"]) < _CHANGELOG_TTL:
+        return _changelog_cache["content"]
+    remote = _fetch_remote_changelog()
+    if remote:
+        _changelog_cache["content"] = remote
+        _changelog_cache["fetched_at"] = now
+        return remote
+    # Remote failed — return cached if available, otherwise local
+    if _changelog_cache["content"]:
+        return _changelog_cache["content"]
+    return _read_changelog()
+
+
 class ConversionHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     # Maximum bytes to buffer in memory when scanning for multipart boundaries.
@@ -1195,11 +1217,8 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             if not user:
                 return
             _, query_params = self._get_request_parts()
-            use_remote = query_params.get("source") == "remote"
-            if use_remote:
-                content = _fetch_remote_changelog() or _read_changelog()
-            else:
-                content = _read_changelog()
+            force = query_params.get("force") == "true"
+            content = _get_cached_changelog(force=force)
             self._send_json(200, {"changelog": content})
             return
 

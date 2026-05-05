@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.1] - 2026-05-05
+
+### Fixed in 2.2.1
+
+- **Log timestamps now respect TZ**: logs previously showed UTC regardless of the `TZ` environment variable. The Docker entrypoint now symlinks `/etc/localtime` from `TZ`, and the Python logging system calls `time.tzset()` on startup. Log rotation also uses local midnight instead of UTC midnight.
+- **Changelog tab always shows latest content**: the System → Changelog tab now fetches the remote changelog from GitHub on every visit (with a 1-hour server-side cache), ensuring Docker users always see the current changelog instead of a stale bundled copy. "Check for updates" forces a cache refresh.
+
 ## [2.2.0] - 2026-05-05
 
 ### Added in 2.2.0

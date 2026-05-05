@@ -2,6 +2,12 @@
 # Docker entrypoint for clutch — maps environment variables to CLI flags.
 set -e
 
+# Apply timezone from TZ env var (creates /etc/localtime symlink)
+if [ -n "$TZ" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
+    ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime
+    echo "$TZ" > /etc/timezone 2>/dev/null || true
+fi
+
 TARGET_UID="${CLUTCH_UID:-1000}"
 TARGET_GID="${CLUTCH_GID:-1000}"
 
