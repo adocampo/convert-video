@@ -1382,6 +1382,9 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
                 self.server.service.default_date_format,
                 self.server.service.listen_port,
                 self.server.service.binary_paths,
+                self.server.service.upload_dir,
+                self.server.service.max_upload_size_bytes,
+                self.server.service.display_timezone,
             )
             self._send_json(200, {
                 "binary_paths": dict(self.server.service.binary_paths),

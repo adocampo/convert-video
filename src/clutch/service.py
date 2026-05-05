@@ -55,9 +55,10 @@ from clutch.store import (
     normalize_path,
     path_within_roots,
     record_has_recoverable_runtime,
+    set_configured_timezone,
     utc_now,
 )
-from clutch.updater import get_update_state, get_runtime_environment, install_latest_version, mark_update_installed, _build_install_source, _windows_deferred_install
+from clutch.updater import get_update_state, get_runtime_environment, is_running_in_docker, install_latest_version, mark_update_installed, _build_install_source, _windows_deferred_install
 from clutch.watcher import DirectoryWatcher, WorkerHandle
 
 # Re-export for backward compatibility
@@ -144,6 +145,7 @@ class ConversionService:
             self.log_level = "INFO"
             self.log_retention_days = 30
             self.default_date_format = ""
+            self.display_timezone = ""
             self.listen_port = 8765
             self.upload_dir = ""
             self.max_upload_size_bytes = 0
@@ -165,6 +167,7 @@ class ConversionService:
                 self.binary_paths,
                 self.upload_dir,
                 self.max_upload_size_bytes,
+                self.display_timezone,
             )
         else:
             self.allowed_roots = [os.path.abspath(path) for path in (persisted_config.get("allowed_roots") or [])]
@@ -182,6 +185,7 @@ class ConversionService:
             self.log_level = str(persisted_config.get("log_level") or "INFO")
             self.log_retention_days = int(persisted_config.get("log_retention_days") or 30)
             self.default_date_format = str(persisted_config.get("default_date_format") or "")
+            self.display_timezone = str(persisted_config.get("display_timezone") or "")
             self.listen_port = int(persisted_config.get("listen_port") or 8765)
             self.upload_dir = str(persisted_config.get("upload_dir") or "")
             self.max_upload_size_bytes = int(persisted_config.get("max_upload_size_bytes") or 0)
@@ -192,6 +196,9 @@ class ConversionService:
             persisted_bins = persisted_config.get("binary_paths") or {}
             self.binary_paths = {name: persisted_bins.get(name) or detected.get(name, "") for name in REQUIRED_BINARIES}
             set_binary_paths(self.binary_paths)
+
+        # Apply the configured timezone globally
+        set_configured_timezone(self.display_timezone)
 
         with self._watchers_lock:
             for watcher_config in persisted_watchers:
@@ -572,6 +579,11 @@ class ConversionService:
         }
 
     def schedule_self_upgrade(self, shutdown_callback: Callable[[], None]) -> Dict[str, object]:
+        if is_running_in_docker():
+            raise ValueError(
+                "In-app upgrades are not supported in Docker. "
+                "Pull the new image and recreate the container."
+            )
         update_info = self.get_update_info(force_check=False)
         remote_version = str(update_info.get("remote_version") or "")
         if not update_info.get("update_available"):
@@ -1101,6 +1113,18 @@ class ConversionService:
             if fmt in ("", "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"):
                 self.default_date_format = fmt
 
+        # Update display timezone if present in payload
+        if "display_timezone" in payload:
+            tz_value = str(payload.get("display_timezone") or "").strip()
+            if tz_value:
+                try:
+                    from zoneinfo import ZoneInfo
+                    ZoneInfo(tz_value)  # validate
+                except (ImportError, KeyError):
+                    raise ValueError(f"Invalid timezone: {tz_value}")
+            self.display_timezone = tz_value
+            set_configured_timezone(tz_value)
+
         # Update listen port if present in payload
         port_changed = False
         if "listen_port" in payload:
@@ -1148,6 +1172,7 @@ class ConversionService:
             self.binary_paths,
             self.upload_dir,
             self.max_upload_size_bytes,
+            self.display_timezone,
         )
         if worker_count_changed and self._service_started:
             self._sync_worker_pool()
@@ -1756,6 +1781,7 @@ class ConversionService:
             "log_retention_days": self.log_retention_days,
             "auth_enabled": self.auth.is_auth_enabled(),
             "default_date_format": self.default_date_format,
+            "display_timezone": self.display_timezone,
             "listen_port": self.listen_port,
             "binary_paths": dict(self.binary_paths),
             "missing_binaries": get_missing_binaries(),

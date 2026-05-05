@@ -50,6 +50,7 @@
             token: '',
         },
         dateFormat: 'YYYY-MM-DD',
+        displayTimezone: '',
     };
 
     const tokenStorageKey = 'clutch-token';
@@ -222,6 +223,28 @@
     }
 
     function buildSubmittedDisplay(date, showSeconds) {
+        var tz = state.displayTimezone || 'UTC';
+        var y, m, d, hh, mm, ss;
+        var opts = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+        if (showSeconds) opts.second = '2-digit';
+        var parts = {};
+        try {
+            new Intl.DateTimeFormat('en-GB', opts).formatToParts(date).forEach(function (p) { parts[p.type] = p.value; });
+        } catch (e) {
+            // Invalid timezone — fall back to local
+            return buildSubmittedDisplayLocal(date, showSeconds);
+        }
+        y = parts.year; m = parts.month; d = parts.day;
+        hh = parts.hour; mm = parts.minute; ss = parts.second || '00';
+        var time = ' ' + hh + ':' + mm;
+        if (showSeconds) time += ':' + ss;
+        var fmt = state.dateFormat || 'YYYY-MM-DD';
+        if (fmt === 'DD/MM/YYYY') return d + '/' + m + '/' + y + time;
+        if (fmt === 'MM/DD/YYYY') return m + '/' + d + '/' + y + time;
+        return y + '-' + m + '-' + d + time;
+    }
+
+    function buildSubmittedDisplayLocal(date, showSeconds) {
         var y = date.getFullYear();
         var m = padNumber(date.getMonth() + 1);
         var d = padNumber(date.getDate());
@@ -231,6 +254,32 @@
         if (fmt === 'DD/MM/YYYY') return d + '/' + m + '/' + y + time;
         if (fmt === 'MM/DD/YYYY') return m + '/' + d + '/' + y + time;
         return y + '-' + m + '-' + d + time;
+    }
+
+    function populateTimezoneDatalist() {
+        var dl = document.getElementById('tz-list');
+        if (!dl || dl.childNodes.length > 0) return;
+        var zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [
+            'Africa/Cairo','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi',
+            'America/Anchorage','America/Argentina/Buenos_Aires','America/Bogota',
+            'America/Chicago','America/Denver','America/Los_Angeles','America/Mexico_City',
+            'America/New_York','America/Sao_Paulo','America/Toronto','America/Vancouver',
+            'Asia/Bangkok','Asia/Colombo','Asia/Dubai','Asia/Ho_Chi_Minh','Asia/Hong_Kong',
+            'Asia/Jakarta','Asia/Karachi','Asia/Kolkata','Asia/Manila','Asia/Seoul',
+            'Asia/Shanghai','Asia/Singapore','Asia/Taipei','Asia/Tokyo',
+            'Atlantic/Reykjavik','Australia/Melbourne','Australia/Perth','Australia/Sydney',
+            'Europe/Amsterdam','Europe/Athens','Europe/Berlin','Europe/Brussels',
+            'Europe/Bucharest','Europe/Budapest','Europe/Copenhagen','Europe/Dublin',
+            'Europe/Helsinki','Europe/Istanbul','Europe/Lisbon','Europe/London',
+            'Europe/Madrid','Europe/Moscow','Europe/Oslo','Europe/Paris',
+            'Europe/Prague','Europe/Rome','Europe/Stockholm','Europe/Vienna',
+            'Europe/Warsaw','Europe/Zurich','Pacific/Auckland','Pacific/Honolulu','UTC'
+        ];
+        zones.forEach(function (tz) {
+            var opt = document.createElement('option');
+            opt.value = tz;
+            dl.appendChild(opt);
+        });
     }
 
     function formatBytes(value) {
@@ -760,7 +809,10 @@
             if (nextInfo.update_in_progress) {
                 label = nextInfo.update_step_label || i18n.t('release.updating');
             } else if (nextInfo.update_available && nextInfo.remote_version) {
-                label = i18n.t('release.update_to', { version: nextInfo.remote_version });
+                var isDocker = nextInfo.runtime_environment && nextInfo.runtime_environment.toLowerCase().indexOf('docker') !== -1;
+                label = isDocker
+                    ? i18n.t('release.update_available_docker', { version: nextInfo.remote_version })
+                    : i18n.t('release.update_to', { version: nextInfo.remote_version });
             }
 
             releaseLabel.textContent = label;
@@ -2174,6 +2226,11 @@
         var dateFormatEl = document.getElementById('general-date-format');
         if (dateFormatEl && summary.default_date_format) dateFormatEl.value = summary.default_date_format;
         state.dateFormat = summary.default_date_format || 'YYYY-MM-DD';
+
+        var timezoneEl = document.getElementById('general-timezone');
+        if (timezoneEl) timezoneEl.value = summary.display_timezone || '';
+        state.displayTimezone = summary.display_timezone || '';
+        populateTimezoneDatalist();
 
         // Upload settings
         var uploadDirEl = document.getElementById('general-upload-dir');
@@ -5055,18 +5112,22 @@
         generalSaveBtn.addEventListener('click', async function () {
             var authEl = document.getElementById('general-auth-enabled');
             var dateEl = document.getElementById('general-date-format');
+            var tzEl = document.getElementById('general-timezone');
             var portEl = document.getElementById('general-listen-port');
             var uploadDirEl = document.getElementById('general-upload-dir');
             var maxUploadEl = document.getElementById('general-max-upload-size');
             var payload = {
                 auth_enabled: authEl ? authEl.checked : undefined,
                 default_date_format: dateEl ? dateEl.value : undefined,
+                display_timezone: tzEl ? tzEl.value.trim() : undefined,
                 listen_port: portEl ? Number(portEl.value) : undefined,
                 upload_dir: uploadDirEl ? uploadDirEl.value.trim() : undefined,
                 max_upload_size_bytes: maxUploadEl ? Number(maxUploadEl.value || 0) * 1024 * 1024 : undefined,
             };
             var oldPort = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80);
             var newPort = portEl ? Number(portEl.value) : oldPort;
+            var oldTz = state.displayTimezone || '';
+            var newTz = tzEl ? tzEl.value.trim() : oldTz;
             generalSaveBtn.disabled = true;
             if (generalSaveStatus) setStatus(generalSaveStatus, '');
             try {
@@ -5081,6 +5142,11 @@
                         var url = window.location.protocol + '//' + window.location.hostname + ':' + newPort + window.location.pathname + window.location.hash;
                         window.location.href = url;
                     }, 2000);
+                    return;
+                }
+                if (newTz !== oldTz) {
+                    showToast(i18n.t('toast.general_saved'), 'ok');
+                    setTimeout(function () { window.location.reload(); }, 1000);
                     return;
                 }
                 applySummaryToForms(result);
@@ -5176,6 +5242,17 @@
 
         if (state.release.update_available) {
             const targetVersion = state.release.remote_version || 'latest';
+
+            // Docker: show pull instructions instead of in-app upgrade
+            if (state.release.runtime_environment && state.release.runtime_environment.toLowerCase().indexOf('docker') !== -1) {
+                await showAlert({
+                    title: i18n.t('release.docker_upgrade_title'),
+                    message: i18n.t('release.docker_upgrade_message', { version: targetVersion }),
+                    ok: i18n.t('release.docker_upgrade_ok'),
+                });
+                return;
+            }
+
             const confirmed = await showConfirm({
                 title: i18n.t('confirm.install_update_title'),
                 message: i18n.t('confirm.install_update_message', { version: targetVersion }),
@@ -5301,7 +5378,7 @@
 
     // General settings
     setupIdsDirtyTracking('general-settings', [
-        'general-auth-enabled', 'general-date-format', 'general-listen-port',
+        'general-auth-enabled', 'general-date-format', 'general-timezone', 'general-listen-port',
         'general-upload-dir', 'general-max-upload-size',
     ], document.getElementById('general-settings-save'));
 

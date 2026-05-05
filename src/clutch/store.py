@@ -14,13 +14,39 @@ from clutch.mediainfo import extract_media_summary, get_media_duration_seconds
 from clutch.output import info, warning, debug
 from clutch.presets import normalize_preset_params
 
+# Configured timezone name (IANA, e.g. "Europe/Madrid"). Empty = UTC.
+_configured_timezone: str = ""
+
+
+def set_configured_timezone(tz_name: str) -> None:
+    """Set the application-wide timezone used for display formatting."""
+    global _configured_timezone
+    _configured_timezone = tz_name.strip()
+
+
+def get_configured_timezone() -> str:
+    """Return the currently configured timezone name (empty = UTC)."""
+    return _configured_timezone
+
+
+def _get_tz_info():
+    """Return a tzinfo object for the configured timezone, or UTC if unset."""
+    if _configured_timezone:
+        try:
+            from zoneinfo import ZoneInfo
+            return ZoneInfo(_configured_timezone)
+        except (ImportError, KeyError):
+            pass
+    return timezone.utc
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def local_now_display() -> str:
-    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    tz = _get_tz_info()
+    return datetime.now(timezone.utc).astimezone(tz).strftime("%Y-%m-%d %H:%M")
 
 
 def format_display_timestamp(timestamp: str) -> str:
@@ -32,7 +58,8 @@ def format_display_timestamp(timestamp: str) -> str:
         return timestamp
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone().strftime("%Y-%m-%d %H:%M")
+    tz = _get_tz_info()
+    return parsed.astimezone(tz).strftime("%Y-%m-%d %H:%M")
 
 
 def format_eta(seconds: float) -> str:
@@ -308,6 +335,10 @@ class JobStore:
             if "max_upload_size_bytes" not in service_config_columns:
                 self._conn.execute(
                     "ALTER TABLE service_config ADD COLUMN max_upload_size_bytes INTEGER NOT NULL DEFAULT 0"
+                )
+            if "display_timezone" not in service_config_columns:
+                self._conn.execute(
+                    "ALTER TABLE service_config ADD COLUMN display_timezone TEXT NOT NULL DEFAULT ''"
                 )
             self._conn.execute(
                 """
@@ -621,7 +652,7 @@ class JobStore:
     def load_service_config(self) -> Optional[Dict[str, object]]:
         with self._lock:
             row = self._conn.execute(
-                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes FROM service_config WHERE singleton = 1"
+                "SELECT allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes, display_timezone FROM service_config WHERE singleton = 1"
             ).fetchone()
         if not row:
             return None
@@ -658,6 +689,7 @@ class JobStore:
             "binary_paths": binary_paths,
             "upload_dir": str(row["upload_dir"] or ""),
             "max_upload_size_bytes": int(row["max_upload_size_bytes"] or 0),
+            "display_timezone": str(row["display_timezone"] or ""),
         }
 
     def save_service_config(
@@ -674,12 +706,13 @@ class JobStore:
         binary_paths: Optional[Dict[str, str]] = None,
         upload_dir: str = "",
         max_upload_size_bytes: int = 0,
+        display_timezone: str = "",
     ):
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO service_config (singleton, allowed_roots_json, default_job_settings_json, worker_count, gpu_devices_json, schedule_config_json, log_level, log_retention_days, default_date_format, listen_port, binary_paths_json, upload_dir, max_upload_size_bytes, display_timezone)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(singleton) DO UPDATE SET
                     allowed_roots_json = excluded.allowed_roots_json,
                     default_job_settings_json = excluded.default_job_settings_json,
@@ -692,7 +725,8 @@ class JobStore:
                     listen_port = excluded.listen_port,
                     binary_paths_json = excluded.binary_paths_json,
                     upload_dir = excluded.upload_dir,
-                    max_upload_size_bytes = excluded.max_upload_size_bytes
+                    max_upload_size_bytes = excluded.max_upload_size_bytes,
+                    display_timezone = excluded.display_timezone
                 """,
                 (
                     json.dumps(list(allowed_roots)),
@@ -707,6 +741,7 @@ class JobStore:
                     json.dumps(binary_paths or {}),
                     str(upload_dir),
                     int(max_upload_size_bytes),
+                    str(display_timezone),
                 ),
             )
 

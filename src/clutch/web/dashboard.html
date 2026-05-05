@@ -972,6 +972,19 @@
                             </select>
                         </div>
                     </div>
+                    <div class="field-row">
+                        <label class="field-row-label" data-i18n="settings.general.timezone_label">Timezone</label>
+                        <div class="field-row-control">
+                            <input id="general-timezone" type="text" list="tz-list" autocomplete="off"
+                                placeholder="Europe/Madrid"
+                                data-i18n-placeholder="settings.general.timezone_placeholder"
+                                data-i18n-title="settings.general.timezone_title"
+                                title="IANA timezone (e.g. Europe/Madrid, America/New_York). Leave empty for UTC.">
+                            <datalist id="tz-list"></datalist>
+                            <p class="field-row-help" data-i18n="settings.general.timezone_help">IANA timezone name
+                                used for all displayed timestamps. Leave empty for UTC.</p>
+                        </div>
+                    </div>
                 </fieldset>
                 <fieldset class="options-section">
                     <legend data-i18n="settings.general.upload_legend">File Upload</legend>

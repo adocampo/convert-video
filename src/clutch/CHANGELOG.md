@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.2] - 2026-05-06
+
+### Added in 2.2.2
+
+- **Display timezone setting**: new General Settings field to choose the display timezone for all timestamps in the dashboard, replacing the need for the Docker `TZ` environment variable. Uses an IANA timezone datalist with autocomplete.
+
+### Fixed in 2.2.2
+
+- **Empty timezone defaults to UTC**: when no timezone is configured, the system now explicitly falls back to UTC instead of using the host local time, ensuring consistent behaviour across environments.
+- **Timezone Save button dirty tracking**: changing the timezone field now correctly marks the General Settings form as dirty so the Save button enables.
+- **Log timestamps include UTC offset**: log entries now emit ISO 8601 timestamps with the timezone offset (e.g. `+02:00`), allowing the dashboard JS to parse and convert them accurately regardless of client locale.
+- **Page reload on timezone change**: saving a new timezone forces a full page reload so all tabs immediately show timestamps in the updated zone.
+
 ## [2.2.1] - 2026-05-05
 
 ### Fixed in 2.2.1
@@ -87,7 +100,6 @@ All notable changes to this project will be documented in this file.
 - **Real-time progress in stream-convert client**: switched from `read(8192)` to `readline()` so NDJSON progress events are delivered immediately instead of waiting for the buffer to fill.
 - **Log line parser**: fixed stale log file detection and improved robustness of the progress log reader.
 - **i18n placeholder syntax**: fixed stale-warning strings that used double-brace `{{}}` instead of single-brace `{}`.
-
 
 ## [1.8.18] - 2026-04-24
 

@@ -7,6 +7,8 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from clutch.store import _get_tz_info
+
 # Matches: 2026-04-14T12:34:56 [INFO ] clutch: message
 # Handles padded level names like [INFO ] (%-5s formatting).
 _LOG_LINE_RE = re.compile(
@@ -29,10 +31,11 @@ def _list_log_files() -> List[Dict[str, object]]:
             st = os.stat(full)
         except OSError:
             continue
+        tz = _get_tz_info() or timezone.utc
         result.append({
             "name": name,
             "size": st.st_size,
-            "modified": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+            "modified": datetime.fromtimestamp(st.st_mtime, tz=tz).isoformat(),
         })
     return result
 

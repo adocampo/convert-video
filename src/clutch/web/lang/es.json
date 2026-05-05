@@ -336,6 +336,10 @@
   "settings.general.language_help": "Idioma de visualización del dashboard.",
   "settings.general.date_format_label": "Formato de fecha",
   "settings.general.date_format_title": "Formato de visualización de fechas.",
+  "settings.general.timezone_label": "Zona horaria",
+  "settings.general.timezone_placeholder": "Europe/Madrid",
+  "settings.general.timezone_title": "Zona horaria IANA (ej. Europe/Madrid, America/New_York). Dejar vacío para UTC.",
+  "settings.general.timezone_help": "Nombre de zona horaria IANA usado para todas las marcas de tiempo mostradas. Dejar vacío para UTC.",
   "settings.general.save": "Guardar",
 
   "settings.binaries.title": "Rutas de binarios",
@@ -784,6 +788,10 @@
   "release.check_tooltip_date": "Comprobar si hay nuevas versiones disponibles. Última comprobación: {date}.",
   "release.installing_tooltip": "Instalando la última versión de clutch y reiniciando el servicio.",
   "release.update_available_tooltip": "Nueva versión disponible: {local} → {remote}",
+  "release.update_available_docker": "v{version} disponible",
+  "release.docker_upgrade_title": "Actualización Docker necesaria",
+  "release.docker_upgrade_message": "Las actualizaciones en la aplicación no son compatibles con Docker.\nPara actualizar a v{version}, descarga la nueva imagen y recrea el contenedor:\n\ndocker pull ghcr.io/adocampo/clutch:{version}\n\nLuego recrea tu contenedor con la nueva imagen.",
+  "release.docker_upgrade_ok": "Entendido",
 
   "prompt.create_token_title": "Crear token",
   "prompt.create_token_message": "Nombre del token (opcional):",

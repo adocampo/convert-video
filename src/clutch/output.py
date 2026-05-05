@@ -4,7 +4,6 @@ import glob
 import logging
 import os
 import sys
-import time as _time
 from logging.handlers import TimedRotatingFileHandler
 
 # ANSI color codes
@@ -40,16 +39,26 @@ def set_console_log_level(level: str) -> None:
     _console_level = _resolve_level(level)
 
 
+class _TzAwareFormatter(logging.Formatter):
+    """Formatter that converts log record times to the configured timezone."""
+
+    def formatTime(self, record, datefmt=None):
+        from clutch.store import _get_tz_info
+        from datetime import datetime, timezone as _tz
+        dt = datetime.fromtimestamp(record.created, tz=_tz.utc)
+        tz = _get_tz_info()
+        dt = dt.astimezone(tz)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.isoformat(timespec="seconds")
+
+
 def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 30):
     """Configure daily-rotating file logging under *log_dir*.
 
     Safe to call more than once — subsequent calls reconfigure the handler.
     """
     global _file_handler, _log_dir, _retention_days
-
-    # Ensure the process honours the TZ environment variable (important in Docker)
-    if hasattr(_time, "tzset"):
-        _time.tzset()
 
     os.makedirs(log_dir, exist_ok=True)
     _log_dir = log_dir
@@ -64,9 +73,8 @@ def setup_file_logging(log_dir: str, level: str = "INFO", retention_days: int = 
     handler = TimedRotatingFileHandler(
         log_path, when="midnight", backupCount=_retention_days, utc=False, encoding="utf-8",
     )
-    handler.setFormatter(logging.Formatter(
+    handler.setFormatter(_TzAwareFormatter(
         "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
     ))
     numeric_level = _resolve_level(level)
     handler.setLevel(numeric_level)

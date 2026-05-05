@@ -336,6 +336,10 @@
   "settings.general.language_help": "Display language for the dashboard.",
   "settings.general.date_format_label": "Date format",
   "settings.general.date_format_title": "Date display format.",
+  "settings.general.timezone_label": "Timezone",
+  "settings.general.timezone_placeholder": "Europe/Madrid",
+  "settings.general.timezone_title": "IANA timezone (e.g. Europe/Madrid, America/New_York). Leave empty for UTC.",
+  "settings.general.timezone_help": "IANA timezone name used for all displayed timestamps. Leave empty for UTC.",
   "settings.general.save": "Save",
 
   "settings.binaries.title": "Binary Paths",
@@ -783,6 +787,10 @@
   "release.check_tooltip_date": "Check whether new versions are available. Last checked: {date}.",
   "release.installing_tooltip": "Installing the latest clutch release and restarting the service.",
   "release.update_available_tooltip": "New version available: {local} → {remote}",
+  "release.update_available_docker": "v{version} available",
+  "release.docker_upgrade_title": "Docker Update Required",
+  "release.docker_upgrade_message": "In-app upgrades are not supported in Docker.\nTo update to v{version}, pull the new image and recreate the container:\n\ndocker pull ghcr.io/adocampo/clutch:{version}\n\nThen recreate your container with the new image.",
+  "release.docker_upgrade_ok": "Got it",
 
   "prompt.create_token_title": "Create Token",
   "prompt.create_token_message": "Token name (optional):",
