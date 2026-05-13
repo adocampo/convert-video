@@ -29,6 +29,7 @@ from clutch.converter import (
     find_existing_converted_output,
     get_current_conversion_paused_seconds,
     get_current_conversion_output_size,
+    get_last_failure_reason,
     get_visible_nvidia_gpus,
     is_conversion_process_alive,
     parse_gpu_devices,
@@ -1011,6 +1012,11 @@ class ConversionService:
         if latest and latest["status"] in {"queued", "running", "paused", "cancelling"}:
             return True
 
+        # Don't let the watcher re-submit a file that already failed — the user
+        # must retry it manually or clear it first.
+        if latest and latest["status"] == "failed":
+            return True
+
         codec = str(settings.get("codec") or "nvenc_h265")
         if check_already_converted(normalized, codec, False, quiet=True) == "skip":
             return True
@@ -1743,20 +1749,34 @@ class ConversionService:
     def retry_job(self, job_id: str) -> Optional[Dict[str, object]]:
         record = self.store.get(job_id)
         if not record:
+            debug(f"retry_job({job_id}): job not found in store.")
             return None
         if record["status"] not in {"failed", "cancelled"}:
+            debug(f"retry_job({job_id}): cannot retry, current status={record['status']}.")
             return None
 
-        self._validate_path(str(record["input_file"]), require_file=True)
+        debug(f"retry_job({job_id}): input_file={record['input_file']}, status={record['status']}, codec={record.get('codec')}, preset_id={record.get('preset_id')}")
+        try:
+            self._validate_path(str(record["input_file"]), require_file=True)
+        except ValueError:
+            print_error(f"retry_job({job_id}): input file no longer exists: {record['input_file']}")
+            raise
         output_dir = str(record.get("output_dir") or "").strip()
         if output_dir:
             output_parent = output_dir if os.path.exists(output_dir) else os.path.dirname(output_dir) or "."
-            self._validate_path(output_parent, allow_missing=False, require_directory=True)
+            try:
+                self._validate_path(output_parent, allow_missing=False, require_directory=True)
+            except ValueError:
+                print_error(f"retry_job({job_id}): output directory no longer valid: {output_parent}")
+                raise
 
         retried = self.store.requeue(job_id, "Queued for retry.")
         if retried:
             info(f"Queued retry for job {job_id} -> {record['input_file']}")
+            debug(f"retry_job({job_id}): requeued successfully, waking workers.")
             self._wake_event.set()
+        else:
+            debug(f"retry_job({job_id}): store.requeue returned None (row not updated).")
         return retried
 
     def delete_job(self, job_id: str) -> bool:
@@ -1979,6 +1999,7 @@ class ConversionService:
         self._set_active_job(job_id)
         try:
             job = ConversionJob.from_row(record)
+            debug(f"[{job_id[:8]}] _execute_job: input={job.input_file}, codec={job.codec}, speed={job.encode_speed}, preset_id={job.preset_id}, force={job.force}, source={job.source}")
             info(f"[{job_id[:8]}] Processing: {os.path.basename(job.input_file)}")
 
             if is_iso_file(job.input_file):
@@ -2108,13 +2129,16 @@ class ConversionService:
 
         if not job.force:
             status = check_already_converted(job.input_file, job.codec, job.force)
+            debug(f"[{job_id[:8]}] check_already_converted result: {status}")
             if status == "skip":
                 return "skipped", "", "File already converted."
 
             existing_output = find_existing_converted_output(job.input_file, job.output_dir, job.codec)
             if existing_output:
                 output_name = os.path.basename(existing_output)
+                debug(f"[{job_id[:8]}] Found existing converted output: {existing_output}")
                 return "skipped", "", f"Converted output already exists: {output_name}."
+            debug(f"[{job_id[:8]}] No existing output found, proceeding with conversion.")
 
         gpu_device = self._select_gpu_device(job.codec, job.encode_speed)
         if gpu_device is not None:
@@ -2189,7 +2213,10 @@ class ConversionService:
         # If this was a resume attempt that failed to join, requeue for fresh encode
         if resume_partial:
             return "queued", "", "Resume join failed — re-encoding from the beginning."
-        return "failed", "", "Conversion failed."
+        debug(f"[{job_id[:8]}] convert_video returned empty output_path. input={job.input_file}, codec={job.codec}, speed={job.encode_speed}, force={job.force}")
+        failure_detail = get_last_failure_reason()
+        fail_msg = f"Conversion failed. {failure_detail}".strip() if failure_detail else "Conversion failed."
+        return "failed", "", fail_msg
 
     def _execute_iso_job(self, job_id: str, job: ConversionJob, record: Dict[str, object]) -> tuple[str, str, str]:
         if self._consume_cancel_request(job_id):
@@ -2299,7 +2326,9 @@ class ConversionService:
             return "detached", "", "Service stopped while the conversion was still running."
         if resume_partial:
             return "queued", "", "Resume join failed — re-encoding from the beginning."
-        return "failed", "", "Conversion failed."
+        failure_detail = get_last_failure_reason()
+        fail_msg = f"Conversion failed. {failure_detail}".strip() if failure_detail else "Conversion failed."
+        return "failed", "", fail_msg
 
 
 

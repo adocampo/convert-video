@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from clutch.converter import RESUME_MIN_DURATION, is_conversion_process_alive
+from clutch.converter import RESUME_MIN_DURATION, RESUME_SAFETY_MARGIN, is_conversion_process_alive
 from clutch.mediainfo import extract_media_summary, get_media_duration_seconds
 from clutch.output import info, warning, debug
 from clutch.presets import normalize_preset_params

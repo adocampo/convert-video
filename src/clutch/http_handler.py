@@ -28,7 +28,7 @@ from clutch.logs import (
     _read_log_entries,
 )
 from clutch.mediainfo import VIDEO_EXTENSIONS, get_media_duration_seconds
-from clutch.output import debug, error, info, set_log_level
+from clutch.output import debug, error, info, warning, set_log_level
 from clutch.scheduler import BIDDING_ZONES
 from clutch.store import ConversionJob
 from clutch.updater import get_update_state, _fetch_remote_changelog
@@ -1281,12 +1281,14 @@ class ServiceRequestHandler(BaseHTTPRequestHandler):
             try:
                 record = self.server.service.retry_job(job_id)
             except ValueError as exc:
+                error(f"Retry rejected for job {job_id}: {exc}")
                 if self._is_json_request():
                     self._send_json(400, {"error": str(exc)})
                 else:
                     self._redirect_with_message(error_message=str(exc))
                 return
             if not record:
+                error(f"Retry rejected for job {job_id}: job cannot be retried (status not eligible).")
                 if self._is_json_request():
                     self._send_json(409, {"error": "Job cannot be retried."})
                 else:

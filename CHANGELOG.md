@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.3] - 2026-05-13
+
+### Fixed in 2.2.3
+
+- **Watcher re-submit loop**: the directory watcher no longer re-enqueues a file that already has a failed job, preventing an infinite retry loop when a file cannot be converted (e.g. still being copied). Failed files must be retried manually or cleared first.
+- **Conversion failure messages now include detail**: job failure messages previously only said "Conversion failed." with no explanation. They now include the HandBrakeCLI exit code and error output, visible both in the dashboard and in the logs.
+- **Retry error logging**: when a job retry is rejected (e.g. input file no longer exists), the error is now logged at ERROR level instead of being silently swallowed into the HTTP redirect URL.
+- **Debug logging for conversion pipeline**: added debug-level tracing across the retry, job execution, skip-detection, and conversion stages to aid troubleshooting.
+
 ## [2.2.2] - 2026-05-06
 
 ### Added in 2.2.2

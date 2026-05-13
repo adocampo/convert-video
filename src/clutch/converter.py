@@ -71,9 +71,24 @@ LANGUAGE_NAME_ALIASES = {
 _STATE_UNSET = object()
 _conversion_state_lock = threading.Lock()
 _conversion_states: dict[int, dict[str, object]] = {}
+_last_failure_reason: dict[int, str] = {}  # thread_id -> last failure detail
 _last_sigint_time: float = 0.0
 _DOUBLE_PRESS_INTERVAL = 1.5  # seconds
 _nvenc_available_cache: Optional[bool] = None
+
+
+def get_last_failure_reason() -> str:
+    """Return and clear the last failure reason for the calling thread."""
+    tid = threading.get_ident()
+    with _conversion_state_lock:
+        return _last_failure_reason.pop(tid, "")
+
+
+def _set_failure_reason(reason: str):
+    """Store the failure reason for the calling thread."""
+    tid = threading.get_ident()
+    with _conversion_state_lock:
+        _last_failure_reason[tid] = reason
 
 
 def _get_conversion_state(thread_id: Optional[int] = None) -> dict[str, object]:
@@ -1079,6 +1094,8 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
     else:
         resolution = get_resolution(input_file, data=media_info_data)
         if not resolution:
+            debug(f"convert_video: aborting — could not determine resolution for {os.path.basename(input_file)}")
+            _set_failure_reason(f"Could not determine video resolution for {os.path.basename(input_file)}.")
             return ""
 
     # Build audio parameters
@@ -1513,6 +1530,10 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             except OSError:
                 output_size = 0
             if output_size == 0:
+                returncode = getattr(process, 'returncode', None) if process else None
+                debug(f"convert_video: output file is empty (0 bytes) for {os.path.basename(input_file)} — returncode={returncode}")
+                if hb_error_detail:
+                    debug(f"convert_video: HandBrakeCLI error detail:\n{hb_error_detail}")
                 try:
                     os.remove(final_output)
                 except OSError:
@@ -1525,6 +1546,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     error(f"Conversion produced empty file: {os.path.basename(input_file)}")
                     if hb_error_detail:
                         error(f"HandBrakeCLI output:\n{hb_error_detail}")
+                _set_failure_reason(f"Conversion produced empty file. HandBrakeCLI exited with code {returncode}." + (f" Detail: {hb_error_detail[:500]}" if hb_error_detail else ""))
                 report_progress(last_progress, "Conversion failed (empty output).")
                 return ""
             _update_conversion_state(
@@ -1627,6 +1649,10 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                 paused_at=None,
                 paused_seconds=0.0,
             )
+            returncode = getattr(process, 'returncode', None) if process else None
+            debug(f"convert_video: conversion failed for {os.path.basename(input_file)} — returncode={returncode}, hb_error_detail_length={len(hb_error_detail)}")
+            if hb_error_detail:
+                debug(f"convert_video: HandBrakeCLI error detail:\n{hb_error_detail}")
             if emit_logs:
                 if elapsed_text:
                     error(f"Conversion failed [{elapsed_text}]: {os.path.basename(input_file)}")
@@ -1634,6 +1660,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
                     error(f"Conversion failed: {os.path.basename(input_file)}")
                 if hb_error_detail:
                     error(f"HandBrakeCLI output:\n{hb_error_detail}")
+            _set_failure_reason(f"HandBrakeCLI exited with code {returncode}." + (f" Detail: {hb_error_detail[:500]}" if hb_error_detail else ""))
             report_progress(last_progress, "Conversion failed.")
             return ""
     except ConversionDetached:
@@ -1654,6 +1681,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             paused_at=None,
             paused_seconds=0.0,
         )
+        _set_failure_reason("HandBrakeCLI binary not found.")
         report_progress(last_progress, "HandBrakeCLI not found.")
         return ""
     except subprocess.CalledProcessError as e:
@@ -1670,6 +1698,7 @@ def convert_video(input_file: str, output_dir: str, codec: str, encode_speed: st
             paused_at=None,
             paused_seconds=0.0,
         )
+        _set_failure_reason(f"Conversion process error: {e}")
         report_progress(last_progress, f"Conversion error: {e}")
         return ""
 
